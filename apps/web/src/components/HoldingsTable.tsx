@@ -504,6 +504,16 @@ function HoldingCard({
             <DayChange pct={holding.quote?.dayChangePct} />
           </p>
         </div>
+        {!editing && !confirmingDelete && (
+          <div className="-ms-5 shrink-0">
+            <HoldingRowMenu
+              symbol={symbol}
+              instrumentId={holding.instrument.id}
+              onEdit={startEditing}
+              onRemove={() => setConfirmingDelete(true)}
+            />
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between gap-2">
@@ -515,17 +525,7 @@ function HoldingCard({
           {holding.weightPct !== null &&
             t('holdings.ofPortfolio', { share: formatShare(holding.weightPct) })}
         </p>
-        {!editing && !confirmingDelete && (
-          <div className="flex shrink-0 items-center gap-1">
-            <ExpandMark open={open} />
-            <HoldingRowMenu
-              symbol={symbol}
-              instrumentId={holding.instrument.id}
-              onEdit={startEditing}
-              onRemove={() => setConfirmingDelete(true)}
-            />
-          </div>
-        )}
+        {!editing && !confirmingDelete && <ExpandMark open={open} className="me-1.5" />}
       </div>
 
       {!editing && holding.costBasisMinor === null && (

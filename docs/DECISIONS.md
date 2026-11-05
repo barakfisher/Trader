@@ -400,4 +400,6 @@ while this file is out of date.
 | 387 | D386 on the real portfolio, case by case: who may give a view, and what a view may write |
 | 388 | Planned (M13): advice or observation, per user, and only a user who accepted the advisory terms may choose advice |
 | 389 | A long phone page opens as a list of what is on it |
+| 390 | A phone's holding card keeps its menu in the top corner and its arrow in the bottom corner, on one line |
+| 391 | The app installs from a manifest alone, with no service worker |
 | 392 | D387 case 1 as built: research gives a view, and a view that asks for action is an acknowledge-only proposal on the real portfolio |

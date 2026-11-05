@@ -119,12 +119,12 @@ export function ExpandingCard({
 }
 
 /** The mark that a card opens; it turns over once it has. */
-export function ExpandMark({ open }: { open: boolean }) {
+export function ExpandMark({ open, className = '' }: { open: boolean; className?: string }) {
   return (
     <ChevronDown
       className={`size-4 shrink-0 text-text-muted transition-transform duration-200 motion-reduce:transition-none ${
         open ? 'rotate-180' : ''
-      }`}
+      } ${className}`}
       aria-hidden
     />
   );
