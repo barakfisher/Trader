@@ -160,7 +160,7 @@ function AgentRow({
         <Link
           to="/agents/$agentId"
           params={{ agentId: agent.id }}
-          className="font-medium hover:text-accent hover:underline"
+          className="tap-compact font-medium hover:text-accent hover:underline"
         >
           <bdi>{agentName(agent)}</bdi>
         </Link>

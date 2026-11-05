@@ -25,12 +25,9 @@ five, so this is one late).
   - **PR 2: a bottom navigation bar** (D382), designed with the user 2026-11-05. Owed on a real
     iPhone, because emulation reports every safe-area inset as 0: the bar clears the home indicator,
     nothing sits under the notch in landscape, and what the bar does with the keyboard open.
-  - **PR 3 became three PRs** (the user, 2026-11-05). Bugs first (D383). Then tap targets and
-    text: at 375 px in Hebrew, under 40 px are 63 of the portfolio's 93 controls, 37 of Settings'
-    43, 35 of the agent's Settings tab's 48; 81% of the portfolio's text is 12 px or less. 44 of the
-    portfolio's 63 are the symbol and rating links on holding cards, so 40 px each would undo D381:
-    that is a decision, not a rule. Then collapsing Research (14.3 screens with 22 rated holdings)
-    and Settings (7.6).
+  - **PR 3 became three PRs** (the user, 2026-11-05). Bugs: D383 #377, deployed. Sizes and the opening
+    card: D384. Last: collapsing Research (14.3 screens with 22 rated holdings) and Settings (7.6),
+    measured again once D384 is live. The user put off the iPhone checks on 2026-11-05.
 - **Owed by the user, on the phone:** tap a field in Settings and confirm the page does not zoom;
   type `12.5` on Targets and confirm it shows whole. Neither has been seen on a real iPhone.
 - **Owed by a session:** re-measure Ask from a week of production Langfuse traces (~2026-11-11),
@@ -6403,6 +6400,38 @@ failure they prevent.
     own right-to-left placement for one sign. **Keeping `(USD)`** - accurate, but two signs for one
     currency on one screen. **Smaller type in the model select** - iOS zooms a field under 16 px.
     **Truncating the name with an ellipsis** - a native select cannot, and half a name is the bug.
+384. **A phone's holding card opens where it is tapped, and every control on a phone is 44 px** (the
+    user, 2026-11-05). 44 of the portfolio's 63 small controls were the symbol and rating links on
+    cards, so a size rule alone would have made each card about 115 px and undone D381. A tap anywhere
+    on a card now opens the total P&L, cost, the price's age, each holder's part and a button to the
+    holding's page, one card at a time, in 200 ms of CSS. **This reverses D381's rejection of
+    tap-to-expand:** that rejection was about hiding the figures a list is read for, and the closed
+    card still states them. The cost is one more tap to the holding's page. It also gives a phone the
+    total the P&L sort orders by. A stretched button rather than a click handler, so a keyboard and a
+    screen reader can reach it; it is removed while a card is edited, so a tap in a field cannot close
+    it. The symbol is no longer a link on the card: two neighbouring targets that do different things
+    are mis-taps. **Sizes** live in one unlayered rule in `index.css` below `NARROW_QUERY`, so a wide
+    screen never sees it and a new control cannot forget it: text 10-11 -> 12, 12 -> 13, 14 -> 15 px;
+    buttons, selects and fields at least 44 px. `.tap-compact` keeps a control's look and takes its 44
+    px from the air around it. *Rejected:* **the whole card as a link to the holding's page** - one
+    tap to the page, but no place for the total, and an agent-only row would have nothing to open.
+    **Invisible targets alone** - a tap on the value or the percent still does nothing. **40 px** -
+    4 px less for a target under Apple's figure; the user: start at 44 and shrink if needed. **48 px**
+    is Android's and longer everywhere. **14 px for secondary text** - expected to break the three-line
+    card. *Deliberately under 44:* the rating and the holder chips on a card have 34 px (`.tap-tight`):
+    a full 44 px target reached the name line and sent its taps to Research, found only by tapping it
+    in the browser. The same goes for what shares a closed card's line: the set-cost pill and Approve.
+    Approve can take the bottom 9 px of the "⋮" above it; a tap there opens the review drawer, never
+    an approval. Inline links in a sentence and checkboxes keep their size; a checkbox's label is its
+    target. **Links and list rows are not caught by the size rule** (it names `button`, `select`,
+    `input`), so each carries its own 44 px; a list's rows are a real 44, because hidden targets on
+    neighbouring rows would overlap. Chips that wrap (concepts on an observation) sit 14 px apart so
+    two rows of 44 px targets do not cross. **The label rule is in the base layer, unlike the rest:**
+    a label that says `items-start` above a long sentence is right, and unlayered it was overruled.
+    Chart axes read `var(--text-2xs)`, the one size CSS cannot reach through a class. An independent
+    QA pass found all of this after the first commit; the sweep (`elementFromPoint` up and down from
+    each control's centre) is what proves it, at 375 px over Portfolio, Insights, Settings, Research,
+    a holding, Agents and an agent, on synthetic data.
 **Three PRs for the polish:** bugs first, then tap targets and text, then collapsing Research and
 Settings, because a collapsed row's height depends on the sizing rule (the user, 2026-11-05).
 ---
@@ -7211,6 +7240,8 @@ component starts a query app-wide, grep the tests for catch-all pending mocks; a
 awaits invalidation inherits every active query's fate.** Same shape in UX5: adding a holding waits
 for the equity curve's snapshots.
 
+**An invisible tap target can take another element's taps** (D384). The rating's 44 px hit area reached the name line under it, so tapping a card's name opened Research. jsdom and the size measurement both passed; only a real click in the browser found it. **Lesson: after enlarging a target, sweep `elementFromPoint` across its neighbours.**
+
 **A parent's `space-y-*` shrinks a fixed overlay** (D382). Tailwind's `space-y-4` gives each child a
 bottom margin, and on a `fixed inset-0` box that margin comes out of its height: the Drawer on the
 Agents page stopped 16 px short of the screen. Nobody saw it while nothing lived at the bottom; the
@@ -7231,8 +7262,7 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 | Item | Where | Impact |
 |---|---|---|
 | **Tab can reach the page behind an open Drawer** | `Drawer.tsx` (D382) | It says `aria-modal` but has no focus trap, so a keyboard user can Tab onto a covered link, now including the bottom bar, and leave a half-filled form. Older than the bar; only a hardware keyboard reaches it. |
-| **A phone can sort by P&L but not see it** | `SortControl`, `CombinedCard`, `HoldingCard` (D381) | The card states today's percent, so sorting by P&L or P&L % orders the cards by a figure they do not show. Harmless, but it reads as a random order. The total is one tap away on the holding's page. |
-| **Much of a phone's UI is under 40 px and 12 px** | App-wide | The account button and its rows are still 32 px, and so are many page controls. PR 3 of the phone view (top of this file). |
+| **A phone sorts by P&L with the figure one tap away** | `SortControl`, `CombinedCard`, `HoldingCard` (D381, D384) | The closed card states today's percent, so sorting by P&L orders cards by a figure shown only when one is opened. Harmless, but it can read as a random order. |
 | **A reset keeps the agent review's suggestions** | `reset_account` (0072), `agent_suggestions` (0079) | A reset of `agents_trading` erases the scans and fills a suggestion's evidence came from, but an open card stays until dismissed or superseded by the next window. Its Apply still checks the setting's current value, so it can change nothing unexpected; the figures are only out of date. Fix: add the table to the reset's `agents_trading` group (a `CREATE OR REPLACE` of the function, as 0072 did) |
 | **Consent records go with an erased account** | `0077` cascade, D317's erase | Once an account is erased there is no record of what it agreed to. Whether consent must outlive the account (and for how long) is a legal retention question for the user or a lawyer, raised by the PR 15 security review; keeping it would need the erase to keep an anonymised row |
 | ~~Telegram ignores the legal acceptance~~ | — | **Resolved** (2026-10-26, the PR after #332): messages and taps are answered with one sentence, `/stop` excepted, and pushes go nowhere until the account accepts (D321) |

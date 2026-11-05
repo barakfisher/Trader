@@ -37,7 +37,7 @@ export function NarrationBadge() {
     <div className="group relative">
       <button
         type="button"
-        className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${tone}`}
+        className={`tap-compact flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${tone}`}
         aria-label={t('narration.badgeLabel', { label: copy.label })}
       >
         <Sparkles className="size-3" aria-hidden />
@@ -64,7 +64,7 @@ export function NarrationBadge() {
         )}
 
         {health.sampleSize > 0 && (
-          <p className="mt-2 border-t border-border-subtle pt-2 text-[11px] text-text-muted">
+          <p className="mt-2 border-t border-border-subtle pt-2 text-2xs text-text-muted">
             {t('narration.sample', { count: health.sampleSize })}
             {health.lastFallbackReason &&
               t('narration.fallback', { reason: health.lastFallbackReason })}

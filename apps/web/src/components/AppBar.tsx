@@ -55,11 +55,11 @@ export const AppBar = observer(function AppBar() {
     <header className="sticky top-0 z-30 border-b border-border-subtle bg-surface/95 backdrop-blur">
       <nav
         aria-label={t('nav.label')}
-        className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2 sm:px-6"
+        className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-0.5 sm:px-6 sm:py-2"
       >
         <Link
           to="/"
-          className="flex items-center gap-2 rounded-lg px-1 py-1 text-base font-semibold text-text-primary"
+          className="flex items-center gap-2 rounded-lg px-1 py-1 text-base font-semibold text-text-primary max-sm:min-h-11"
           aria-current={pathname === '/' ? 'page' : undefined}
         >
           <BrandMark className="size-5" />
@@ -112,7 +112,7 @@ function PlaceLink({ place, pathname, wide = false }: { place: Place; pathname: 
     <Link
       to={place.to}
       aria-current={current ? 'page' : undefined}
-      className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition hover:bg-surface-hover hover:text-text-primary ${
+      className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition max-sm:min-h-11 hover:bg-surface-hover hover:text-text-primary ${
         wide ? 'w-full' : ''
       } ${current ? 'bg-surface-hover text-text-primary' : 'text-text-muted'}`}
     >

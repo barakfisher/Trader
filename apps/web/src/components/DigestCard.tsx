@@ -99,7 +99,7 @@ function EntryList({ entries }: { entries: DigestEntry[] }) {
         return (
           <li key={`${entry.observationId}-${index}`} className="flex flex-wrap items-baseline gap-x-2 text-xs">
             {severity && (
-              <span className={`rounded px-1.5 py-0.5 text-[10px] ${severity.chipClassName}`}>
+              <span className={`rounded px-1.5 py-0.5 text-3xs ${severity.chipClassName}`}>
                 {severity.label}
               </span>
             )}

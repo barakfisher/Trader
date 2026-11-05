@@ -87,7 +87,7 @@ export function AccountCard({
             type="button"
             onClick={() => setOpen(true)}
             aria-haspopup="dialog"
-            className="flex items-center gap-1 text-xs text-accent hover:underline"
+            className="tap-compact flex items-center gap-1 text-xs text-accent hover:underline"
           >
             <Wallet className="size-3.5" aria-hidden />
             {data.state === 'unset' ? t('account.setCash') : t('account.manage')}
@@ -231,7 +231,7 @@ function MovementForm({ onDone }: { onDone: () => void }) {
             {PRIMARY_MOVEMENT_TYPES.map((option) => (
               <label
                 key={option}
-                className={`cursor-pointer rounded-lg border px-2 py-1.5 text-center text-xs transition ${
+                className={`cursor-pointer justify-center rounded-lg border px-2 py-1.5 text-center text-xs transition ${
                   option === type
                     ? 'border-accent bg-accent/10 font-medium text-text-primary'
                     : 'border-border-subtle text-text-muted hover:bg-surface-hover'

@@ -96,7 +96,7 @@ export function InsightsPage() {
         <h1 className="text-base font-semibold">{t('insights.title')}</h1>
       </header>
 
-      <div role="tablist" className="flex gap-2 overflow-x-auto overflow-y-hidden border-b border-border-subtle">
+      <div role="tablist" className="flex gap-2 overflow-x-auto overflow-y-hidden border-b border-border-subtle max-sm:[scrollbar-width:none]">
         {INSIGHTS_TABS.map((name) => (
           <button
             key={name}
@@ -104,7 +104,7 @@ export function InsightsPage() {
             type="button"
             aria-selected={tab === name}
             onClick={() => show(name)}
-            className={`-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm ${
+            className={`-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm max-sm:h-[45px] ${
               tab === name ? 'border-accent text-text-primary' : 'border-transparent text-text-muted'
             }`}
           >

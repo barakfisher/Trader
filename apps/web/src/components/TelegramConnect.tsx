@@ -100,7 +100,7 @@ export const TelegramConnect = observer(function TelegramConnect() {
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <a
-                  className="flex items-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-surface hover:brightness-110"
+                  className="flex items-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-surface hover:brightness-110 max-sm:min-h-11"
                   href={link.url}
                   target="_blank"
                   rel="noreferrer noopener"
@@ -116,7 +116,7 @@ export const TelegramConnect = observer(function TelegramConnect() {
               {/* Shown as text as well as a button: on a desktop without Telegram
                   installed the link has to travel to a phone, and a link you
                   cannot read is a link you cannot move. */}
-              <p className="break-all font-mono text-[11px] text-text-muted">{link.url}</p>
+              <p className="break-all font-mono text-2xs text-text-muted">{link.url}</p>
 
               {/*
                 The deep link only sends its payload for a bot you have never
@@ -135,7 +135,7 @@ export const TelegramConnect = observer(function TelegramConnect() {
                     {t('telegram.alreadyStarted')}
                   </p>
                   <div className="flex items-start gap-2">
-                    <code className="block flex-1 break-all rounded bg-surface px-2 py-1 font-mono text-[11px] text-text-primary">
+                    <code className="block flex-1 break-all rounded bg-surface px-2 py-1 font-mono text-2xs text-text-primary">
                       {startCommand}
                     </code>
                     <Button variant="secondary" onClick={() => void copy(startCommand)}>

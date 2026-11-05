@@ -42,7 +42,7 @@ export function DigestBanner() {
         <Link
           to="/insights"
           search={{ tab: 'digest' }}
-          className="rounded-lg px-3 py-1 font-medium text-accent hover:bg-accent/10"
+          className="rounded-lg px-3 py-1 font-medium text-accent hover:bg-accent/10 max-sm:inline-flex max-sm:min-h-11 max-sm:items-center"
         >
           {t('digest.banner.open')}
         </Link>

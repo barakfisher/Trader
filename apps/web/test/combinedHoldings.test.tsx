@@ -219,6 +219,15 @@ describe('the holdings table', () => {
 });
 
 describe('the card on a phone', () => {
+  /** The real portfolio holds NVDA as h-1, so its row has a holding page. */
+  function serveRealHolding() {
+    get.mockImplementation(async (path: string) =>
+      path === '/portfolio'
+        ? { holdings: [{ id: 'h-1', instrument: { id: response().rows[0]!.instrument.id, symbol: 'NVDA' }, costBasisMinor: 15000 }] }
+        : new Promise(() => {}),
+    );
+  }
+
   beforeEach(() => {
     window.matchMedia = ((query: string) => ({
       matches: true,
@@ -245,6 +254,87 @@ describe('the card on a phone', () => {
     renderPage(<CombinedHoldingsTable data={data} scope={ALL} />);
     await screen.findByText('NVDA');
     expect(screen.queryByRole('list', { name: 'Holders' })).toBeNull();
+  });
+
+  it('opens to each holder\'s part and the holding page, and leaves them out while closed (D384)', async () => {
+    serveRealHolding();
+    renderPage(<CombinedHoldingsTable data={response()} scope={ALL} />);
+    const details = await screen.findByRole('button', { name: 'Details for NVDA' });
+    await vi.waitFor(() => expect(get).toHaveBeenCalledWith('/portfolio'));
+    expect(screen.queryByRole('link', { name: 'Holding page for NVDA' })).toBeNull();
+    expect(screen.queryByRole('term')).toBeNull();
+
+    fireEvent.click(details);
+
+    expect(details.getAttribute('aria-expanded')).toBe('true');
+    expect((await screen.findByRole('link', { name: 'Holding page for NVDA' })).getAttribute('href')).toBe('/holdings/h-1');
+    expect(screen.getByText('Combined')).toBeTruthy();
+  });
+
+  it('still offers the holding page while the portfolio has not answered (D384)', async () => {
+    // Nothing resolves /portfolio here: the row's own real position is the way there.
+    renderPage(<CombinedHoldingsTable data={response()} scope={ALL} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Details for NVDA' }));
+    const primary = response().rows[0]!.positions.find((position) => position.isPrimary)!;
+    expect((await screen.findByRole('link', { name: 'Holding page for NVDA' })).getAttribute('href')).toBe(
+      `/holdings/${primary.holdingId}`,
+    );
+  });
+
+  /** A stock only Momentum holds, with the portfolio answered and not holding it. */
+  function serveAgentOnlyRow() {
+    serveRealHolding();
+    const nvda = response().rows[0]!;
+    const data = response();
+    data.rows.push({
+      ...nvda,
+      instrument: { ...nvda.instrument, id: 'i-TSLA', symbol: 'TSLA', name: 'Tesla' },
+      positions: [{ ...nvda.positions.find((position) => !position.isPrimary)!, holdingId: 'h-3' }],
+    });
+    return data;
+  }
+
+  it('has no holding page to offer for a stock only an agent holds (D384)', async () => {
+    renderPage(<CombinedHoldingsTable data={serveAgentOnlyRow()} scope={ALL} />);
+    await vi.waitFor(() => expect(get).toHaveBeenCalledWith('/portfolio'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Details for TSLA' }));
+    expect(screen.getAllByRole('term').map((term) => term.textContent)).toContain('P&L');
+    expect(screen.queryByRole('link', { name: 'Holding page for TSLA' })).toBeNull();
+  });
+
+  it('keeps one card open at a time (D384)', async () => {
+    renderPage(<CombinedHoldingsTable data={serveAgentOnlyRow()} scope={ALL} />);
+    const nvda = await screen.findByRole('button', { name: 'Details for NVDA' });
+    const tsla = screen.getByRole('button', { name: 'Details for TSLA' });
+
+    fireEvent.click(nvda);
+    fireEvent.click(tsla);
+
+    expect(nvda.getAttribute('aria-expanded')).toBe('false');
+    expect(tsla.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('says a dash for a figure it does not have, never a zero (D384)', async () => {
+    const data = response();
+    const row = data.rows[0]!;
+    data.rows[0] = {
+      ...row,
+      positions: row.positions.map((position) => ({ ...position, costBasisMinor: null, costMinor: null, pnlMinor: null, pnlPct: null })),
+    };
+    renderPage(<CombinedHoldingsTable data={data} scope={ALL} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Details for NVDA' }));
+    const figures = screen.getAllByRole('definition').map((figure) => figure.textContent);
+    expect(figures.slice(0, 2)).toEqual(['—', '—']);
+  });
+
+  it.each(['Edit', 'Remove'])('cannot close a card during %s (D384)', async (action) => {
+    serveRealHolding();
+    renderPage(<CombinedHoldingsTable data={response()} scope={ALL} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Actions for NVDA' }));
+    const item = await screen.findByRole('button', { name: action });
+    await vi.waitFor(() => expect((item as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(item);
+    expect(screen.queryByRole('button', { name: 'Details for NVDA' })).toBeNull();
   });
 
   it('keeps an approve button on a row with a pending trade', async () => {

@@ -72,7 +72,7 @@ export const ConceptDialog = observer(function ConceptDialog() {
             <h2 id="concept-dialog-title" className="text-base font-medium text-text-primary">
               {title}
             </h2>
-            <p className="mt-0.5 text-[11px] uppercase tracking-wide text-text-muted">{t('concept.kind')}</p>
+            <p className="mt-0.5 text-2xs uppercase tracking-wide text-text-muted">{t('concept.kind')}</p>
           </div>
           <button
             ref={closeRef}
@@ -114,7 +114,7 @@ export const ConceptDialog = observer(function ConceptDialog() {
                 </section>
               ))}
 
-              <p className="border-t border-border pt-3 text-[11px] text-text-muted">
+              <p className="border-t border-border pt-3 text-2xs text-text-muted">
                 {t('concept.source', { source: document_.source, license: document_.license })}
                 {document_.uri !== null && (
                   <>

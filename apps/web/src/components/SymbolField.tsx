@@ -151,7 +151,7 @@ export function SymbolField({
               <li
                 key="__search_market__"
                 {...getItemProps({ item, index })}
-                className={`flex cursor-pointer items-center gap-2 border-t border-border-subtle px-3 py-2 text-sm text-accent ${
+                className={`flex cursor-pointer items-center gap-2 border-t border-border-subtle px-3 py-2 text-sm text-accent max-sm:min-h-11 ${
                   highlightedIndex === index ? 'bg-surface-hover' : ''
                 }`}
               >
@@ -162,7 +162,7 @@ export function SymbolField({
               <li
                 key={item.symbol}
                 {...getItemProps({ item, index })}
-                className={`flex cursor-pointer items-baseline gap-2 px-3 py-2 text-sm ${
+                className={`flex cursor-pointer items-baseline gap-2 px-3 py-2 text-sm max-sm:min-h-11 max-sm:items-center ${
                   highlightedIndex === index ? 'bg-surface-hover' : ''
                 }`}
               >
@@ -175,14 +175,14 @@ export function SymbolField({
                     {item.name ?? ''}
                   </bdi>
                 </span>
-                <span className="shrink-0 text-[11px] text-text-muted">
+                <span className="shrink-0 text-2xs text-text-muted">
                   {[item.exchange, assetClassName(item.assetClass)].filter(Boolean).join(' · ')}
                 </span>
               </li>
             ),
           )}
       </ul>
-      <span id={hintId} className="block text-[11px] text-text-muted">
+      <span id={hintId} className="block text-2xs text-text-muted">
         {status ?? t('addHolding.symbolHint')}
       </span>
     </div>
