@@ -6,6 +6,17 @@ off. The time in the header (D351, D352) says when the build's commit reached `m
 clock; the Mac's compose stack shows its own, so a difference between the two is visible at a
 glance.
 
+## Installing it
+
+The app has a manifest (D391), so it can open on its own, without the browser's address bar.
+A home-screen icon added before that is only a shortcut and stays one, so:
+
+1. Remove the existing TikLens icon from the home screen.
+2. Open <https://app.tiklens.com> in Chrome on Android, or in Safari on an iPhone.
+3. Android: menu (three dots), then **Install app** or **Add to Home screen**. iPhone: Share, then
+   **Add to Home Screen**.
+4. Open it from the new icon. An iPhone's installed app keeps its own sign-in, so sign in once more.
+
 ## The local stacks are not reachable from the phone
 
 Every port the Mac opens listens on `127.0.0.1` only: no other device, not even one on the same

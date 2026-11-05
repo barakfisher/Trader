@@ -1,6 +1,7 @@
 /**
  * The TikLens mark: a rising line on an accent tile, the same drawing as
- * `public/favicon.svg` and `public/logo.svg` - keep the three in step. The tile
+ * `public/favicon.svg` and `public/logo.svg` - keep the three in step, and redraw
+ * the install icons with them (`public/icon-*`, D391). The tile
  * is the accent, not the surface, so the mark stands out from the bar it sits
  * in rather than leaving only a line that reads as an icon button (D357).
  * Inline rather than an `<img>`, so the page's only images are ones it chose to
