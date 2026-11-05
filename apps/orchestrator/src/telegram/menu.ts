@@ -312,7 +312,7 @@ async function proposalScreen(
   if (text.explanation) lines.push('', text.explanation);
   // As the proposal's page has it: a trade from a scan says what the scan checked, even nothing.
   if (row.scan_id !== null) lines.push('', messages.evidenceChecked(evidenceCheckedFrom(row.scan_tool_calls ?? [])));
-  // As its alert ends (D384): a trade is not advice, and is for the simulation only.
+  // As its alert ends (D385): a trade is not advice, and is for the simulation only.
   if (isTradeProposalKind(row.kind)) lines.push('', messages.tradeNotAdvice);
   lines.push(
     '',

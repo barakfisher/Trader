@@ -70,6 +70,6 @@ export function plainAnswer(reply: AssistantReply, messages: Messages, linkBase:
     news.length === 0
       ? text
       : `${text}\n\n${messages.ask.sources}\n${news.map((source) => `• ${source.label}\n${source.url}`).join('\n')}`;
-  // D385: an answer may read like an advisor's, so it ends with the catalogue's not-advice line.
+  // D386: an answer may read like an advisor's, so it ends with the catalogue's not-advice line.
   return reply.outcome === 'answer' ? `${withSources}\n\n${messages.ask.notAdvice}` : withSources;
 }

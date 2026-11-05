@@ -321,7 +321,7 @@ describe('a scan becomes a proposal', () => {
         proposalId: PROPOSAL,
         trade: true,
         title: 'Value proposes to buy 3 AAPL at 200.00',
-        // The thesis, what the scan checked, from its transcript, then the not-advice line (D384).
+        // The thesis, what the scan checked, from its transcript, then the not-advice line (D385).
         body: `AAPL fell 3.18% to 200.00.\n\nChecked: price history AAPL (21 trading days) · position\n\n${messagesFor('en').tradeNotAdvice}`,
       }),
     );

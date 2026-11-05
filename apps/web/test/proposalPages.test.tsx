@@ -274,7 +274,7 @@ describe("an agent's trade proposal", () => {
     expect(screen.queryByRole('region', { name: 'Evidence checked' })).toBeNull();
   });
 
-  it('ends a trade with the catalogue\'s not-advice line, whatever the thesis says (D384)', async () => {
+  it('ends a trade with the catalogue\'s not-advice line, whatever the thesis says (D385)', async () => {
     serveTrade(TRADE);
     renderAt('/proposals/p-trade');
     expect(await screen.findByText(en.proposal.trade.notAdvice)).toBeTruthy();

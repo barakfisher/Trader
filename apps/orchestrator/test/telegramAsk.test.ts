@@ -280,7 +280,7 @@ describe('the reply as plain text (D223)', () => {
     );
   });
 
-  it("ends every answer with the catalogue's not-advice line, in the language given (D385)", () => {
+  it("ends every answer with the catalogue's not-advice line, in the language given (D386)", () => {
     expect(plainAnswer(reply({ text: 'השבבים ירדו.' }), MESSAGES.he, null)).toBe(`השבבים ירדו.\n\n${MESSAGES.he.ask.notAdvice}`);
     expect(plainAnswer(reply({ outcome: 'clarify', text: 'Which one?' }), MESSAGES.en, null)).toBe('Which one?');
   });

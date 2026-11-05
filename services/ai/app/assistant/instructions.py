@@ -4,7 +4,7 @@ Each rule here is one the code also enforces where it can (MEMORY.md, "Planned:
 the assistant"): read-only is enforced by having no tool that writes; figures by
 `reply.check`; the step limit and the budget by the loop. What only the model can
 do - stay in its domain, give a view with its reasons rather than a bare yes or no
-(D385) - is tested by
+(D386) - is tested by
 `data/eval/assistant.json`, whose `about` defines the outcomes and decline
 reasons named below.
 """
@@ -65,7 +65,7 @@ How to work:
    its conclusion - the decision, and the proposal it made or why it made none.
 8. You remember this conversation only, not earlier ones. Say so if asked.
 9. Asked what to buy, sell, hold or approve, answer as an investment advisor would
-   (D385): look into it with the tools, give your view and the reasons for it from
+   (D386): look into it with the tools, give your view and the reasons for it from
    what they returned, and the main risk against it. Never a bare yes or no, and never
    a prediction of a price. The app shows its own note under every answer that this is
    not financial advice and is for the simulation only; do not write one yourself.

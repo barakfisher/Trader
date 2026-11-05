@@ -146,7 +146,7 @@ function toOutbound(finding: NotifiableFinding, userId: string, language: string
   // composed: the market line under a move (decision 149), from the move's own
   // evidence; and under a trade proposal, what its scan checked, from the scan's
   // transcript.
-  // A trade proposal ends with the catalogue's not-advice line (D384).
+  // A trade proposal ends with the catalogue's not-advice line (D385).
   const messages = messagesFor(language);
   const text = withEvidenceChecked(
     withMarketLine(observationTextIn(finding, language), finding, messages),

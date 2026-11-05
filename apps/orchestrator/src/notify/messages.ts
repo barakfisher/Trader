@@ -377,7 +377,7 @@ export interface Messages {
   /** D197: appended to a buy's headline when it needs the proceeds of sells from the same scan. */
   tradeFundedBy: (symbols: string[]) => string;
   /**
-   * The last line of every trade proposal, in an alert and on `/pending` (D384):
+   * The last line of every trade proposal, in an alert and on `/pending` (D385):
    * a thesis may read like advice, so the catalogue - never the model - says
    * that it is not, and what it is for.
    */
@@ -453,7 +453,7 @@ export interface Messages {
     textOnly: string;
     /** The heading over the news an answer drew on. */
     sources: string;
-    /** The last line of every answer (D385): a view like an advisor's is still not advice. */
+    /** The last line of every answer (D386): a view like an advisor's is still not advice. */
     notAdvice: string;
     newConversation: string;
   };
