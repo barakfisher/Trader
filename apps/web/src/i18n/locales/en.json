@@ -2221,6 +2221,7 @@
     "cellLabel": "{{rating}}, by {{agent}} on {{date}}. Open the research.",
     "stale": "· stale",
     "staleLong": "Stale: older than a week",
+    "toggleEntry": "Reasons for {{symbol}}",
     "notYet": "Not rated yet",
     "noHoldings": "Your main portfolio has no holdings to research.",
     "unassignedTitle": "No agent researches your portfolio",

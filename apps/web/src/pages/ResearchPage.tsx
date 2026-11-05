@@ -1,11 +1,13 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useLocation } from '@tanstack/react-router';
 import { Microscope, Play } from 'lucide-react';
 
 import { RESEARCH_STOPS, isLegacyRating, type ResearchHolding, type ResearchRunSummary, type ResearchStop } from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
+import { CollapsingCards } from '../components/CollapsingCards.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
+import { ExpandMark, ExpandingPanel, useRevealOnOpen } from '../components/ExpandingCard.tsx';
 import { OwnKeyNotice } from '../components/OwnKeyNotice.tsx';
 import { SentimentBadge, byOn, ratedOn } from '../components/SentimentBadge.tsx';
 import { Button, Card, EmptyState, ErrorNote, Spinner } from '../components/ui.tsx';
@@ -13,6 +15,7 @@ import { useTranslation } from '../i18n/index.ts';
 import { researchRefusalText } from '../lib/researchRefusals.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
 import { SERVER_ENGLISH } from '../lib/textDirection.ts';
+import { useNarrowViewport } from '../lib/viewport.ts';
 import { useAgentsQuery } from '../queries/agents.ts';
 import { useModelAccess } from '../queries/modelAccess.ts';
 import { useAssignResearchAgent, useResearchQuery, useStartResearch } from '../queries/research.ts';
@@ -27,21 +30,35 @@ import { useAssignResearchAgent, useResearchQuery, useStartResearch } from '../q
  *
  * A stock researched on its own from a holding row (D369) is listed under the
  * holdings, in a section of its own (D370): it is rated, but not held.
+ *
+ * On a phone (D389) each entry is a closed line that still states the rating, its
+ * agent and its date (guardrails 3-4); a tap opens the reasons, one entry at a
+ * time. The agent's card closes too, and takes the intro with it. The disclaimer
+ * and the note that a rating is not advice are never folded away.
  */
 export function ResearchPage() {
   const { t } = useTranslation();
   const research = useResearchQuery();
+  const narrow = useNarrowViewport();
   const hash = useLocation({ select: (location) => location.hash });
 
   // Once per address: the read repeats while a run goes, and the page must not
   // jump back to the stock on every repeat. A stock researched on its own has
   // no entry until its rating lands, so the scroll waits for the entry.
   const scrolledTo = useRef<string | null>(null);
+  // One open entry across both lists, and the one a link names starts open.
+  const [openEntry, setOpenEntry] = useState<string | null>(hash || null);
+  useEffect(() => {
+    if (hash) setOpenEntry(hash);
+  }, [hash]);
+  const toggleEntry = (symbol: string) => setOpenEntry(openEntry === symbol ? null : symbol);
   useEffect(() => {
     if (!hash || scrolledTo.current === hash) return;
     const entry = research.data && document.getElementById(`research-${hash}`);
     if (!entry) return;
     entry.scrollIntoView({ block: 'start' });
+    // Again once the agent's card above it has opened itself, if it does.
+    window.requestAnimationFrame(() => entry.scrollIntoView({ block: 'start' }));
     scrolledTo.current = hash;
   }, [hash, research.data]);
   const held = research.data?.holdings.filter((holding) => holding.held) ?? [];
@@ -53,7 +70,7 @@ export function ResearchPage() {
         <Microscope className="size-5 text-accent" aria-hidden />
         <h1 className="text-base font-semibold">{t('research.title')}</h1>
       </header>
-      <p className="text-sm text-text-muted">{t('research.intro')}</p>
+      {!narrow && <p className="text-sm text-text-muted">{t('research.intro')}</p>}
       <Disclaimer />
       <p className="text-xs text-text-muted">{t('research.notAdvice')}</p>
       {research.isPending ? (
@@ -62,16 +79,24 @@ export function ResearchPage() {
         <ErrorNote message={errorMessage(research.error, t('research.loadFailed'))} onRetry={() => research.refetch()} />
       ) : (
         <>
-          <AssignmentCard
-            agentId={research.data.agent?.id ?? null}
-            run={research.data.run}
-            holdingCount={held.length}
+          {/* It opens above the list, and must not pull the page from the entry a link named. */}
+          <CollapsingCards revealAttention={false}>
+            <AssignmentCard
+              agentId={research.data.agent?.id ?? null}
+              run={research.data.run}
+              holdingCount={held.length}
+            />
+          </CollapsingCards>
+          <HoldingsResearch
+            holdings={held}
+            assigned={research.data.agent !== null}
+            openEntry={openEntry}
+            onToggle={toggleEntry}
           />
-          <HoldingsResearch holdings={held} assigned={research.data.agent !== null} />
           {research.data.agent !== null && others.length > 0 && (
             <Card title={t('research.othersTitle', { count: others.length })}>
               <p className="mb-3 text-xs text-text-muted">{t('research.othersExplained')}</p>
-              <ResearchList holdings={others} />
+              <ResearchList holdings={others} openEntry={openEntry} onToggle={toggleEntry} />
             </Card>
           )}
         </>
@@ -98,10 +123,27 @@ function AssignmentCard({
   const assigned = choosable.find((agent) => agent.id === agentId) ?? null;
   const running = run?.status === 'running';
   const refusal = researchRefusalText(start.error);
+  const narrow = useNarrowViewport();
+  // What would otherwise wait behind a closed line on a phone. Each its own reason,
+  // so a run that fails opens the card again after it was closed while running.
+  const attention =
+    refusal ??
+    (assign.error
+      ? 'assign-failed'
+      : !agents.isPending && assigned === null
+        ? 'unassigned'
+        : running
+          ? `running:${run.id}`
+          : run?.status === 'failed'
+            ? `failed:${run.id}`
+            : run?.error
+              ? `stopped:${run.id}`
+              : null);
 
   return (
-    <Card title={t('research.agentTitle')}>
+    <Card title={t('research.agentTitle')} attention={attention}>
       <div className="space-y-3">
+        {narrow && <p className="text-sm text-text-muted">{t('research.intro')}</p>}
         <label className="block space-y-1 text-sm">
           <span className="text-text-muted">{t('research.agentLabel')}</span>
           <select
@@ -171,68 +213,120 @@ function RunStatus({ run }: { run: ResearchRunSummary }) {
   );
 }
 
-function HoldingsResearch({ holdings, assigned }: { holdings: ResearchHolding[]; assigned: boolean }) {
+interface EntryOpening {
+  openEntry: string | null;
+  onToggle: (symbol: string) => void;
+}
+
+function HoldingsResearch({
+  holdings,
+  assigned,
+  openEntry,
+  onToggle,
+}: { holdings: ResearchHolding[]; assigned: boolean } & EntryOpening) {
   const { t } = useTranslation();
   if (holdings.length === 0) return <EmptyState title={t('research.noHoldings')} />;
   if (!assigned) return <EmptyState title={t('research.unassignedTitle')} body={t('research.unassignedBody')} />;
   return (
     <Card title={t('research.holdingsTitle', { count: holdings.length })}>
-      <ResearchList holdings={holdings} />
+      <ResearchList holdings={holdings} openEntry={openEntry} onToggle={onToggle} />
     </Card>
   );
 }
 
 /** Each stock's latest rating, with the anchor a holding row's "Research this stock" opens at. */
-function ResearchList({ holdings }: { holdings: ResearchHolding[] }) {
+function ResearchList({ holdings, openEntry, onToggle }: { holdings: ResearchHolding[] } & EntryOpening) {
+  const narrow = useNarrowViewport();
   return (
     <ul className="divide-y divide-border-subtle/60">
       {holdings.map((holding) => (
-        <li key={holding.instrumentId} id={`research-${holding.symbol}`} className="scroll-mt-20 py-3 first:pt-0 last:pb-0">
-          <HoldingResearch holding={holding} />
+        <li
+          key={holding.instrumentId}
+          id={`research-${holding.symbol}`}
+          className="scroll-mt-20 sm:py-3 sm:first:pt-0 sm:last:pb-0"
+        >
+          <HoldingResearch
+            holding={holding}
+            closes={narrow}
+            open={openEntry === holding.symbol}
+            onToggle={() => onToggle(holding.symbol)}
+          />
         </li>
       ))}
     </ul>
   );
 }
 
-function HoldingResearch({ holding }: { holding: ResearchHolding }) {
+function HoldingResearch({
+  holding,
+  closes,
+  open,
+  onToggle,
+}: {
+  holding: ResearchHolding;
+  /** A phone: the reasons wait behind a tap. Elsewhere they are simply there. */
+  closes: boolean;
+  open: boolean;
+  onToggle: () => void;
+}) {
   const { t } = useTranslation();
+  const root = useRef<HTMLElement>(null);
   const latest = holding.latest;
   // A rating stored before D390 was written in English; one since, in the user's language.
   const textLang = latest !== null && isLegacyRating(latest.rating) ? SERVER_ENGLISH : {};
+  const panelId = useId();
+  // With no rating there is nothing behind the line, so it offers nothing to open.
+  const opens = closes && latest !== null;
+  useRevealOnOpen(root, opens && open);
   return (
-    <article className="space-y-2">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h2 className="text-sm font-semibold">{holding.symbol}</h2>
-        {holding.name && <span className="text-xs text-text-muted">{holding.name}</span>}
-        {latest ? (
-          <>
-            <SentimentBadge rating={latest.rating} />
-            <span className="text-xs text-text-muted">
-              {t('research.byOn', byOn(latest.agentName, latest.ratedAt))}
-            </span>
-            {latest.stale && <span className="text-xs text-warn">{t('research.staleLong')}</span>}
-          </>
-        ) : (
-          <span className="text-xs text-text-muted">{t('research.notYet')}</span>
+    <article ref={root} className="scroll-mt-20 sm:space-y-2">
+      <div className="relative flex items-center gap-2 max-sm:min-h-11 max-sm:py-2">
+        {opens && (
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={panelId}
+            aria-label={t('research.toggleEntry', { symbol: holding.symbol })}
+            onClick={onToggle}
+            className="absolute inset-0 z-[1] rounded-lg transition active:bg-surface-hover/40"
+          />
         )}
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+          <h2 className="text-sm font-semibold">{holding.symbol}</h2>
+          {holding.name && <span className="text-xs text-text-muted">{holding.name}</span>}
+          {latest ? (
+            <>
+              <SentimentBadge rating={latest.rating} />
+              <span className="text-xs text-text-muted">
+                {t('research.byOn', byOn(latest.agentName, latest.ratedAt))}
+              </span>
+              {latest.stale && <span className="text-xs text-warn">{t('research.staleLong')}</span>}
+            </>
+          ) : (
+            <span className="text-xs text-text-muted">{t('research.notYet')}</span>
+          )}
+        </div>
+        {opens && <ExpandMark open={open} />}
       </div>
       {latest && (
-        <>
-          <p {...textLang} className="text-sm">
-            {latest.rationale}
-          </p>
-          {latest.findings.length > 0 && (
-            <ul {...textLang} className="list-disc space-y-0.5 ps-5 text-xs text-text-muted">
-              {latest.findings.map((finding, index) => (
-                <li key={index}>{finding}</li>
-              ))}
-            </ul>
-          )}
-        </>
+        <ExpandingPanel id={panelId} open={open} active={closes}>
+          <div className="space-y-2 max-sm:pb-3">
+            <p {...textLang} className="text-sm">
+              {latest.rationale}
+            </p>
+            {latest.findings.length > 0 && (
+              <ul {...textLang} className="list-disc space-y-0.5 ps-5 text-xs text-text-muted">
+                {latest.findings.map((finding, index) => (
+                  <li key={index}>{finding}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </ExpandingPanel>
       )}
+      {/* Outside the fold: it says the rating above is not the newest word. */}
       {holding.lastAttempt && (
-        <p className="text-xs text-text-muted">
+        <p className="text-xs text-text-muted max-sm:pb-2">
           {t(`research.lastAttempt.${holding.lastAttempt.status}`, { date: ratedOn(holding.lastAttempt.at) })}
         </p>
       )}

@@ -3,18 +3,34 @@
 import type { ReactNode } from 'react';
 
 import { useTranslation } from '../i18n/index.ts';
+import { CollapsingCard, useCardGroup } from './CollapsingCards.tsx';
 
 export function Card({
   title,
   action,
   children,
   className = '',
+  attention = null,
 }: {
   title?: string;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  /**
+   * Inside `CollapsingCards`: why something here must be seen right now, or null.
+   * The card opens itself on each new reason, so a user's close holds until there is another.
+   */
+  attention?: string | null;
 }) {
+  const group = useCardGroup();
+  // A card with an action of its own has more in its title line than one button can be.
+  if (group && title && !action) {
+    return (
+      <CollapsingCard group={group} title={title} className={className} attention={attention}>
+        {children}
+      </CollapsingCard>
+    );
+  }
   return (
     <section
       className={`rounded-xl border border-border-subtle bg-surface-raised ${className}`}
@@ -54,6 +70,7 @@ export function Button({
   variant = 'primary',
   disabled = false,
   type = 'button',
+  form,
   className = '',
   describedBy,
 }: {
@@ -62,6 +79,8 @@ export function Button({
   variant?: ButtonVariant;
   disabled?: boolean;
   type?: 'button' | 'submit';
+  /** The id of the form this submits, when it stands outside that form. */
+  form?: string;
   className?: string;
   /** The id of the text that says why the button is disabled. */
   describedBy?: string;
@@ -69,6 +88,7 @@ export function Button({
   return (
     <button
       type={type}
+      form={form}
       onClick={onClick}
       disabled={disabled}
       aria-describedby={describedBy}

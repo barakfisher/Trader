@@ -2274,6 +2274,7 @@
     "cellLabel": "{{rating}}, מאת {{agent}} ב-{{date}}. פתיחת המחקר.",
     "stale": "· לא עדכני",
     "staleLong": "לא עדכני: ישן משבוע",
+    "toggleEntry": "הנימוקים של {{symbol}}",
     "notYet": "טרם דורג",
     "noHoldings": "אין בתיק הראשי שלך אחזקות למחקר.",
     "unassignedTitle": "אף סוכן לא חוקר את התיק שלך",
