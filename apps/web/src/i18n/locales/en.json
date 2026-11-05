@@ -642,6 +642,7 @@
       "agentPrice": "the agent's price {{price}}",
       "thesis": "Why the agent proposes it",
       "paperOnly": "A paper trade: approving it records a fill in the agent's simulated account. No order is placed.",
+      "notAdvice": "Not financial or investment advice, and no substitute for a professional: this proposal is for simulation inside the app only.",
       "checked": {
         "label": "Evidence checked",
         "none": "nothing - the agent decided from its briefing alone",
@@ -881,12 +882,13 @@
     },
     "declined": {
       "off_domain": "Outside what I cover",
-      "advice": "Not personal advice",
+      "advice": "Personal finance planning isn't covered",
       "action": "I can't change anything",
       "prompt": "Not something I share"
     },
     "suggestions": "Questions to ask next",
     "sources": "Sources ({{count}})",
+    "notAdvice": "Not financial or investment advice, and no substitute for a professional: answers are for the simulation inside the app only.",
     "noReplyStored": "No reply was stored for this question.",
     "history": "Conversations",
     "historyLoading": "Loading conversations…",

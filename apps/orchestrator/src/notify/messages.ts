@@ -376,6 +376,12 @@ export interface Messages {
   tradeProposalHeadline: (agent: string, side: 'buy' | 'sell', quantity: string, symbol: string, price: string) => string;
   /** D197: appended to a buy's headline when it needs the proceeds of sells from the same scan. */
   tradeFundedBy: (symbols: string[]) => string;
+  /**
+   * The last line of every trade proposal, in an alert and on `/pending` (D385):
+   * a thesis may read like advice, so the catalogue - never the model - says
+   * that it is not, and what it is for.
+   */
+  tradeNotAdvice: string;
 
   /** Decision 148: a holding's move and drawdown from one scan, said in one message. */
   moveWithDrawdown: (figures: MoveWithDrawdownFigures) => NoticeText;
@@ -447,6 +453,8 @@ export interface Messages {
     textOnly: string;
     /** The heading over the news an answer drew on. */
     sources: string;
+    /** The last line of every answer (D386): a view like an advisor's is still not advice. */
+    notAdvice: string;
     newConversation: string;
   };
 
@@ -772,6 +780,8 @@ const en: Messages = {
   tradeProposalHeadline: (agent, side, quantity, symbol, price) =>
     `${agent} proposes to ${side} ${quantity} ${symbol} at ${price}`,
   tradeFundedBy: (symbols) => ` - paid for by selling ${symbols.join(', ')}: approve that first`,
+  tradeNotAdvice:
+    'Not financial or investment advice, and no substitute for a professional: this proposal is for simulation inside the app only.',
 
   moveWithDrawdown: (f) => ({
     headline: `${f.symbol} ${f.direction} ${f.change} to ${f.price}`,
@@ -884,6 +894,7 @@ const en: Messages = {
     unavailable: "The assistant couldn't be reached, so this question wasn't answered. Try again in a minute.",
     textOnly: 'I can read text only. Write your question as a message.',
     sources: 'Sources:',
+    notAdvice: 'Not financial or investment advice, and no substitute for a professional: answers are for the simulation inside the app only.',
     newConversation: 'New conversation. Your next question starts it.',
   },
   recheck: {
@@ -1317,6 +1328,7 @@ const he: Messages = {
   tradeProposalHeadline: (agent, side, quantity, symbol, price) =>
     `${isolated(agent)} מציע ${side === 'buy' ? 'לקנות' : 'למכור'} ${ltr(quantity)} ${ltr(symbol)} ב־${ltr(price)}`,
   tradeFundedBy: (symbols) => ` - במימון מכירת ${symbols.map(ltr).join(', ')}: אשרו אותה קודם`,
+  tradeNotAdvice: 'אין בהצעה זו ייעוץ פיננסי או ייעוץ השקעות, והיא אינה תחליף לייעוץ מקצועי: היא נועדה לסימולציה בתוך האפליקציה בלבד.',
 
   moveWithDrawdown: (f) => ({
     headline: `מחיר ${ltr(f.symbol)} ${f.direction === 'fell' ? 'ירד' : 'עלה'} ב־${ltr(f.change)} ל־${ltr(f.price)}`,
@@ -1427,6 +1439,7 @@ const he: Messages = {
     unavailable: 'לא הצלחתי להגיע לעוזר, ולכן השאלה לא נענתה. נסו שוב בעוד דקה.',
     textOnly: 'אני קורא טקסט בלבד. כתבו את השאלה כהודעה.',
     sources: 'מקורות:',
+    notAdvice: 'אין בתשובה זו ייעוץ פיננסי או ייעוץ השקעות, והיא אינה תחליף לייעוץ מקצועי: התשובות נועדו לסימולציה בתוך האפליקציה בלבד.',
     newConversation: 'שיחה חדשה. השאלה הבאה שלכם תפתח אותה.',
   },
   recheck: {

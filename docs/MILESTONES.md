@@ -355,6 +355,30 @@ cash movement that records tax a broker took - a record, not a computation.
 The exact rules (the substantial-shareholder rate, dividends) are checked with an accountant, not
 taken from a model. Exit criteria are set with the decisions.
 
+## M13 — Advice or observation mode *(roadmap, added 2026-11-05; D388; not scheduled)*
+
+D386 and D387 made advisory output the behaviour for everyone, with no switch. M13 makes it a
+per-user choice, and only a user who has accepted the advisory terms may choose it.
+
+- **Two modes, chosen in Settings:**
+  - **Observation** (the default): the behaviour before D386 - theses explain without
+    recommending, research rates Bullish / Bearish / Neutral under D254's guardrails, Ask gives
+    facts and declines "should I buy X?", alerts state facts, and nothing is proposed on the real
+    portfolio.
+  - **Advice:** everything D386 and D387 allow, each output with the not-advice line (D385).
+- **Advice needs its terms accepted.** The choice is disabled, with its reason (D368), until the
+  user accepts them; acceptance is recorded per version, append-only, like `legal_acceptances`
+  (0077, D265). A new version of those terms puts the user back in Observation until they accept
+  it.
+- **Enforced on the server, not only in the UI:** each prompt and each real-portfolio proposal
+  reads the user's mode, so a user in Observation gets none of it from any surface - the app,
+  Telegram, the digest.
+
+**To decide when it is scheduled:** whether the advisory terms are their own document or a
+section of `/terms` with its own acceptance; what happens to open advisory proposals when a user
+moves back to Observation; whether the admin needs to accept them too. The terms' wording is the
+lawyer's (D265).
+
 ---
 
 ## Ordering notes

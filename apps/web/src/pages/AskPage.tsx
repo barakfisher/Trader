@@ -220,6 +220,8 @@ function ReplyView({
         </p>
       )}
       <Sources sources={reply.sources} />
+      {/* An answer may give a view like an advisor's; the catalogue says it is not advice (D386). */}
+      {reply.outcome === 'answer' && <p className="text-xs text-text-muted">{t('ask.notAdvice')}</p>}
       {showSuggestions && reply.suggestions.length > 0 && (
         <Suggestions suggestions={reply.suggestions} onPick={onPick} />
       )}

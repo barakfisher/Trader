@@ -395,3 +395,7 @@ while this file is out of date.
 | 382 | A phone moves between places on a bottom bar, and its header holds the name and the account |
 | 383 | A field's currency is written `($)`, and "Not chosen" does not name the model |
 | 384 | A phone's holding card opens where it is tapped, and every control on a phone is 44 px |
+| 385 | Every trade proposal ends with the catalogue's not-advice line, in the app, in its alert and on `/pending` |
+| 386 | Agents and the assistant may behave and research like an advisor, everywhere, while every such output says it is not advice; guideline 2 is amended accordingly |
+| 387 | D386 on the real portfolio, case by case: who may give a view, and what a view may write |
+| 388 | Planned (M13): advice or observation, per user, and only a user who accepted the advisory terms may choose advice |

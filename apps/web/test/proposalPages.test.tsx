@@ -15,6 +15,8 @@ import { createMemoryHistory } from '@tanstack/react-router';
 
 import type { Proposal, ProposalDetailResponse, ProposalRecheck } from '@traders/shared';
 
+import en from '../src/i18n/locales/en.json';
+
 const get = vi.fn();
 const post = vi.fn();
 const patch = vi.fn();
@@ -270,6 +272,12 @@ describe("an agent's trade proposal", () => {
     renderAt('/proposals/p-trade');
     expect(await screen.findByText('INTC fell 3.18% to 112.50 with no news against it.')).toBeTruthy();
     expect(screen.queryByRole('region', { name: 'Evidence checked' })).toBeNull();
+  });
+
+  it('ends a trade with the catalogue\'s not-advice line, whatever the thesis says (D385)', async () => {
+    serveTrade(TRADE);
+    renderAt('/proposals/p-trade');
+    expect(await screen.findByText(en.proposal.trade.notAdvice)).toBeTruthy();
   });
 
   it('approves through a preview at the live price, then confirms at the price it showed', async () => {
