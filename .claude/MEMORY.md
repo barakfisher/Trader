@@ -18,7 +18,7 @@ five, so this is one late).
     P&L; every field is 16 px on a phone (D381).
 - **Deployed:** production (`https://app.tiklens.com`) and compose both run `e71b463` (#374) at
   `0084_index_article_duplicates`, read 2026-11-05. Nothing merged is undeployed.
-- **Decisions reach 388** (next: **389**). D386 (advisory character, 2026-11-05): the agents'
+- **Decisions reach 389** (next: **390**). D386 (advisory character, 2026-11-05): the agents'
   voice and Ask are built; D387 designs the real portfolio case by case - its PRs are owed. **Migrations:** `0084` head; next free `0085`.
 - **The phone view is three PRs, agreed with the user 2026-11-04, and #374 is the first.** Measured
   on production at 375 px in Hebrew: no sideways scroll on any screen, so the problem is density,
@@ -27,8 +27,8 @@ five, so this is one late).
     iPhone, because emulation reports every safe-area inset as 0: the bar clears the home indicator,
     nothing sits under the notch in landscape, and what the bar does with the keyboard open.
   - **PR 3 became three PRs** (the user, 2026-11-05). Bugs: D383 #377, deployed. Sizes and the opening
-    card: D384. Last: collapsing Research (14.3 screens with 22 rated holdings) and Settings (7.6),
-    measured again once D384 is live. The user put off the iPhone checks on 2026-11-05.
+    card: D384. Last: collapsing Research (13.2 screens) and Settings (7.0), measured after D384:
+    D389. The user put off the iPhone checks on 2026-11-05.
 - **Owed by the user, on the phone:** tap a field in Settings and confirm the page does not zoom;
   type `12.5` on Targets and confirm it shows whole. Neither has been seen on a real iPhone.
 - **Owed by a session:** re-measure Ask from a week of production Langfuse traces (~2026-11-11),
@@ -6523,6 +6523,43 @@ failure they prevent.
     mode the UI hides but Telegram ignores is no mode. **Consequence for D387's PRs:** each reads
     "is this user advisory?" from one function that returns true for now, so M13 changes one place
     instead of every prompt. Open questions are listed in `docs/MILESTONES.md` M13.
+389. **A long phone page opens as a list of what is on it** (the user, 2026-11-05). Measured on
+    production at 375 px in Hebrew after D384: Research 13.2 screens (22 holdings, 92% of it the
+    list, an entry averaging 443 px of which 31 is its line), Settings 7.0 (13 cards, none dominant),
+    an agent's Settings tab 4.8. Below 640 px, a Research entry is a closed line and a tap opens its
+    reasons, one at a time across both lists; Settings' cards and an agent's Settings cards are title
+    lines, one open at a time; Research's agent card closes and holds the intro. On synthetic data of
+    the same shape: Research 2.3 screens, Settings 1.4, the agent tab 1.0; at 1280 px every section's
+    height is the same as on `main`, measured side by side. `Card` reads a `CollapsingCards` around it,
+    so no call site changes. **What is never folded:** a rating's word, agent, date and stale mark
+    (guardrails 3-4 of D254); the disclaimer and the note that a rating is not advice (guardrail 5);
+    the save bar, and on an agent's form its Save, its errors and a note of unsaved changes, which on
+    a phone stand under the closed card and submit the form by `form=`; a failed attempt, because it
+    says the rating shown is not the newest word. **What opens itself:** the entry `/research#SYMBOL`
+    names; the agent card with no agent, a run going, a failed or stopped run or a refusal; the
+    sign-in card with a Google outcome it has to state. `attention` is a reason, not a boolean: a
+    boolean stays true from running to failed, so a card closed during a run hid the failure, and each
+    new reason now opens it again while a re-read of the same one leaves a user's close alone. The
+    research card opens without scrolling (`revealAttention={false}`), or it would pull the page away
+    from the entry a link named. **Everything stays
+    mounted, and crossing the width keeps the same elements,** so neither a close nor a turned phone
+    loses typing; that is why `CollapsingCard` keeps one element tree rather than switching to the
+    plain card. The Research line's button covers the line, not the reasons, unlike `ExpandingCard`, so
+    a long press can select them. *Rejected:* **a two-line preview of the rationale** - a screen more
+    of sentences cut mid-way, in English on a Hebrew page. **Folding only the findings** - about 9
+    screens. **Five groups in Settings** - a layer of new names, and an open group still scrolls 2-3
+    screens; 13 lines nearly fit one. **Closing only the long cards** - a page where nothing says what
+    is open. **Leaving the top of Research** - a page that opens with no stock on screen. **Splitting
+    the agent's 16-field form** - its own design, not done; open, it is still 2.3 screens. *Known:* a
+    closed card's own failed read shows only when opened; the page's read failure is outside the fold.
+    The cards with a Save of their own (model, schedule, key, safety limit) keep it inside: a half-made
+    edit there stays mounted but says nothing while closed. A stopped run keeps the agent card open
+    until the next run, every run for someone over the holdings limit. Turning a phone back to
+    portrait scrolls to the open card. **`ExpandingPanel` carries the clip's class for a reason:** the
+    extraction first moved `overflow-hidden` away from the negative margins and cut the holding card's
+    focus ring; an independent QA pass found that, the hidden Save and the run failure.
+    To sweep tap targets in a hidden browser pane, turn transitions off first: frames do not advance,
+    so panels stay at height 0 and the sweep reports false failures.
 **Three PRs for the polish:** bugs first, then tap targets and text, then collapsing Research and
 Settings, because a collapsed row's height depends on the sizing rule (the user, 2026-11-05).
 ---

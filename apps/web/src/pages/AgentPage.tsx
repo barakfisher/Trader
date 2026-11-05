@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type FormEvent } from 'react';
 import { Link, useParams, useSearch } from '@tanstack/react-router';
 import { Archive, ArrowLeft, ArrowLeftRight, Pause, Play, RotateCcw, Save } from 'lucide-react';
 
@@ -14,8 +14,10 @@ import { AgentField } from '../components/AgentField.tsx';
 import { InstructionsCheckStatus, InstructionsConflicts } from '../components/InstructionsCheck.tsx';
 import { InstructionsField } from '../components/InstructionsField.tsx';
 import { MandateFields } from '../components/MandateFields.tsx';
+import { CollapsingCards } from '../components/CollapsingCards.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { Button, Card, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
+import { useNarrowViewport } from '../lib/viewport.ts';
 import { errorMessage } from '../api/client.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { formatMoney } from '../i18n/format.ts';
@@ -181,12 +183,12 @@ function SimulatedAgent({ agent }: { agent: AgentView }) {
         </>
       )}
       {tab === 'settings' && (
-        <>
+        <CollapsingCards>
           <SettingsForm agent={agent} />
           <AgentModelCard agentId={agent.id} />
           <ScanScheduleCard agent={agent} />
           <StateControls agent={agent} />
-        </>
+        </CollapsingCards>
       )}
       {trading && (
         <TradePanel
@@ -278,6 +280,8 @@ function SettingsForm({ agent }: { agent: AgentView }) {
   const storedBudget = agent.budgetMinor === null ? '' : minorToDecimalString(agent.budgetMinor, agent.currency);
   const storedMandate = JSON.stringify(mandateInput(draftFromMandate(agent.mandate)));
   const [draft, setDraft] = useState(() => storedDraft(agent, storedBudget));
+  const narrow = useNarrowViewport();
+  const formId = useId();
   // A save, or another tab's, re-renders with the stored values.
   useEffect(() => {
     setDraft(storedDraft(agent, storedBudget));
@@ -306,50 +310,66 @@ function SettingsForm({ agent }: { agent: AgentView }) {
     );
   };
 
+  // On a phone the card closes (D389), and the save must not close with it: a
+  // changed form out of sight, and nothing to say so, is an edit a tab switch loses.
+  const saving = (
+    <>
+      {!mandateValid && <p className="text-xs text-loss">{t('agents.mandate.invalid')}</p>}
+      {update.error && <ErrorNote message={agentErrorMessage(update.error, t('agents.saveFailed'))} />}
+      {narrow && dirty && <p className="text-sm text-text-muted">{t('settings.unsaved')}</p>}
+      <Button
+        type="submit"
+        form={formId}
+        disabled={!dirty || update.isPending || !name.trim() || !budgetValid || !mandateValid}
+      >
+        <span className="flex items-center gap-1">
+          <Save className="size-4" aria-hidden />
+          {t('agents.save')}
+        </span>
+      </Button>
+    </>
+  );
+
   return (
-    <Card title={t('agents.settings')}>
-      <form onSubmit={submit} className="space-y-3">
-        <AgentField label={t('agents.fields.name')}>
-          <input
-            value={name}
-            onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-            maxLength={60}
-            dir="auto"
-            required
-            className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2"
+    <>
+      <Card title={t('agents.settings')}>
+        <form id={formId} onSubmit={submit} className="space-y-3">
+          <AgentField label={t('agents.fields.name')}>
+            <input
+              value={name}
+              onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+              maxLength={60}
+              dir="auto"
+              required
+              className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2"
+            />
+          </AgentField>
+          <AgentField label={t('agents.fields.budget')} hint={t('agents.fields.budgetEditHint')}>
+            <input
+              value={budget}
+              onChange={(event) => setDraft({ ...draft, budget: event.target.value })}
+              inputMode="decimal"
+              dir="ltr"
+              required
+              aria-invalid={!budgetValid}
+              className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-start"
+            />
+          </AgentField>
+          <MandateFields draft={mandate} onChange={(next) => setDraft(withMandate(draft, next))} />
+          <OverLimits agent={agent} />
+          <InstructionsField
+            value={persona}
+            generated={generated}
+            rows={6}
+            onChange={(value) => setDraft({ ...draft, persona: value })}
           />
-        </AgentField>
-        <AgentField label={t('agents.fields.budget')} hint={t('agents.fields.budgetEditHint')}>
-          <input
-            value={budget}
-            onChange={(event) => setDraft({ ...draft, budget: event.target.value })}
-            inputMode="decimal"
-            dir="ltr"
-            required
-            aria-invalid={!budgetValid}
-            className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-start"
-          />
-        </AgentField>
-        <MandateFields draft={mandate} onChange={(next) => setDraft(withMandate(draft, next))} />
-        <OverLimits agent={agent} />
-        <InstructionsField
-          value={persona}
-          generated={generated}
-          rows={6}
-          onChange={(value) => setDraft({ ...draft, persona: value })}
-        />
-        <InstructionsConflicts agent={agent} />
-        <InstructionsCheckStatus pending={check.isPending} result={check.data} />
-        {!mandateValid && <p className="text-xs text-loss">{t('agents.mandate.invalid')}</p>}
-        {update.error && <ErrorNote message={agentErrorMessage(update.error, t('agents.saveFailed'))} />}
-        <Button type="submit" disabled={!dirty || update.isPending || !name.trim() || !budgetValid || !mandateValid}>
-          <span className="flex items-center gap-1">
-            <Save className="size-4" aria-hidden />
-            {t('agents.save')}
-          </span>
-        </Button>
-      </form>
-    </Card>
+          <InstructionsConflicts agent={agent} />
+          <InstructionsCheckStatus pending={check.isPending} result={check.data} />
+          {!narrow && saving}
+        </form>
+      </Card>
+      {narrow && <div className="space-y-3">{saving}</div>}
+    </>
   );
 }
 

@@ -399,3 +399,4 @@ while this file is out of date.
 | 386 | Agents and the assistant may behave and research like an advisor, everywhere, while every such output says it is not advice; guideline 2 is amended accordingly |
 | 387 | D386 on the real portfolio, case by case: who may give a view, and what a view may write |
 | 388 | Planned (M13): advice or observation, per user, and only a user who accepted the advisory terms may choose advice |
+| 389 | A long phone page opens as a list of what is on it |
