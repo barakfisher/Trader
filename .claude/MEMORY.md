@@ -18,7 +18,7 @@ five, so this is one late).
     P&L; every field is 16 px on a phone (D381).
 - **Deployed:** production (`https://app.tiklens.com`) and compose both run `e71b463` (#374) at
   `0084_index_article_duplicates`, read 2026-11-05. Nothing merged is undeployed.
-- **Decisions reach 386** (next: **387**). D385 (advisory character, 2026-11-05): the agents'
+- **Decisions reach 387** (next: **388**). D385 (advisory character, 2026-11-05): the agents'
   voice and Ask are built; D386 designs the real portfolio case by case - its PRs are owed. **Migrations:** `0084` head; next free `0085`.
 - **The phone view is three PRs, agreed with the user 2026-11-04, and #374 is the first.** Measured
   on production at 375 px in Hebrew: no sideways scroll on any screen, so the problem is density,
@@ -6484,6 +6484,16 @@ failure they prevent.
     - *Rejected:* "record as if done" on approval (holdings drift from the broker when the
       user never trades); a paper copy of the real portfolio (a second ledger to explain);
       simulated agents on the real portfolio (the user's "no"; each scan would also cost more).
+387. **Planned (M13): advice or observation, per user, and only a user who accepted the advisory
+    terms may choose advice** (the user, 2026-11-05: "advice or observation mode in a future plan;
+    only whoever accepts the terms can use the advice mode"). Observation is the default and is
+    the behaviour before D385; advice is what D385 and D386 allow. It replaces D385's "no gate in
+    code" once built; until then advice is everyone's behaviour and D265 is the only gate.
+    Acceptance is versioned and append-only like `legal_acceptances` (0077), and the server
+    enforces the mode in every prompt and every real-portfolio proposal, never the UI alone - a
+    mode the UI hides but Telegram ignores is no mode. **Consequence for D386's PRs:** each reads
+    "is this user advisory?" from one function that returns true for now, so M13 changes one place
+    instead of every prompt. Open questions are listed in `docs/MILESTONES.md` M13.
 **Three PRs for the polish:** bugs first, then tap targets and text, then collapsing Research and
 Settings, because a collapsed row's height depends on the sizing rule (the user, 2026-11-05).
 ---
