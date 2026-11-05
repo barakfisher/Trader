@@ -19,7 +19,7 @@ five, so this is one late).
 - **Deployed:** production (`https://app.tiklens.com`) and compose both run `e71b463` (#374) at
   `0084_index_article_duplicates`, read 2026-11-05. Nothing merged is undeployed.
 - **Decisions reach 386** (next: **387**). D385 (advisory character, 2026-11-05): the agents'
-  voice and Ask are built; real-portfolio proposals are owed, as listed in it. **Migrations:** `0084` head; next free `0085`.
+  voice and Ask are built; D386 designs the real portfolio case by case - its PRs are owed. **Migrations:** `0084` head; next free `0085`.
 - **The phone view is three PRs, agreed with the user 2026-11-04, and #374 is the first.** Measured
   on production at 375 px in Hebrew: no sideways scroll on any screen, so the problem is density,
   not breakage. The portfolio went from 8.1 screens to 4.7 on real data.
