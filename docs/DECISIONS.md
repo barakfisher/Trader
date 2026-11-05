@@ -394,3 +394,5 @@ while this file is out of date.
 | 381 | A phone's holding card is three lines, and every field is 16 px on a phone |
 | 382 | A phone moves between places on a bottom bar, and its header holds the name and the account |
 | 383 | A field's currency is written `($)`, and "Not chosen" does not name the model |
+| 384 | Every trade proposal ends with the catalogue's not-advice line, in the app, in its alert and on `/pending` |
+| 385 | Agents and the assistant may behave and research like an advisor, everywhere, while every such output says it is not advice; guideline 2 is amended accordingly |

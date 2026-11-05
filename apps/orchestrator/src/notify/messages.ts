@@ -376,6 +376,12 @@ export interface Messages {
   tradeProposalHeadline: (agent: string, side: 'buy' | 'sell', quantity: string, symbol: string, price: string) => string;
   /** D197: appended to a buy's headline when it needs the proceeds of sells from the same scan. */
   tradeFundedBy: (symbols: string[]) => string;
+  /**
+   * The last line of every trade proposal, in an alert and on `/pending` (D384):
+   * a thesis may read like advice, so the catalogue - never the model - says
+   * that it is not, and what it is for.
+   */
+  tradeNotAdvice: string;
 
   /** Decision 148: a holding's move and drawdown from one scan, said in one message. */
   moveWithDrawdown: (figures: MoveWithDrawdownFigures) => NoticeText;
@@ -772,6 +778,8 @@ const en: Messages = {
   tradeProposalHeadline: (agent, side, quantity, symbol, price) =>
     `${agent} proposes to ${side} ${quantity} ${symbol} at ${price}`,
   tradeFundedBy: (symbols) => ` - paid for by selling ${symbols.join(', ')}: approve that first`,
+  tradeNotAdvice:
+    'Not financial or investment advice, and no substitute for a professional: this proposal is for simulation inside the app only.',
 
   moveWithDrawdown: (f) => ({
     headline: `${f.symbol} ${f.direction} ${f.change} to ${f.price}`,
@@ -1317,6 +1325,7 @@ const he: Messages = {
   tradeProposalHeadline: (agent, side, quantity, symbol, price) =>
     `${isolated(agent)} מציע ${side === 'buy' ? 'לקנות' : 'למכור'} ${ltr(quantity)} ${ltr(symbol)} ב־${ltr(price)}`,
   tradeFundedBy: (symbols) => ` - במימון מכירת ${symbols.map(ltr).join(', ')}: אשרו אותה קודם`,
+  tradeNotAdvice: 'אין בהצעה זו ייעוץ פיננסי או ייעוץ השקעות, והיא אינה תחליף לייעוץ מקצועי: היא נועדה לסימולציה בתוך האפליקציה בלבד.',
 
   moveWithDrawdown: (f) => ({
     headline: `מחיר ${ltr(f.symbol)} ${f.direction === 'fell' ? 'ירד' : 'עלה'} ב־${ltr(f.change)} ל־${ltr(f.price)}`,

@@ -12,6 +12,7 @@
 import { feeMinor } from '@traders/shared';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { messagesFor } from '../src/notify/messages.js';
 import { ACTIVE_SESSION } from './session.js';
 
 const USER = { ...ACTIVE_SESSION, id: '00000000-0000-0000-0000-000000000001', email: null, base_currency: 'USD', timezone: 'Asia/Jerusalem' };
@@ -320,8 +321,8 @@ describe('a scan becomes a proposal', () => {
         proposalId: PROPOSAL,
         trade: true,
         title: 'Value proposes to buy 3 AAPL at 200.00',
-        // The thesis, then what the scan checked, from its transcript.
-        body: 'AAPL fell 3.18% to 200.00.\n\nChecked: price history AAPL (21 trading days) · position',
+        // The thesis, what the scan checked, from its transcript, then the not-advice line (D384).
+        body: `AAPL fell 3.18% to 200.00.\n\nChecked: price history AAPL (21 trading days) · position\n\n${messagesFor('en').tradeNotAdvice}`,
       }),
     );
     expect(queries.listScanToolCalls).toHaveBeenCalledWith(USER.id, agentRow().id, SCAN);

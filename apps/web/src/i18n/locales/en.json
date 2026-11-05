@@ -635,6 +635,7 @@
       "agentPrice": "the agent's price {{price}}",
       "thesis": "Why the agent proposes it",
       "paperOnly": "A paper trade: approving it records a fill in the agent's simulated account. No order is placed.",
+      "notAdvice": "Not financial or investment advice, and no substitute for a professional: this proposal is for simulation inside the app only.",
       "checked": {
         "label": "Evidence checked",
         "none": "nothing - the agent decided from its briefing alone",

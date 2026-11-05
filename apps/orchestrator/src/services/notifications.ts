@@ -134,6 +134,10 @@ function withEvidenceChecked<T extends { explanation: string | null }>(
   return { ...text, explanation: text.explanation ? `${text.explanation}\n\n${line}` : line };
 }
 
+function appendLine(text: string | null, line: string): string {
+  return text ? `${text}\n\n${line}` : line;
+}
+
 function toOutbound(finding: NotifiableFinding, userId: string, language: string): OutboundNotification {
   // The explanation is already evidence-validated prose from the scan, in
   // every language it was stored in; a channel never composes its own, because
@@ -142,16 +146,18 @@ function toOutbound(finding: NotifiableFinding, userId: string, language: string
   // composed: the market line under a move (decision 149), from the move's own
   // evidence; and under a trade proposal, what its scan checked, from the scan's
   // transcript.
+  // A trade proposal ends with the catalogue's not-advice line (D384).
   const messages = messagesFor(language);
   const text = withEvidenceChecked(
     withMarketLine(observationTextIn(finding, language), finding, messages),
     finding,
     messages,
   );
+  const body = finding.trade === true ? appendLine(text.explanation, messages.tradeNotAdvice) : (text.explanation ?? '');
   return {
     userId,
     title: text.headline,
-    body: text.explanation ?? '',
+    body,
     proposalId: finding.proposalId,
     ...(finding.trade === true ? { trade: true } : {}),
     severity: finding.severity,

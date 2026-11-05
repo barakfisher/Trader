@@ -117,7 +117,11 @@ export const TradeProposalCard = observer(function TradeProposalCard({
           <EvidenceCheckedLine checked={proposal.evidenceChecked} agentId={proposal.agentId} scanId={proposal.scanId} />
         )}
 
-        <p className="text-xs text-text-muted">{t('proposal.trade.paperOnly')}</p>
+        {/* The thesis may read like advice; the catalogue says it is not (D384). */}
+        <div className="space-y-1 text-xs text-text-muted">
+          <p>{t('proposal.trade.paperOnly')}</p>
+          <p className="font-medium">{t('proposal.trade.notAdvice')}</p>
+        </div>
 
         {shown !== null && (
           <PreviewSummary preview={shown.trade}>

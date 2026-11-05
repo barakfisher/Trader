@@ -18,7 +18,8 @@ five, so this is one late).
     P&L; every field is 16 px on a phone (D381).
 - **Deployed:** production (`https://app.tiklens.com`) and compose both run `e71b463` (#374) at
   `0084_index_article_duplicates`, read 2026-11-05. Nothing merged is undeployed.
-- **Decisions reach 382** (next: **383**). **Migrations:** `0084` head; next free `0085`.
+- **Decisions reach 385** (next: **386**). D385 (advisory character, drafted 2026-11-05) is
+  recorded but not built; its three PRs are listed in it. **Migrations:** `0084` head; next free `0085`.
 - **The phone view is three PRs, agreed with the user 2026-11-04, and #374 is the first.** Measured
   on production at 375 px in Hebrew: no sideways scroll on any screen, so the problem is density,
   not breakage. The portfolio went from 8.1 screens to 4.7 on real data.
@@ -6403,6 +6404,48 @@ failure they prevent.
     own right-to-left placement for one sign. **Keeping `(USD)`** - accurate, but two signs for one
     currency on one screen. **Smaller type in the model select** - iOS zooms a field under 16 px.
     **Truncating the name with an ellipsis** - a native select cannot, and half a name is the bug.
+384. **Every trade proposal ends with the catalogue's not-advice line, in the app, in its alert and
+    on `/pending`** (the user, 2026-11-05: "a text that stresses the proposal is not financial
+    advice, no substitute for a professional, and is only for simulation inside the app").
+    `proposal.trade.notAdvice` on the card, below `paperOnly`; `tradeNotAdvice` in
+    `notify/messages.ts`, appended by `toOutbound` to a `trade: true` finding (so a digest entry
+    carries it too) and by the `/pending` proposal screen for a trade kind. **The line is the
+    catalogue's, never the model's**: a thesis can be told to add a disclaimer and forget, soften
+    or translate it, and the one sentence that must always be there would then be the one nobody
+    checked. It is the first piece of D385 and holds whatever D385 becomes. *Rejected:* folding it
+    into `paperOnly` (two facts - nothing is placed, nothing is advice - and a lawyer will reword
+    the second, not the first); the global footer `disclaimer` alone (it is not beside the
+    sentence that reads like advice, and Telegram has no footer).
+385. **Agents and the assistant may behave and research like an advisor, everywhere, while every
+    such output says it is not advice; guideline 2 is amended accordingly** (the user,
+    2026-11-05: "all places - behave and research like an advisor but stress that it is not
+    advice; the exact wording with a lawyer", gate: "record only"). *Drafted and recorded; not yet
+    built.* It reverses the "no personalized advice" half of guideline 2 and the guardrails that
+    implemented it:
+    - **Simulated agents:** the thesis may be written as a recommendation, in the advisor's voice.
+    - **The real portfolio:** agents may propose buy, sell, trim or accumulate on the user's real
+      holdings, as simulation only - recorded and approvable in the app, never sent anywhere
+      (guideline 2's first half, no execution, stands unchanged). This reverses D254 guardrail 1
+      ("never says you, your position, buy, sell, hold...") and D253's rejection of a model's
+      rebalance ideas.
+    - **Ask:** the assistant may answer "should I buy X?" with a view and its reasons instead of
+      declining; the `advice` refusal reason and the never-do line "act as the user's financial
+      advisor" in `assistant/instructions.py` go.
+    - **What does not move:** guideline 7 (every figure from evidence, the validator unchanged);
+      no execution; the not-advice line (D384) beside each output, from the catalogue.
+    - **Gate: none in code** (the user chose "record only" over an owner-only switch that
+      production would refuse while signup is open). What stands between this and a stranger is
+      D265: public signup stays closed until the legal text exists, and the not-advice wording is
+      to be settled with a lawyer as part of it. *Residual risk, recorded:* a disclaimer does not
+      make advice-in-substance into something else; whether this is regulated advice where users
+      live (in Israel, the Investment Advice Law) is the lawyer's question, and this decision makes
+      it a sharper one than D254 did.
+    - **Owed, one PR each, on the user's word:** the scan prompt's voice; real-portfolio proposals
+      (the database refuses a trade proposal on the main portfolio today - the `0038` trigger - so this needs a migration, and its ledger and approval path need design); Ask's
+      instructions and refusal reasons, with the Ask measurement set's `advice-yes-or-no` case
+      changed from "declines" to "answers with the line".
+    - *Rejected:* an owner-only switch (offered; the user chose to rely on D265); keeping guideline
+      2 and widening only the agents' voice (the user asked for every place).
 **Three PRs for the polish:** bugs first, then tap targets and text, then collapsing Research and
 Settings, because a collapsed row's height depends on the sizing rule (the user, 2026-11-05).
 ---
