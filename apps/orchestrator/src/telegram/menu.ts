@@ -20,6 +20,7 @@
 
 import {
   formatMoney,
+  RESEARCH_PROPOSAL_KIND,
   isTradeProposalKind,
   MAX_SCAN_EVERY_HOURS,
   MIN_SCAN_EVERY_HOURS,
@@ -314,6 +315,8 @@ async function proposalScreen(
   if (row.scan_id !== null) lines.push('', messages.evidenceChecked(evidenceCheckedFrom(row.scan_tool_calls ?? [])));
   // As its alert ends (D385): a trade is not advice, and is for the simulation only.
   if (isTradeProposalKind(row.kind)) lines.push('', messages.tradeNotAdvice);
+  // A research view (D392): approving only acknowledges, and it is not advice.
+  if (row.kind === RESEARCH_PROPOSAL_KIND) lines.push('', messages.researchAcknowledgeOnly, '', messages.researchNotAdvice);
   lines.push(
     '',
     state === 'snoozed' && row.snoozed_until !== null

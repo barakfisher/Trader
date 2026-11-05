@@ -374,6 +374,12 @@ per-user choice, and only a user who has accepted the advisory terms may choose 
   reads the user's mode, so a user in Observation gets none of it from any surface - the app,
   Telegram, the digest.
 
+**Already wired for it:** the orchestrator reads the mode from one function,
+`services/advisoryMode.ts` `isAdvisory()` (true for everyone until M13), before it raises a research
+view (D392). **Not wired:** research's vocabulary is chosen in the AI service's prompt
+(`app/research/run.py`), which does not read the mode; Observation needs the mode passed to the run
+and a wording guard again (D392 removed D292's; it is in git history).
+
 **To decide when it is scheduled:** whether the advisory terms are their own document or a
 section of `/terms` with its own acceptance; what happens to open advisory proposals when a user
 moves back to Observation; whether the admin needs to accept them too. The terms' wording is the

@@ -72,6 +72,12 @@ export interface NotifiableFinding {
    * severity floor, and a channel offers Approve and Reject only.
    */
   trade?: boolean;
+  /**
+   * The proposal is a research view on the real portfolio (D392): pushed
+   * whatever the severity floor, like a trade, and ending with the catalogue's
+   * acknowledge-only and not-advice lines.
+   */
+  research?: boolean;
   /** D70: a sell made while the market is open is pushed through quiet hours. */
   urgent?: boolean;
   /** A trade proposal's "Evidence checked" line: what the agent's scan looked at. */
@@ -153,7 +159,13 @@ function toOutbound(finding: NotifiableFinding, userId: string, language: string
     finding,
     messages,
   );
-  const body = finding.trade === true ? appendLine(text.explanation, messages.tradeNotAdvice) : (text.explanation ?? '');
+  // A research view ends with what approving does and the not-advice line (D392).
+  const body =
+    finding.trade === true
+      ? appendLine(text.explanation, messages.tradeNotAdvice)
+      : finding.research === true
+        ? appendLine(appendLine(text.explanation, messages.researchAcknowledgeOnly), messages.researchNotAdvice)
+        : (text.explanation ?? '');
   return {
     userId,
     title: text.headline,
@@ -196,7 +208,7 @@ export async function fanOut(
     // about the fall as a whole or not at all, never about half of it.
     const lead = group.members[0]!;
     const decision = routeFinding(group.severity, settings, now, {
-      floor: lead.trade === true ? 'ignored' : 'applies',
+      floor: lead.trade === true || lead.research === true ? 'ignored' : 'applies',
       quietHours: lead.urgent === true ? 'ignored' : 'apply',
     });
     const channel = channelFor(decision.route, notifier);

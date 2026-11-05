@@ -217,6 +217,20 @@ describe('a proposal opened from the list', () => {
     expect(decodeMenuData(buttonsOf(lastEdit()).at(-1)!.callback_data!)).toEqual({ view: 'pending' });
   });
 
+  it('a research view (D392): acknowledged like an observation, ending with what approving does and the not-advice line', async () => {
+    row = proposalRow({ id: OBSERVATION, kind: 'research', scan_id: null, scan_tool_calls: null });
+    await tap(encodeMenuData({ view: 'proposal', proposalId: OBSERVATION }));
+    const en = messagesFor('en');
+    const text = String(lastEdit()?.text);
+    expect(text).toContain(`${en.researchAcknowledgeOnly}\n\n${en.researchNotAdvice}`);
+    expect(text).not.toContain(en.tradeNotAdvice);
+    const actions = buttonsOf(lastEdit())
+      .map((b) => (b.callback_data ? decodeCallbackData(b.callback_data, SIGNING_SECRET) : null))
+      .filter((d) => d !== null)
+      .map((d) => d!.action);
+    expect(actions).toEqual(['approve', 'reject', 'snooze']);
+  });
+
   it('a snoozed one says until when, and that it can still be decided now', async () => {
     row = proposalRow({ state: 'snoozed', snoozed_until: new Date(Date.now() + 1_800_000) });
     await tap(encodeMenuData({ view: 'proposal', proposalId: TRADE }));

@@ -24,6 +24,7 @@
 
 import {
   RECHECK_WINDOW_DAYS,
+  type ActionableRating,
   type AgentScanOutcome,
   type AssistantOutcome,
   type DigestReason,
@@ -382,6 +383,18 @@ export interface Messages {
    * that it is not, and what it is for.
    */
   tradeNotAdvice: string;
+  /**
+   * A research view's headline on the real portfolio (D392): the agent and its
+   * word, from the catalogue; the rationale under it is the model's.
+   */
+  researchProposalHeadline: (agent: string, action: ActionableRating, symbol: string) => string;
+  /**
+   * Under every research proposal (D392, D387): approving it only acknowledges -
+   * nothing is placed and no holding changes until the user records their trade.
+   */
+  researchAcknowledgeOnly: string;
+  /** The last line of every research proposal: the catalogue's not-advice line, never the model's (D385). */
+  researchNotAdvice: string;
 
   /** Decision 148: a holding's move and drawdown from one scan, said in one message. */
   moveWithDrawdown: (figures: MoveWithDrawdownFigures) => NoticeText;
@@ -782,6 +795,12 @@ const en: Messages = {
   tradeFundedBy: (symbols) => ` - paid for by selling ${symbols.join(', ')}: approve that first`,
   tradeNotAdvice:
     'Not financial or investment advice, and no substitute for a professional: this proposal is for simulation inside the app only.',
+  researchProposalHeadline: (agent, action, symbol) =>
+    `${agent} recommends: ${{ buy_more: 'buy more', trim: 'trim', sell: 'sell', buy: 'buy' }[action]} ${symbol}`,
+  researchAcknowledgeOnly:
+    "Approving only records that you saw it: no order is placed and no holding changes. When you trade at your broker, record the trade from the holding's menu.",
+  researchNotAdvice:
+    "Not financial or investment advice, and no substitute for a professional: a model's view, written by the research agent, for your own judgement.",
 
   moveWithDrawdown: (f) => ({
     headline: `${f.symbol} ${f.direction} ${f.change} to ${f.price}`,
@@ -1329,6 +1348,12 @@ const he: Messages = {
     `${isolated(agent)} מציע ${side === 'buy' ? 'לקנות' : 'למכור'} ${ltr(quantity)} ${ltr(symbol)} ב־${ltr(price)}`,
   tradeFundedBy: (symbols) => ` - במימון מכירת ${symbols.map(ltr).join(', ')}: אשרו אותה קודם`,
   tradeNotAdvice: 'אין בהצעה זו ייעוץ פיננסי או ייעוץ השקעות, והיא אינה תחליף לייעוץ מקצועי: היא נועדה לסימולציה בתוך האפליקציה בלבד.',
+  researchProposalHeadline: (agent, action, symbol) =>
+    `המלצת ${isolated(agent)}: ${{ buy_more: 'לקנות עוד', trim: 'לצמצם', sell: 'למכור', buy: 'לקנות' }[action]} ${ltr(symbol)}`,
+  researchAcknowledgeOnly:
+    'האישור רק מתעד שראיתם את ההמלצה: שום פקודה לא נשלחת ושום אחזקה לא משתנה. כשתבצעו עסקה אצל הברוקר, רשמו אותה מתפריט השורה של האחזקה.',
+  researchNotAdvice:
+    'אין בכך ייעוץ פיננסי או ייעוץ השקעות, וזה אינו תחליף לייעוץ מקצועי: זו עמדה שכתב מודל של סוכן המחקר, לשיקול דעתכם.',
 
   moveWithDrawdown: (f) => ({
     headline: `מחיר ${ltr(f.symbol)} ${f.direction === 'fell' ? 'ירד' : 'עלה'} ב־${ltr(f.change)} ל־${ltr(f.price)}`,

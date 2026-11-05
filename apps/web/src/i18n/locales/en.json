@@ -498,7 +498,8 @@
     "sigma_move": "Unusual move",
     "drawdown": "Drawdown",
     "allocation_drift": "Allocation drift",
-    "agent_trade": "Agent trade"
+    "agent_trade": "Agent trade",
+    "research_view": "Research view"
   },
   "news": {
     "cashtag": "ticker ${{symbol}} in the text",
@@ -724,6 +725,11 @@
         "override": "You can still confirm: approving overrides the agent's limit for this trade. To keep it for later trades, change the setting.",
         "settings": "Agent settings"
       }
+    },
+    "research": {
+      "acknowledgeOnly": "Approving only records that you saw it: no order is placed and no holding changes. When you trade at your broker, record the trade from the holding's menu.",
+      "notAdvice": "Not financial or investment advice, and no substitute for a professional: a model's view, written by the research agent, for your own judgement.",
+      "openResearch": "Read the full research"
     }
   },
   "summary": {
@@ -2160,8 +2166,8 @@
   },
   "research": {
     "title": "Research",
-    "intro": "An agent you choose reads each holding's recent news, price history, sector and market trend, and rates the stock's outlook as Bullish, Bearish or Neutral, with its reasons.",
-    "notAdvice": "A rating describes a stock's outlook from the evidence the agent read. It says nothing about your position and is not a recommendation to buy, sell or keep anything. The reasons are written by a model in English; every figure in them was checked against the data it was given.",
+    "intro": "An agent you choose reads each holding's recent news, price history, sector and market trend, and gives its view - Buy more, Hold, Trim or Sell - with its reasons. A Buy more, Trim or Sell also arrives in Proposals and Telegram for you to acknowledge.",
+    "notAdvice": "Not financial or investment advice, and no substitute for a professional: each rating is a model's view, written by the research agent, for your own judgement. Every figure in its reasons was checked against the data the agent was given.",
     "loadFailed": "The research could not be loaded.",
     "agentTitle": "Research agent",
     "agentLabel": "Agent researching your main portfolio",
@@ -2200,6 +2206,13 @@
       "abandoned": "It was interrupted before it finished."
     },
     "ratings": {
+      "buy_more": "Buy more",
+      "hold": "Hold",
+      "trim": "Trim",
+      "sell": "Sell",
+      "buy": "Buy",
+      "wait": "Wait",
+      "avoid": "Avoid",
       "bullish": "Bullish",
       "bearish": "Bearish",
       "neutral": "Neutral"
@@ -2218,10 +2231,10 @@
       "refused": "The latest attempt, {{date}}, was refused by the checks; the rating above is the one before it.",
       "failed": "The latest attempt, {{date}}, failed; the rating above is the one before it."
     },
-    "column": "Sentiment",
+    "column": "Rating",
     "othersTitle_one": "Another researched stock (1)",
     "othersTitle_other": "Other researched stocks ({{count}})",
-    "othersExplained": "Stocks you researched from a holding row that your real portfolio does not hold. The daily research rates only your holdings."
+    "othersExplained": "Stocks you researched from a holding row that your real portfolio does not hold. They are rated Buy, Wait or Avoid, and a Buy arrives in Proposals for you to acknowledge. The daily research rates only your holdings."
   },
   "reset": {
     "requestTitle": "Reset your password",

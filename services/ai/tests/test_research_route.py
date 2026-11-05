@@ -75,7 +75,7 @@ def research(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, Any]]:
     )
     monkeypatch.setattr(f"{module}.main_holdings", lambda *_a: state["holdings"])
     monkeypatch.setattr(
-        f"{module}.instrument_to_rate", lambda _engine, key: state["instruments"].get(key)
+        f"{module}.instrument_to_rate", lambda _engine, _user, key: state["instruments"].get(key)
     )
     monkeypatch.setattr(f"{module}.claim_run", fake_claim)
     monkeypatch.setattr(f"{module}.run_research", fake_run)

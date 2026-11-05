@@ -3,7 +3,13 @@ import { observer } from 'mobx-react-lite';
 import { Link } from '@tanstack/react-router';
 import { Undo2 } from 'lucide-react';
 
-import { isTradeProposalKind, type Proposal, type ProposalAction } from '@traders/shared';
+import {
+  RESEARCH_PROPOSAL_KIND,
+  isTradeProposalKind,
+  type Proposal,
+  type ProposalAction,
+  type ResearchProposalPayload,
+} from '@traders/shared';
 
 import { useTranslation } from '../i18n/index.ts';
 import { isUrgent, snoozeDescription, timeLeft } from '../lib/proposalCountdown.ts';
@@ -142,6 +148,27 @@ export const ProposalCard = observer(function ProposalCard({
   return <QuestionCard proposal={proposal} baseCurrency={baseCurrency} linkToPage={linkToPage} />;
 });
 
+/**
+ * Under a research view on the real portfolio (D392): its figures are the
+ * rating's, on the research page; approving only acknowledges; and the
+ * catalogue's not-advice line, never the model's (D385).
+ */
+function ResearchViewNotes({ proposal }: { proposal: Proposal }) {
+  const { t } = useTranslation();
+  const payload = proposal.payload as Partial<ResearchProposalPayload> | null;
+  return (
+    <div className="space-y-1 text-xs text-text-muted">
+      {payload?.symbol && (
+        <Link to="/research" hash={payload.symbol} className="text-accent hover:underline">
+          {t('proposal.research.openResearch')}
+        </Link>
+      )}
+      <p>{t('proposal.research.acknowledgeOnly')}</p>
+      <p>{t('proposal.research.notAdvice')}</p>
+    </div>
+  );
+}
+
 const QuestionCard = observer(function QuestionCard({
   proposal,
   baseCurrency,
@@ -197,11 +224,15 @@ const QuestionCard = observer(function QuestionCard({
             user acts on a claim, so its figures are not one click away. Read
             through `readEvidence` - money in its currency, fractions as
             percentages - not printed as raw keys ("value minor 3502842"). */}
-        <EvidenceDrawer
-          evidence={proposal.evidence}
-          baseCurrency={baseCurrency}
-          id={`proposal-evidence-${proposal.id}`}
-        />
+        {proposal.kind === RESEARCH_PROPOSAL_KIND ? (
+          <ResearchViewNotes proposal={proposal} />
+        ) : (
+          <EvidenceDrawer
+            evidence={proposal.evidence}
+            baseCurrency={baseCurrency}
+            id={`proposal-evidence-${proposal.id}`}
+          />
+        )}
 
         {refusal !== null && (
           // Rendered against the proposal it concerned rather than as a page

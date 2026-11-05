@@ -28,7 +28,7 @@ from app.llm.base import (
     OwnKeyRequiredError,
     TokenUsage,
 )
-from app.research.rating import UNSOURCED_PREFIX, WORDING_PREFIX
+from app.research.rating import UNSOURCED_PREFIX
 from app.research.run import (
     CALL_FAILED,
     RESEARCH_ATTEMPTS,
@@ -61,7 +61,7 @@ def _completion(body: dict[str, Any] | str) -> LLMCompletion:
     )
 
 
-def _rating(rating: str = "bullish", rationale: str = "CCJ trades at 54.32.") -> LLMCompletion:
+def _rating(rating: str = "buy_more", rationale: str = "CCJ trades at 54.32.") -> LLMCompletion:
     return _completion({"rating": rating, "rationale": rationale, "findings": ["Steady news."]})
 
 
@@ -187,7 +187,7 @@ def _rows(engine: Engine, run_id: str) -> tuple[Any, list[Any]]:
 
 
 async def test_each_holding_is_rated_from_its_evidence(loaded: Engine, agent: ScanAgent) -> None:
-    llm = ScriptedLLM(_rating("bullish"), _rating("neutral", "NXE trades at 8.12."))
+    llm = ScriptedLLM(_rating("buy_more"), _rating("hold", "NXE trades at 8.12."))
 
     run_id, tally = await _run(loaded, agent, llm)
 
@@ -195,8 +195,8 @@ async def test_each_holding_is_rated_from_its_evidence(loaded: Engine, agent: Sc
     assert (run.status, run.holdings, run.rated, run.error) == ("done", 2, 2, None)
     assert run.cost_micro_usd == 2 * CALL_COST == tally.cost_micro_usd
     assert [(r.symbol, r.status, r.rating) for r in ratings] == [
-        ("CCJ", "rated", "bullish"),
-        ("NXE", "rated", "neutral"),
+        ("CCJ", "rated", "buy_more"),
+        ("NXE", "rated", "hold"),
     ]
     assert ratings[0].findings == ["Steady news."]
     assert ratings[0].evidence["quote"]["price"] == "54.32"
@@ -211,7 +211,7 @@ async def test_a_refused_answer_goes_back_once_then_is_stored_refused(
     loaded: Engine, agent: ScanAgent
 ) -> None:
     bad = _rating(rationale="CCJ is a buy at 99.99.")
-    llm = ScriptedLLM(*([bad] * RESEARCH_ATTEMPTS), _rating("bearish", "NXE trades at 8.12."))
+    llm = ScriptedLLM(*([bad] * RESEARCH_ATTEMPTS), _rating("sell", "NXE trades at 8.12."))
 
     run_id, _ = await _run(loaded, agent, llm)
 
@@ -219,13 +219,13 @@ async def test_a_refused_answer_goes_back_once_then_is_stored_refused(
     assert (run.status, run.rated) == ("done", 1)
     ccj = ratings[0]
     assert (ccj.status, ccj.rating, ccj.rationale) == ("refused", None, None)
-    assert ccj.problems == [f"{WORDING_PREFIX}: buy", f"{UNSOURCED_PREFIX}: 99.99"]
+    assert ccj.problems == [f"{UNSOURCED_PREFIX}: 99.99"]
     assert "Your previous answer was refused" in llm.prompts[1]
     assert llm.verdicts[:RESEARCH_ATTEMPTS] == ["unsourced_figures"] * RESEARCH_ATTEMPTS
 
 
 async def test_a_failed_call_fails_that_holding_only(loaded: Engine, agent: ScanAgent) -> None:
-    llm = ScriptedLLM(LLMTimeoutError("scripted", 30), _rating("neutral", "NXE trades at 8.12."))
+    llm = ScriptedLLM(LLMTimeoutError("scripted", 30), _rating("trim", "NXE trades at 8.12."))
 
     run_id, _ = await _run(loaded, agent, llm)
 
@@ -301,10 +301,13 @@ def test_one_stock_is_found_whether_or_not_the_user_holds_it(
 ) -> None:
     unheld = _instrument(loaded, "UEC")
     assert "UEC" not in {holding.symbol for holding in main_holdings(loaded, agent.user_id)}
-    found = instrument_to_rate(loaded, unheld)
+    found = instrument_to_rate(loaded, agent.user_id, unheld)
     assert found is not None
-    assert (found.instrument_id, found.symbol) == (unheld, "UEC")
-    assert instrument_to_rate(loaded, "10000000-0000-0000-0000-0000000000ff") is None
+    assert (found.instrument_id, found.symbol, found.held) == (unheld, "UEC", False)
+    held = main_holdings(loaded, agent.user_id)[0]
+    again = instrument_to_rate(loaded, agent.user_id, held.instrument_id)
+    assert again is not None and again.held, "a held stock is rated in the holding's words (D392)"
+    assert instrument_to_rate(loaded, agent.user_id, "10000000-0000-0000-0000-0000000000ff") is None
 
 
 def test_the_assigned_agent_must_be_the_users_own(loaded: Engine, agent: ScanAgent) -> None:

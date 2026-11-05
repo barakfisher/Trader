@@ -1,43 +1,60 @@
-"""A research rating: what the model wrote, and the checks that keep it an observation (D254, D292).
+"""A research rating: what the model wrote, and the checks that keep its figures true (D254, D392).
 
-The model answers with one JSON object per holding:
+The model answers with one JSON object per stock:
 
-    {"rating": "bullish", "rationale": "...", "findings": ["...", "..."]}
+    {"rating": "trim", "rationale": "...", "findings": ["...", "..."]}
 
-Three checks stand between that answer and the Dashboard, each one of D254's
-guardrails made a mechanism:
+Since D392 (D387 case 1) a rating is a view on what to do, like an advisor's:
+**Buy more / Hold / Trim / Sell** for a stock the real portfolio holds, and
+**Buy / Wait / Avoid** for one researched on its own that it does not (D369).
+D254's guardrail 1 - no "you", no buy or sell wording - is gone with it; the
+others stand, and two of them are here:
 
-1. **The form**: a rating of Bullish / Bearish / Neutral, a rationale short
-   enough to read, at most `MAX_FINDINGS` findings.
-2. **The wording** (guardrail 1): the rating is about the stock's outlook, never
-   the reader's position. No word in `FORBIDDEN_WORDS` - "you", "your", buy,
-   sell, hold, trim, accumulate, a target price - appears anywhere in it.
-   Matched as whole words, case-insensitively, so "household" passes and "Sell"
-   does not. A strict list refuses some innocent sentences ("the support level
-   holds"); a refused rating costs a retry, a permitted instruction costs the
-   guardrail.
-3. **The figures** (guardrail 2): every number in the rationale and the
-   findings is sourced from the holding's evidence by the evidence validator,
-   as a scan's thesis is (guideline 7).
+1. **The form**: a rating from the stock's own vocabulary, a rationale short
+   enough to read, at most `MAX_FINDINGS` findings. A held stock rated "buy",
+   or one not held rated "trim", is refused: the word would be about a
+   position that does not exist.
+2. **The figures** (guardrail 2): every number in the rationale and the
+   findings is sourced from the stock's evidence by the evidence validator, as
+   a scan's thesis is (guideline 7). It reads figures the same way in every
+   language, which is what lets the rationale be in the user's (D392).
 
 A problem is a reason string, never an exception: the run stores a refused
 rating with its reasons, and the research page says it was refused.
+
+The ratings stored before D392 (Bullish / Bearish / Neutral) stay in the table
+and on the page until a newer rating replaces them (D392): `LEGACY_RATINGS` is
+part of the column's CHECK, never of what a model may answer.
 """
 
 from __future__ import annotations
 
 import json
 import re
-import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
 from app.narration.evidence_validator import unsourced_figures
 
-Rating = Literal["bullish", "bearish", "neutral"]
-#: `0070_holding_research.RATINGS`; a test holds the two equal.
-RATINGS: tuple[Rating, ...] = ("bullish", "bearish", "neutral")
+HeldRating = Literal["buy_more", "hold", "trim", "sell"]
+UnheldRating = Literal["buy", "wait", "avoid"]
+LegacyRating = Literal["bullish", "bearish", "neutral"]
+Rating = HeldRating | UnheldRating
+
+#: What a model may answer about a stock the real portfolio holds.
+HELD_RATINGS: tuple[HeldRating, ...] = ("buy_more", "hold", "trim", "sell")
+#: What a model may answer about a stock researched on its own, not held (D369).
+UNHELD_RATINGS: tuple[UnheldRating, ...] = ("buy", "wait", "avoid")
+#: Stored before D392, shown until replaced, never answered again.
+LEGACY_RATINGS: tuple[LegacyRating, ...] = ("bullish", "bearish", "neutral")
+#: Every value `research_ratings.rating` may hold: `0085_research_advice.RATINGS`;
+#: a test holds the two equal, and the web's `RESEARCH_RATINGS` says the same.
+RATINGS: tuple[str, ...] = (*HELD_RATINGS, *UNHELD_RATINGS, *LEGACY_RATINGS)
+#: The ratings that ask for an action, and so raise an acknowledge-only proposal
+#: on the real portfolio (D392). Hold, Wait and Avoid are a bottom line on the
+#: research page only.
+ACTIONABLE_RATINGS: tuple[Rating, ...] = ("buy_more", "trim", "sell", "buy")
 
 #: Long enough for the reasons, short enough to read in a table's detail.
 MAX_RATIONALE_CHARS = 1200
@@ -45,35 +62,15 @@ MAX_RATIONALE_CHARS = 1200
 MAX_FINDINGS = 5
 MAX_FINDING_CHARS = 300
 
-#: Words a rating never uses (D254 guardrail 1): it speaks of the stock, not to
-#: the reader, and never tells anyone what to do with a position. Each is a
-#: regular expression matched as a whole word.
-FORBIDDEN_WORDS: tuple[str, ...] = (
-    r"you",
-    r"your",
-    r"yours",
-    r"yourself",
-    r"buy(?:s|ing)?",
-    r"bought",
-    r"sell(?:s|ing)?",
-    r"sold",
-    r"hold(?:s|ings?)?",
-    r"trim(?:s|med|ming)?",
-    r"accumulat(?:e|es|ed|ing|ion)",
-    r"purchas(?:e|es|ed|ing)",
-    r"(?:take|takes|took|taking) profits?",
-    r"reduce exposure",
-    r"target price",
-    r"price target",
-)
-_FORBIDDEN = re.compile(r"\b(" + "|".join(FORBIDDEN_WORDS) + r")\b", re.IGNORECASE)
-
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")
 
 #: How a problem naming unsourced figures begins.
 UNSOURCED_PREFIX = "figures not in the evidence"
-#: How a problem naming forbidden words begins.
-WORDING_PREFIX = "words a rating never uses"
+
+
+def ratings_for(held: bool) -> tuple[Rating, ...]:
+    """The vocabulary a stock is rated in: a holding's, or a stock not held."""
+    return HELD_RATINGS if held else UNHELD_RATINGS
 
 
 @dataclass(frozen=True)
@@ -86,7 +83,7 @@ class ParsedRating:
         return (self.rationale, *self.findings)
 
 
-def parse_rating(raw: str) -> tuple[ParsedRating | None, list[str]]:
+def parse_rating(raw: str, *, held: bool) -> tuple[ParsedRating | None, list[str]]:
     """The rating the model wrote, or why it is not one."""
     body = _FENCE.sub("", raw.strip())
     try:
@@ -96,10 +93,11 @@ def parse_rating(raw: str) -> tuple[ParsedRating | None, list[str]]:
     if not isinstance(data, dict):
         return None, ["the answer is not a JSON object"]
     problems: list[str] = []
+    allowed = ratings_for(held)
     rating = data.get("rating")
-    rating = rating.strip().lower() if isinstance(rating, str) else None
-    if rating not in RATINGS:
-        problems.append("rating is one of bullish, bearish or neutral")
+    rating = rating.strip().lower().replace(" ", "_") if isinstance(rating, str) else None
+    if rating not in allowed:
+        problems.append(f"rating is one of {', '.join(allowed)}")
     rationale = data.get("rationale")
     rationale = rationale.strip() if isinstance(rationale, str) else ""
     if not rationale:
@@ -120,29 +118,9 @@ def parse_rating(raw: str) -> tuple[ParsedRating | None, list[str]]:
     return ParsedRating(rating=rating, rationale=rationale, findings=findings), []  # type: ignore[arg-type]
 
 
-def _normalized(text: str) -> str:
-    """`text` as it reads: compatibility forms folded (NFKC) and invisible format
-    characters (zero-width spaces, joiners, bidi marks) removed, so "s\u200bell"
-    is matched as the "sell" a reader sees."""
-    folded = unicodedata.normalize("NFKC", text)
-    return "".join(ch for ch in folded if unicodedata.category(ch) != "Cf")
-
-
-def forbidden_words(text: str) -> list[str]:
-    """The forbidden words `text` uses, lower-cased, in order, each once."""
-    matches = _FORBIDDEN.finditer(_normalized(text))
-    return list(dict.fromkeys(match.group(1).lower() for match in matches))
-
-
 def rating_problems(parsed: ParsedRating, evidence: Mapping[str, object]) -> list[str]:
-    """Why a well-formed rating may still not be shown: its wording, its figures."""
-    problems: list[str] = []
-    words = list(dict.fromkeys(w for text in parsed.texts() for w in forbidden_words(text)))
-    if words:
-        problems.append(f"{WORDING_PREFIX}: {', '.join(words)}")
+    """Why a well-formed rating may still not be shown: a figure the evidence lacks."""
     figures = list(
         dict.fromkeys(f for text in parsed.texts() for f in unsourced_figures(text, evidence))
     )
-    if figures:
-        problems.append(f"{UNSOURCED_PREFIX}: {', '.join(figures)}")
-    return problems
+    return [f"{UNSOURCED_PREFIX}: {', '.join(figures)}"] if figures else []

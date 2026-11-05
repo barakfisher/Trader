@@ -188,6 +188,36 @@ describe("a proposal's page", () => {
   });
 });
 
+describe('a research view on the real portfolio (D392)', () => {
+  const VIEW = proposal({
+    id: 'p-view',
+    kind: 'research',
+    payload: {
+      action: 'trim',
+      symbol: 'CCJ',
+      instrumentId: 'i1',
+      ratingId: 'r1',
+      researchAgentId: 'a1',
+      researchAgentName: 'Analyst',
+    },
+    headline: 'Analyst recommends: trim CCJ',
+    explanation: 'CCJ trades at 54.32.',
+    evidence: { symbol: 'CCJ', rating: 'trim' },
+  });
+
+  it('says approving only acknowledges, ends with the not-advice line, and links to the research', async () => {
+    serve({ '/proposals/p-view': { proposal: VIEW, transitions: [], attempts: [], recheck: null } });
+    renderAt('/proposals/p-view');
+    expect(await screen.findByText(en.proposal.research.acknowledgeOnly)).toBeTruthy();
+    expect(screen.getByText(en.proposal.research.notAdvice)).toBeTruthy();
+    expect(screen.getByRole('link', { name: en.proposal.research.openResearch }).getAttribute('href')).toBe(
+      '/research#CCJ',
+    );
+    // Acknowledged like any question, never through a trade's preview.
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+  });
+});
+
 describe("an agent's trade proposal", () => {
   const TRADE = proposal({
     id: 'p-trade',

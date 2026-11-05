@@ -6558,6 +6558,7 @@ failure they prevent.
        D244).
     - **Order, one PR each, on the user's word:** case 1 (the migration and the new kinds land
       here, and the others reuse them), then case 4, then case 5. Case 3's button later.
+    - **Case 1 is built as D392** (migration `0085`, kind `research`).
     - *Rejected:* "record as if done" on approval (holdings drift from the broker when the
       user never trades); a paper copy of the real portfolio (a second ledger to explain);
       simulated agents on the real portfolio (the user's "no"; each scan would also cost more).
@@ -6630,6 +6631,62 @@ failure they prevent.
     against guideline 7. **`vite-plugin-pwa`** - it writes a manifest and a service worker; this needs
     a short static file and no worker. **A phone with the old shortcut must remove it and install
     again**: a shortcut does not become an app.
+392. **D387 case 1 as built: research gives a view, and a view that asks for action is an
+    acknowledge-only proposal on the real portfolio** (the user, 2026-11-05, seven questions one at
+    a time; migration `0085`). Reverses D254 guardrail 1 and D291's English-only rationale, and the
+    wording guard of D292; D254 guardrails 2-5 stand.
+    - **The words:** Buy more / Hold / Trim / Sell for a stock the real portfolio holds; **Buy / Wait
+      / Avoid** for one researched on its own from a row (D369) - "Buy more" on a stock nobody holds
+      would be about a position that does not exist (the user chose these over reusing the holding's
+      words). A held stock rated "buy", or an unheld one "trim", is a form failure and is retried.
+      `MainHolding.held` picks the vocabulary; `instrument_to_rate` now reads it from the user's
+      primary holdings.
+    - **Stored Bullish / Bearish / Neutral stay and are shown** with their old word, colour and
+      English `lang` until a newer rating replaces them (the user: "keep and show"). They stay in
+      the CHECK and in `RatingWord`; no model may answer them again. *Rejected:* hiding them until the
+      next run; deleting them in the migration (loses history for a day's gain).
+    - **Which ratings raise a proposal:** Buy more, Trim, Sell and Buy (`ACTIONABLE_RATINGS`), and
+      **only when the agent's word for that stock changed** (the first rating counts as a change,
+      and so does a legacy word). Hold / Wait / Avoid are a bottom line on the research page and the
+      Rating column only. The user asked mid-question "after research I always expect a bottom
+      line, i.e. a proposal" - answered: every stock always gets its word and reasons; "proposal"
+      here is the inbox item with Approve/Reject, and they confirmed only actionable words raise
+      one. *Rejected:* one per run (a daily Trim would be a daily message); one open per stock
+      (a rejected Trim would come back the next day).
+    - **Expiry: 7 days after the rating** (`RESEARCH_STALE_DAYS`, when the rating goes stale), and
+      **a different newer word closes the open one** as a system expiry, so two contradicting views
+      on one stock are never open together; a newer rating in the same word leaves it open.
+    - **Buttons: Approve / Reject** (the user, over "Got it / Dismiss"), on the same path as
+      `rebalance` - the `decide` keyboard with Snooze, Undo, and an intent row that records the
+      assent and changes no holding. Under it, always: `researchAcknowledgeOnly` (nothing is placed,
+      record your broker trade from the holding's menu) and `researchNotAdvice`, in the app
+      (`proposal.research.*`), the Telegram alert and `/pending`; the card links to `/research#SYM`
+      instead of an evidence drawer (the rating's evidence is news lists and nested history,
+      unreadable in the drawer).
+    - **The rationale is in the user's language** (the user, over keeping English): the only reason
+      for English was the whole-word guard, which is gone; the evidence validator reads figures in
+      Hebrew too. Old ratings keep `lang="en"`; a new one inherits the page's language.
+      *Debt:* the row does not store its language, so a user who switches language sees the
+      earlier ratings unmarked in the old one until the next run.
+    - **How it is wired:** the AI service rates in the background after a 202 and tells nobody when
+      it ends, so the orchestrator's **proposal sweep** (every 15 minutes, every installation) first
+      expires superseded views, then raises new ones (`services/researchProposals.ts`,
+      `db/queries/researchProposals.ts`). Observation `research_view` on the primary (shown in
+      Alerts and findings as "Research view"), dedupe `research:<rating id>`, proposal kind
+      `research`, payload `{action, symbol, instrumentId, ratingId, researchAgentId,
+      researchAgentName}`. Announced like a trade: the severity floor is ignored, quiet hours and a
+      mute are not. A view reaches Telegram within one sweep of its rating. *Rejected:* the AI
+      service calling the orchestrator (it has no URL for it, and a second write path for
+      proposals); writing proposals from Python (all proposal SQL lives in the orchestrator).
+    - **`0085`** keeps 0038's trigger name and widens its allowlist to `rebalance`, `research`;
+      `research` is refused on any agent but the primary and with a `quantity` or `priceMinor` in
+      its payload, so it can never become a fill; `buy`/`sell` stay refused on the primary.
+    - **D388's one function:** `services/advisoryMode.ts` `isAdvisory()` returns true and gates the
+      raising. *Known gap for M13:* the vocabulary is chosen in the AI service's prompt, which does
+      not read the mode; Observation mode will need the mode passed to the research run and a
+      wording guard again (git history: `app/research/rating.py` before D392).
+    - **Not yet seen with a real model:** the next scheduled research run is the first; read its
+      Langfuse trace and the refused count (a held/unheld vocabulary mix-up is the likely failure).
 **Three PRs for the polish:** bugs first, then tap targets and text, then collapsing Research and
 Settings, because a collapsed row's height depends on the sizing rule (the user, 2026-11-05).
 ---

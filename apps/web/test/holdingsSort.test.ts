@@ -124,3 +124,15 @@ describe('compareDecimal', () => {
     expect(compareDecimal(a, b)).toBe(expected);
   });
 });
+
+describe('the rating order (D392)', () => {
+  it('runs from adding to exiting, with the words stored before D392 in between', () => {
+    const order = ['buy_more', 'bullish', 'hold', 'trim', 'sell'] as const;
+    const ranks = order.map((rating) => sentimentRank(rating)!);
+    expect([...ranks].sort((a, b) => b - a)).toEqual(ranks);
+    expect(sentimentRank('buy')).toBe(sentimentRank('buy_more'));
+    expect(sentimentRank('wait')).toBe(sentimentRank('hold'));
+    expect(sentimentRank('avoid')).toBe(sentimentRank('sell'));
+    expect(sentimentRank(null)).toBeNull();
+  });
+});

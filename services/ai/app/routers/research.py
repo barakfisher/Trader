@@ -91,7 +91,7 @@ async def start_research(
     llm = _model(request, settings)
     _payable(request, user_id)
     if payload.instrument_id is not None:
-        one = instrument_to_rate(engine, str(payload.instrument_id))
+        one = instrument_to_rate(engine, user_id, str(payload.instrument_id))
         if one is None:
             raise _refuse("unknown_instrument", "no such instrument", status.HTTP_404_NOT_FOUND)
         holdings = [one]

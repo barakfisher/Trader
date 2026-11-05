@@ -42,6 +42,7 @@ import { EVERY_ACTIVE_USER, INSTALLATION_KINDS } from '../../runKinds.js';
 import { MARKET_BENCHMARK_SYMBOLS } from '../../services/marketBenchmarks.js';
 import { BENCHMARK_SYMBOL } from '../../services/performance.js';
 import { sweepExpiredProposals } from '../../services/proposals.js';
+import { sweepResearchProposals } from '../../services/researchProposals.js';
 import { planScheduledScans } from '../../services/scheduledScans.js';
 import { logger } from '../../logger.js';
 import { localDate, takeSnapshot } from '../../services/snapshot.js';
@@ -254,7 +255,10 @@ async function runForInstallation(context: Context, request: RunRequest): Promis
     if (kind === 'proposal_sweep') {
       // A deadline is a deadline for everybody: one sweep expires every
       // account's proposals.
-      return done(runId, 'ok', { expired: (await sweepExpiredProposals()).length });
+      // Research views first (D392): a view a newer rating changed closes here,
+      // and the new ones are raised and announced.
+      const research = await sweepResearchProposals(context.get('notifier'));
+      return done(runId, 'ok', { expired: (await sweepExpiredProposals()).length, research });
     }
 
     if (kind === 'auth_sweep') {

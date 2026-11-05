@@ -19,16 +19,18 @@ and [docs/MILESTONES.md](docs/MILESTONES.md) before changing architecture.
    when written); a model-written observation shows its template in a language other than
    English. Telegram and the digest speak `user_settings.language` through a typed catalogue
    (`apps/orchestrator/src/notify/messages.ts`; a missing sentence is a compile error). **An
-   agent's thesis is the one model-written text in the user's language** (D51): the scan asks for
-   it in `user_settings.language`, the evidence validator checks its figures the same way, and
-   the frame around it - side, quantity, price, expiry - comes from the catalogues. **The
+   agent's thesis and a research rating's reasons are the model-written texts in the user's
+   language** (D51, D392): each is asked for in `user_settings.language`, the evidence validator
+   checks its figures the same way, and the frame around it - side, quantity, price, expiry, the
+   rating's word - comes from the catalogues. **The
    assistant answers in the language the question was asked in** (D220), on the Ask page and in
    Telegram, its figures checked the same way, and the UI marks an answer with its own language.
    Other server-generated text (news, the concept corpus) stays English until a decision says
    otherwise, and is marked `lang="en"` where the UI shows it.
 2. **No order execution, ever.** Approvals write to the virtual ledger only. No broker API.
    Agents and the assistant may research and speak like an advisor, on simulated accounts and on
-   the real portfolio (not built there yet), but every such output carries the catalogue's
+   the real portfolio (research views built, D392; a real-portfolio proposal is only acknowledged),
+   but every such output carries the catalogue's
    not-advice line, never the model's (D385, D386); the line's final wording is the lawyer's,
    before public signup (D265).
 3. **Money is integer minor units plus an explicit currency code.** `Decimal` in Python, integer

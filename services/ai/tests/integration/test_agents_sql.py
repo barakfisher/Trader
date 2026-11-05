@@ -226,7 +226,7 @@ def test_the_app_role_reads_and_writes_agents(as_app: Engine) -> None:
         transaction.rollback()
 
 
-def _propose(connection: Connection, agent: str, kind: str) -> None:
+def _propose(connection: Connection, agent: str, kind: str, payload: str = "{}") -> None:
     observation = connection.execute(
         text(
             "INSERT INTO observations (user_id, agent_id, kind, headline, dedupe_key) "
@@ -237,10 +237,17 @@ def _propose(connection: Connection, agent: str, kind: str) -> None:
     ).scalar_one()
     connection.execute(
         text(
-            "INSERT INTO proposals (user_id, agent_id, observation_id, kind, expires_at) "
-            "VALUES (CAST(:user AS uuid), CAST(:agent AS uuid), :observation, :kind, now())"
+            "INSERT INTO proposals (user_id, agent_id, observation_id, kind, payload, expires_at) "
+            "VALUES (CAST(:user AS uuid), CAST(:agent AS uuid), :observation, :kind, "
+            "CAST(:payload AS jsonb), now())"
         ),
-        {"user": SEED_USER, "agent": agent, "observation": observation, "kind": kind},
+        {
+            "user": SEED_USER,
+            "agent": agent,
+            "observation": observation,
+            "kind": kind,
+            "payload": payload,
+        },
     )
 
 
@@ -253,6 +260,24 @@ def test_the_primary_is_asked_to_acknowledge_never_to_trade(connection: Connecti
         _propose(connection, primary, "trade")
     savepoint.rollback()
     assert "the primary agent is passive" in str(refusal.value.orig)
+
+
+def test_the_primary_may_be_asked_to_acknowledge_a_research_view(connection: Connection) -> None:
+    """0085, D392: `research` is admitted on the primary, never a fill, never elsewhere."""
+    primary = _primary(connection, SEED_USER)
+    _propose(connection, primary, "research")
+    for agent, kind, payload, refusal_text in (
+        (primary, "buy", "{}", "the primary agent is passive"),
+        (primary, "sell", "{}", "the primary agent is passive"),
+        (primary, "research", '{"quantity": "1"}', "never filled"),
+        (primary, "research", '{"priceMinor": 100}', "never filled"),
+        (_simulated(connection), "research", "{}", "on the real portfolio only"),
+    ):
+        savepoint = connection.begin_nested()
+        with pytest.raises(DBAPIError) as refusal:
+            _propose(connection, agent, kind, payload)
+        savepoint.rollback()
+        assert refusal_text in str(refusal.value.orig), (kind, payload)
 
 
 def test_a_simulated_agent_may_receive_other_kinds(connection: Connection) -> None:
