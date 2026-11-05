@@ -396,3 +396,4 @@ while this file is out of date.
 | 383 | A field's currency is written `($)`, and "Not chosen" does not name the model |
 | 384 | Every trade proposal ends with the catalogue's not-advice line, in the app, in its alert and on `/pending` |
 | 385 | Agents and the assistant may behave and research like an advisor, everywhere, while every such output says it is not advice; guideline 2 is amended accordingly |
+| 386 | D385 on the real portfolio, case by case: who may give a view, and what a view may write |

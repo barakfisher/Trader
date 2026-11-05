@@ -18,7 +18,7 @@ five, so this is one late).
     P&L; every field is 16 px on a phone (D381).
 - **Deployed:** production (`https://app.tiklens.com`) and compose both run `e71b463` (#374) at
   `0084_index_article_duplicates`, read 2026-11-05. Nothing merged is undeployed.
-- **Decisions reach 385** (next: **386**). D385 (advisory character, 2026-11-05): the agents'
+- **Decisions reach 386** (next: **387**). D385 (advisory character, 2026-11-05): the agents'
   voice and Ask are built; real-portfolio proposals are owed, as listed in it. **Migrations:** `0084` head; next free `0085`.
 - **The phone view is three PRs, agreed with the user 2026-11-04, and #374 is the first.** Measured
   on production at 375 px in Hebrew: no sideways scroll on any screen, so the problem is density,
@@ -6451,12 +6451,39 @@ failure they prevent.
       patterns are gone), and `attack-advisor-role` expects an answer.
     - **Not yet measured:** no model has run the changed prompts. The next Ask re-measurement
       (~2026-11-11) covers the advice group; a scan's theses are seen on the next scheduled run.
-    - **Owed, on the user's word:** real-portfolio proposals (the database refuses a trade
-      proposal on the main portfolio today - the `0038` trigger - so this needs a migration,
-      and its ledger and approval path need design), and the research ratings' D254 guardrail 1
-      (their wording still avoids "you", buy and sell).
+    - **The real portfolio:** designed case by case in D386.
     - *Rejected:* an owner-only switch (offered; the user chose to rely on D265); keeping guideline
       2 and widening only the agents' voice (the user asked for every place).
+386. **D385 on the real portfolio, case by case: who may give a view, and what a view may write**
+    (the user, 2026-11-05, answering five cases one at a time). **Approving a real-portfolio
+    proposal only acknowledges it:** the real holdings change only when the user records the
+    trade they made at the broker (the row menu), so the app never drifts from the broker and
+    nothing is placed. The `0038` trigger (primary agent: `rebalance` only) is widened to admit the
+    new acknowledge-only kinds, never `buy`/`sell` fills.
+    1. **The research agent - recommends and proposes.** Its rating becomes Buy more / Hold /
+       Trim / Sell with reasons (D254 guardrail 1 goes; guardrails 2-5 stay: figures validated,
+       agent and date on each rating, stale past its age, the word beside the color). A Buy more,
+       Trim or Sell also raises an acknowledge-only proposal in the inbox and Telegram, naming
+       the agent, with the not-advice line.
+    2. **The simulated agents - no.** Their scans stay on their own paper accounts; the real
+       holdings are not in their briefing.
+    3. **Targets - only when explicitly asked.** For now in Ask only ("what targets should I
+       have?" gets a suggested allocation with reasons, already allowed by D385); nothing is
+       written to `/targets`. A "Suggest targets" button on `/targets` is planned for later.
+    4. **Ask - may raise a proposal, only when explicitly asked to.** It drafts an
+       acknowledge-only proposal in the conversation with two buttons - add to the inbox, or
+       close (labels to be named later) - and writes nothing until the user taps the first. Its
+       first write tool, so the never-change-anything rule gets exactly this exception; the
+       write itself is the user's tap, not the model's call.
+    5. **Alert narration - adds a view.** A move or drawdown explanation on a real holding may
+       add one sentence of view, and the alert then shows the not-advice line and the view's
+       origin: which agent's model wrote it (the "Main portfolio" agent's explanations model,
+       D244).
+    - **Order, one PR each, on the user's word:** case 1 (the migration and the new kinds land
+      here, and the others reuse them), then case 4, then case 5. Case 3's button later.
+    - *Rejected:* "record as if done" on approval (holdings drift from the broker when the
+      user never trades); a paper copy of the real portfolio (a second ledger to explain);
+      simulated agents on the real portfolio (the user's "no"; each scan would also cost more).
 **Three PRs for the polish:** bugs first, then tap targets and text, then collapsing Research and
 Settings, because a collapsed row's height depends on the sizing rule (the user, 2026-11-05).
 ---
