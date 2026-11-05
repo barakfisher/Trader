@@ -18,7 +18,7 @@ five, so this is one late).
     P&L; every field is 16 px on a phone (D381).
 - **Deployed:** production (`https://app.tiklens.com`) and compose both run `e71b463` (#374) at
   `0084_index_article_duplicates`, read 2026-11-05. Nothing merged is undeployed.
-- **Decisions reach 388** (next: **389**). D386 (advisory character, 2026-11-05): the agents'
+- **Decisions reach 389** (next: **390**). D386 (advisory character, 2026-11-05): the agents'
   voice and Ask are built; D387 designs the real portfolio case by case - its PRs are owed. **Migrations:** `0084` head; next free `0085`.
 - **The phone view is three PRs, agreed with the user 2026-11-04, and #374 is the first.** Measured
   on production at 375 px in Hebrew: no sideways scroll on any screen, so the problem is density,
