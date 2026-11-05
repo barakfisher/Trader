@@ -75,7 +75,7 @@ function BarLink({ place, current }: { place: Place; current: boolean }) {
       <span className="relative inline-flex">
         <Icon className="size-5" aria-hidden />
         {counted && (
-          <span className="absolute -end-3 -top-1.5 min-w-4 rounded-full bg-accent px-1 text-center text-[10px] leading-4 font-semibold text-surface">
+          <span className="absolute -end-3 -top-1.5 min-w-4 rounded-full bg-accent px-1 text-center text-3xs leading-4 font-semibold text-surface">
             {place.count}
           </span>
         )}

@@ -242,5 +242,5 @@ export function OutcomeBadge({ proposal }: { proposal: Pick<Proposal, 'state' | 
       : tone === 'warn'
         ? 'bg-warn/15 text-warn'
         : 'bg-surface-hover text-text-muted';
-  return <span className={`rounded px-1.5 py-0.5 text-[11px] ${classes}`}>{outcomeText(proposal)}</span>;
+  return <span className={`rounded px-1.5 py-0.5 text-2xs ${classes}`}>{outcomeText(proposal)}</span>;
 }

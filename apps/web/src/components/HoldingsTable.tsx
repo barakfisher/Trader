@@ -15,10 +15,11 @@ import { usePortfolioQuery, useRemoveHolding, useUpdateHolding } from '../querie
 import { HoldingRowMenu } from './HoldingRowMenu.tsx';
 import { sentimentRank, sortHoldings, type SortFields } from '../lib/holdingsSort.ts';
 import { SortControl, SortableTh, useSortColumns, type SortProps } from './SortableHeader.tsx';
+import { CardDetail, ExpandMark, ExpandingCard } from './ExpandingCard.tsx';
 import { DayChange } from './DayChange.tsx';
 import { InstrumentName } from './InstrumentName.tsx';
 import { SentimentCell, useSentiments } from './SentimentBadge.tsx';
-import { Card, Delta } from './ui.tsx';
+import { Card, Delta, buttonClass } from './ui.tsx';
 
 export type UpdateHolding = ReturnType<typeof useUpdateHolding>;
 export type RemoveHolding = ReturnType<typeof useRemoveHolding>;
@@ -69,6 +70,8 @@ export function HoldingsTable({
   // Below `sm` the table became an 880 px strip inside a 341 px box, showing
   // the symbol, the quantity and half a price: a phone gets one card per holding.
   const narrow = useNarrowViewport();
+  // One open at a time, so a long list stays a list.
+  const [openCard, setOpenCard] = useState<string | null>(null);
 
   if (holdings.length === 0) return null;
 
@@ -84,6 +87,8 @@ export function HoldingsTable({
                 baseCurrency={currency}
                 updateHolding={updateHolding}
                 removeHolding={removeHolding}
+                open={openCard === holding.id}
+                onToggle={() => setOpenCard(openCard === holding.id ? null : holding.id)}
               />
             </li>
           ))}
@@ -259,7 +264,7 @@ function HoldingRow({
                 provider's delay is on top of that. Showing both stops the table
                 implying every figure is live. */}
             <div
-              className="text-[11px] text-text-muted"
+              className="text-2xs text-text-muted"
               title={
                 holding.quote.delaySeconds > 0
                   ? t('holdings.observedViaDelayed', {
@@ -330,11 +335,11 @@ function HoldingRow({
       <td className="py-2 text-end">
         {confirmingDelete ? (
           <span className="flex items-center justify-end gap-2 text-xs">
-            <span className="max-w-56 text-start text-[11px] text-text-muted">{t('holdings.removeNote')}</span>
+            <span className="max-w-56 text-start text-2xs text-text-muted">{t('holdings.removeNote')}</span>
             <button
               type="button"
               onClick={() => removeHolding.mutate(holding.id)}
-              className="text-loss underline"
+              className="tap-compact text-loss underline"
             >
               {t('common.remove')}
             </button>
@@ -358,30 +363,81 @@ function HoldingRow({
 }
 
 /** The symbol with its warnings: a stale price and an unpriced holding are said beside it. */
-function SymbolLabel({ holding, children }: { holding: HoldingView; children?: ReactNode }) {
+function SymbolLabel({
+  holding,
+  linked = true,
+  children,
+}: {
+  holding: HoldingView;
+  /** A phone's card opens where it is tapped, so its symbol is not a second, different target. */
+  linked?: boolean;
+  children?: ReactNode;
+}) {
   const { t } = useTranslation();
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Link
-        to="/holdings/$holdingId"
-        params={{ holdingId: holding.id }}
-        className="font-medium text-accent hover:underline"
-      >
-        {holding.instrument.symbol}
-      </Link>
+      {linked ? (
+        <Link
+          to="/holdings/$holdingId"
+          params={{ holdingId: holding.id }}
+          className="font-medium text-accent hover:underline"
+        >
+          {holding.instrument.symbol}
+        </Link>
+      ) : (
+        <span className="font-medium text-accent">{holding.instrument.symbol}</span>
+      )}
       {holding.quote?.stale && (
         <span
           title={t('holdings.staleTitle', { when: formatExactTime(holding.quote.asOf) })}
-          className="flex items-center gap-1 rounded bg-warn/15 px-1.5 py-0.5 text-[10px] text-warn"
+          className="flex items-center gap-1 rounded bg-warn/15 px-1.5 py-0.5 text-3xs text-warn"
         >
           <Clock className="size-3" aria-hidden /> {t('holdings.stale')}
         </span>
       )}
       {holding.valueMinor === null && (
-        <span className="rounded bg-loss/15 px-1.5 py-0.5 text-[10px] text-loss">{t('holdings.unpriced')}</span>
+        <span className="rounded bg-loss/15 px-1.5 py-0.5 text-3xs text-loss">{t('holdings.unpriced')}</span>
       )}
       {children}
     </div>
+  );
+}
+
+/** What an open card adds: the figures the three lines leave out, and the way to the holding's page. */
+function HoldingDetails({ holding, baseCurrency }: { holding: HoldingView; baseCurrency: string }) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <dl className="space-y-1">
+        <CardDetail label={t('holdings.columns.pnl')}>
+          <Delta value={holding.pnlMinor}>
+            {holding.pnlMinor === null || holding.pnlPct === null
+              ? '—'
+              : t('holdings.pnl', {
+                  money: formatMoney(holding.pnlMinor, baseCurrency),
+                  percent: formatPercent(holding.pnlPct),
+                })}
+          </Delta>
+        </CardDetail>
+        <CardDetail label={t('holdings.columns.cost')}>
+          {holding.costMinor === null ? '—' : formatMoney(holding.costMinor, baseCurrency)}
+          {holding.costBasisMinor !== null && (
+            <span className="block text-text-muted">
+              {t('holdings.details.perUnit', { money: formatMoney(holding.costBasisMinor, holding.costCurrency) })}
+            </span>
+          )}
+        </CardDetail>
+        <CardDetail label={t('holdings.details.priceUpdated')}>{formatAge(holding.quote?.asOf)}</CardDetail>
+      </dl>
+      <Link
+        to="/holdings/$holdingId"
+        params={{ holdingId: holding.id }}
+        aria-label={t('holdings.details.openPageFor', { symbol: holding.instrument.symbol })}
+        className={buttonClass('secondary', 'w-full text-center')}
+      >
+        {t('holdings.details.openPage')}
+      </Link>
+    </>
   );
 }
 
@@ -400,11 +456,15 @@ function HoldingCard({
   baseCurrency,
   updateHolding,
   removeHolding,
+  open,
+  onToggle,
 }: {
   holding: HoldingView;
   baseCurrency: string;
   updateHolding: UpdateHolding;
   removeHolding: RemoveHolding;
+  open: boolean;
+  onToggle: () => void;
 }) {
   const {
     editing,
@@ -423,10 +483,17 @@ function HoldingCard({
   const sentiments = useSentiments();
 
   return (
+    <ExpandingCard
+      label={t('holdings.details.toggle', { symbol })}
+      open={open}
+      locked={editing || confirmingDelete}
+      onToggle={onToggle}
+      details={<HoldingDetails holding={holding} baseCurrency={baseCurrency} />}
+    >
     <div className="space-y-1.5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <SymbolLabel holding={holding}>
+          <SymbolLabel holding={holding} linked={false}>
             {sentiments.shown && <SentimentCell inline holding={sentiments.byInstrument.get(holding.instrument.id)} />}
           </SymbolLabel>
           <InstrumentName>{holding.instrument.name ?? assetClassName(holding.instrument.assetClass)}</InstrumentName>
@@ -449,12 +516,15 @@ function HoldingCard({
             t('holdings.ofPortfolio', { share: formatShare(holding.weightPct) })}
         </p>
         {!editing && !confirmingDelete && (
-          <HoldingRowMenu
-            symbol={symbol}
-            instrumentId={holding.instrument.id}
-            onEdit={startEditing}
-            onRemove={() => setConfirmingDelete(true)}
-          />
+          <div className="flex shrink-0 items-center gap-1">
+            <ExpandMark open={open} />
+            <HoldingRowMenu
+              symbol={symbol}
+              instrumentId={holding.instrument.id}
+              onEdit={startEditing}
+              onRemove={() => setConfirmingDelete(true)}
+            />
+          </div>
         )}
       </div>
 
@@ -495,7 +565,7 @@ function HoldingCard({
       ) : confirmingDelete ? (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-text-muted">{t('holdings.removeConfirm', { symbol })}</span>
-          <span className="w-full text-[11px] text-text-muted">{t('holdings.removeNote')}</span>
+          <span className="w-full text-2xs text-text-muted">{t('holdings.removeNote')}</span>
           <button
             type="button"
             onClick={() => removeHolding.mutate(holding.id)}
@@ -513,6 +583,7 @@ function HoldingCard({
         </div>
       ) : null}
     </div>
+    </ExpandingCard>
   );
 }
 
@@ -535,12 +606,12 @@ export function CostWarning({ symbol, onSet }: { symbol: string; onSet?: () => v
       onClick={onSet}
       title={t('holdings.noCostTitle')}
       aria-label={t('holdings.setCostFor', { symbol })}
-      className="inline-flex items-center gap-1 rounded bg-warn/15 px-1.5 py-0.5 text-[11px] text-warn hover:bg-warn/25"
+      className="inline-flex items-center gap-1 rounded bg-warn/15 px-1.5 py-0.5 text-2xs text-warn hover:bg-warn/25"
     >
       {body}
     </button>
   ) : (
-    <span title={t('holdings.noCostTitle')} className="inline-flex items-center gap-1 rounded bg-warn/15 px-1.5 py-0.5 text-[11px] text-warn">
+    <span title={t('holdings.noCostTitle')} className="inline-flex items-center gap-1 rounded bg-warn/15 px-1.5 py-0.5 text-2xs text-warn">
       {body}
     </span>
   );

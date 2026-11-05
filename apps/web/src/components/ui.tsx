@@ -45,7 +45,7 @@ const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
  * anchors with real addresses, so they open in a new tab and read as links.
  */
 export function buttonClass(variant: ButtonVariant = 'primary', className = ''): string {
-  return `inline-block rounded-lg px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${BUTTON_VARIANTS[variant]} ${className}`;
+  return `inline-block rounded-lg px-3 py-1.5 text-sm font-medium transition max-sm:inline-flex max-sm:min-h-11 max-sm:min-w-11 max-sm:items-center max-sm:justify-center disabled:cursor-not-allowed disabled:opacity-50 ${BUTTON_VARIANTS[variant]} ${className}`;
 }
 
 export function Button({
@@ -104,7 +104,7 @@ export function ErrorNote({ message, onRetry }: { message: string; onRetry?: () 
     <div className="flex items-center justify-between gap-3 rounded-lg border border-loss/40 bg-loss/10 px-3 py-2 text-sm text-loss">
       <span>{message}</span>
       {onRetry && (
-        <button type="button" onClick={onRetry} className="underline">
+        <button type="button" onClick={onRetry} className="tap-compact underline">
           {t('common.retry')}
         </button>
       )}

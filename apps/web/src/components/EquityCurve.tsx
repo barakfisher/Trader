@@ -66,7 +66,7 @@ export function EquityCurve() {
         points.length > 0 && (
           <button
             type="button"
-            className="text-xs text-text-muted underline hover:text-text-primary"
+            className="tap-compact text-xs text-text-muted underline hover:text-text-primary"
             onClick={() => setAsTable(!asTable)}
           >
             {asTable ? t('equity.showChart') : t('equity.showTable')}

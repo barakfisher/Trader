@@ -71,7 +71,7 @@ export const TimeZoneChange = observer(function TimeZoneChange() {
         </select>
       </label>
       {device && device !== zone && (
-        <button type="button" className="text-xs text-accent underline" onClick={() => setZone(device)}>
+        <button type="button" className="tap-compact text-xs text-accent underline" onClick={() => setZone(device)}>
           {t('timeZone.useDevice', { zone: device })}
         </button>
       )}

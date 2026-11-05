@@ -176,7 +176,7 @@ function RiskSlider({
       <p id={`${id}-hint`} className="mt-1 text-xs text-text-muted">
         {t('agents.mandate.riskHint')}{' '}
         {level !== null && (
-          <button type="button" className="text-accent hover:underline" onClick={() => onChange(null)}>
+          <button type="button" className="tap-compact text-accent hover:underline" onClick={() => onChange(null)}>
             {t('agents.mandate.clearRisk')}
           </button>
         )}

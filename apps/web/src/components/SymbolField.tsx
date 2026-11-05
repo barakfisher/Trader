@@ -175,14 +175,14 @@ export function SymbolField({
                     {item.name ?? ''}
                   </bdi>
                 </span>
-                <span className="shrink-0 text-[11px] text-text-muted">
+                <span className="shrink-0 text-2xs text-text-muted">
                   {[item.exchange, assetClassName(item.assetClass)].filter(Boolean).join(' · ')}
                 </span>
               </li>
             ),
           )}
       </ul>
-      <span id={hintId} className="block text-[11px] text-text-muted">
+      <span id={hintId} className="block text-2xs text-text-muted">
         {status ?? t('addHolding.symbolHint')}
       </span>
     </div>

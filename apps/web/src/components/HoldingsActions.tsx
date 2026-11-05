@@ -30,8 +30,8 @@ export function HoldingsActions() {
 
   return (
     <div className="flex items-center gap-1">
-      <Button onClick={() => setAdding(true)}>
-        <span className="flex items-center gap-1">
+      <Button onClick={() => setAdding(true)} className="max-sm:px-2">
+        <span className="flex items-center gap-1 whitespace-nowrap">
           <Plus className="size-4" aria-hidden />
           {t('holdings.actions.add')}
         </span>

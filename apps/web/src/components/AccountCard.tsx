@@ -87,7 +87,7 @@ export function AccountCard({
             type="button"
             onClick={() => setOpen(true)}
             aria-haspopup="dialog"
-            className="flex items-center gap-1 text-xs text-accent hover:underline"
+            className="tap-compact flex items-center gap-1 text-xs text-accent hover:underline"
           >
             <Wallet className="size-3.5" aria-hidden />
             {data.state === 'unset' ? t('account.setCash') : t('account.manage')}

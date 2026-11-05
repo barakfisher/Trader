@@ -129,7 +129,7 @@ export function HoldingRowMenu({
     ask.setDraft(t('holdings.menu.askDraft', { symbol }));
     void navigate({ to: '/ask' });
   };
-  const note = (text: string) => <li className="px-3 pb-1 text-[11px] text-text-muted">{text}</li>;
+  const note = (text: string) => <li className="px-3 pb-1 text-2xs text-text-muted">{text}</li>;
 
   return (
     <>

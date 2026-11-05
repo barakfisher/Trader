@@ -64,7 +64,7 @@ export function NarrationBadge() {
         )}
 
         {health.sampleSize > 0 && (
-          <p className="mt-2 border-t border-border-subtle pt-2 text-[11px] text-text-muted">
+          <p className="mt-2 border-t border-border-subtle pt-2 text-2xs text-text-muted">
             {t('narration.sample', { count: health.sampleSize })}
             {health.lastFallbackReason &&
               t('narration.fallback', { reason: health.lastFallbackReason })}

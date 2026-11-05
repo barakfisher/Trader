@@ -208,7 +208,7 @@ export const ObservationsFeed = observer(function ObservationsFeed({
               <button
                 type="button"
                 onClick={() => goToDay(earlier.day)}
-                className="text-xs text-accent underline"
+                className="tap-compact text-xs text-accent underline"
               >
                 {t('feed.days.latest', { day: dayLabel(days, earlier.day), count: earlier.count })}
               </button>
@@ -225,7 +225,7 @@ export const ObservationsFeed = observer(function ObservationsFeed({
               <button
                 type="button"
                 onClick={() => onFiltersChange({})}
-                className="text-xs text-accent underline"
+                className="tap-compact text-xs text-accent underline"
               >
                 {t('feed.showAll')}
               </button>
@@ -312,7 +312,7 @@ export const ObservationRow = observer(function ObservationRow({
               {t('feed.unread')}
             </span>
           )}
-          <span className={`rounded px-1.5 py-0.5 text-[10px] ${severity.chipClassName}`}>
+          <span className={`rounded px-1.5 py-0.5 text-3xs ${severity.chipClassName}`}>
             {severity.label}
           </span>
           <span className="font-medium text-text-primary">
@@ -331,7 +331,7 @@ export const ObservationRow = observer(function ObservationRow({
         <p {...text.attributes} className="mt-1 text-sm text-text-muted">{text.explanation}</p>
 
         {observation.conceptRefs.length > 0 && (
-          <p className="mt-2 flex flex-wrap items-center gap-1 text-[11px] text-text-muted">
+          <p className="mt-2 flex flex-wrap items-center gap-1 text-2xs text-text-muted">
             <span className="uppercase tracking-wide">{t('feed.concepts')}</span>
             {observation.conceptRefs.map((slug) => (
               <button
@@ -339,7 +339,7 @@ export const ObservationRow = observer(function ObservationRow({
                 type="button"
                 onClick={() => concepts.open(slug)}
                 title={t('feed.whatIs', { concept: conceptLabel(slug).toLowerCase() })}
-                className="rounded bg-surface-hover px-1.5 py-0.5 text-text-primary hover:bg-border hover:underline focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                className="tap-compact rounded bg-surface-hover px-1.5 py-0.5 text-text-primary hover:bg-border hover:underline focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
               >
                 {conceptLabel(slug)}
               </button>
@@ -352,7 +352,7 @@ export const ObservationRow = observer(function ObservationRow({
           onClick={() => observations.toggleEvidence(observation.id)}
           aria-expanded={open}
           aria-controls={drawerId}
-          className="mt-2 flex items-center gap-1 text-xs text-accent hover:underline"
+          className="tap-compact mt-2 flex items-center gap-1 text-xs text-accent hover:underline"
         >
           {open ? (
             <ChevronDown className="size-3.5" aria-hidden />

@@ -41,7 +41,7 @@ export function EvidenceDrawer({
       {sections.map((section, index) => (
         <div key={section.label ?? `figures-${index}`}>
           {section.label && (
-            <p className="mb-1 text-[11px] uppercase tracking-wide text-text-muted">
+            <p className="mb-1 text-2xs uppercase tracking-wide text-text-muted">
               {section.label}
             </p>
           )}

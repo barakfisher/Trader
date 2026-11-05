@@ -394,3 +394,4 @@ while this file is out of date.
 | 381 | A phone's holding card is three lines, and every field is 16 px on a phone |
 | 382 | A phone moves between places on a bottom bar, and its header holds the name and the account |
 | 383 | A field's currency is written `($)`, and "Not chosen" does not name the model |
+| 384 | A phone's holding card opens where it is tapped, and every control on a phone is 44 px |

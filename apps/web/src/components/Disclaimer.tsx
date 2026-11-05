@@ -21,7 +21,7 @@ export function Disclaimer() {
         <p>{t('disclaimer')}</p>
         <p className="flex flex-wrap gap-x-3">
           {LEGAL_DOCUMENTS.map((document) => (
-            <a key={document} href={legalPath(document)} className="text-accent hover:underline">
+            <a key={document} href={legalPath(document)} className="tap-compact text-accent hover:underline">
               {t(`legal.${document}`)}
             </a>
           ))}

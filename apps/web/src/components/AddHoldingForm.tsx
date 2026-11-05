@@ -149,7 +149,7 @@ function Field({
     <label className="block space-y-1">
       <span className="text-xs uppercase tracking-wide text-text-muted">{label}</span>
       {children}
-      {hint && <span className="block text-[11px] text-text-muted">{hint}</span>}
+      {hint && <span className="block text-2xs text-text-muted">{hint}</span>}
     </label>
   );
 }

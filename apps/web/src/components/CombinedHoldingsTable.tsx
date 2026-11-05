@@ -31,11 +31,12 @@ import {
 import { sentimentRank, sortHoldings, type SortFields, type SortKey } from '../lib/holdingsSort.ts';
 import { ApproveProposalButton } from './ProposalApproval.tsx';
 import { SortControl, SortableTh, useSortColumns, type SortProps } from './SortableHeader.tsx';
+import { CardDetail, ExpandMark, ExpandingCard } from './ExpandingCard.tsx';
 import { DayChange } from './DayChange.tsx';
 import { InstrumentName } from './InstrumentName.tsx';
 import { SentimentCell, useSentiments } from './SentimentBadge.tsx';
 import { HoldingRowMenu } from './HoldingRowMenu.tsx';
-import { Card, Delta } from './ui.tsx';
+import { Card, Delta, buttonClass } from './ui.tsx';
 
 /**
  * The dashboard's one holdings table under *All*, *Simulated* and a single
@@ -92,6 +93,8 @@ export function CombinedHoldingsTable({
   const updateHolding = useUpdateHolding();
   const removeHolding = useRemoveHolding();
   const narrow = useNarrowViewport();
+  // One open at a time, so a long list stays a list.
+  const [openCard, setOpenCard] = useState<string | null>(null);
   const failure =
     (updateHolding.error && errorMessage(updateHolding.error, t('holdings.updateFailed'))) ||
     (removeHolding.error && errorMessage(removeHolding.error, t('holdings.removeFailed')));
@@ -108,7 +111,13 @@ export function CombinedHoldingsTable({
         <ul className="divide-y divide-border-subtle/60">
           {rows.map((row) => (
             <li key={row.instrument.id} className="py-3 first:pt-0 last:pb-0">
-              <CombinedCard row={row} real={realOf(row)} {...shared} />
+              <CombinedCard
+                row={row}
+                real={realOf(row)}
+                {...shared}
+                open={openCard === row.instrument.id}
+                onToggle={() => setOpenCard(openCard === row.instrument.id ? null : row.instrument.id)}
+              />
             </li>
           ))}
         </ul>
@@ -189,7 +198,7 @@ function CombinedRow({ row, real, currency, updateHolding, removeHolding }: RowP
           {row.quote ? (
             <>
               <div>{formatMoney(row.quote.priceMinor, row.quote.currency)}</div>
-              <div className="text-[11px] text-text-muted" title={formatExactTime(row.quote.asOf)}>
+              <div className="text-2xs text-text-muted" title={formatExactTime(row.quote.asOf)}>
                 {formatAge(row.quote.asOf)}
               </div>
             </>
@@ -227,8 +236,8 @@ function CombinedRow({ row, real, currency, updateHolding, removeHolding }: RowP
             ))}
             {confirmingDelete && real ? (
               <span className="flex items-center gap-2 text-xs">
-                <span className="max-w-56 text-start text-[11px] text-text-muted">{t('holdings.removeNote')}</span>
-                <button type="button" onClick={() => removeHolding.mutate(real.id)} className="text-loss underline">
+                <span className="max-w-56 text-start text-2xs text-text-muted">{t('holdings.removeNote')}</span>
+                <button type="button" onClick={() => removeHolding.mutate(real.id)} className="tap-compact text-loss underline">
                   {t('common.remove')}
                 </button>
                 <button type="button" onClick={() => setConfirmingDelete(false)} className="text-text-muted">
@@ -257,7 +266,15 @@ function CombinedRow({ row, real, currency, updateHolding, removeHolding }: RowP
  * Holders are a line only when they say something: a row only the real portfolio
  * holds is the usual case, and its "Real" pill led where the symbol already does.
  */
-function CombinedCard({ row, real, currency, updateHolding, removeHolding }: RowProps) {
+function CombinedCard({
+  row,
+  real,
+  currency,
+  updateHolding,
+  removeHolding,
+  open,
+  onToggle,
+}: RowProps & { open: boolean; onToggle: () => void }) {
   const { t } = useTranslation();
   const sentiments = useSentiments();
   const [editing, setEditing] = useState(false);
@@ -266,10 +283,17 @@ function CombinedCard({ row, real, currency, updateHolding, removeHolding }: Row
   const button = 'flex h-10 items-center gap-1.5 rounded-lg border border-border-subtle px-3 text-xs text-text-muted';
 
   return (
+    <ExpandingCard
+      label={t('holdings.details.toggle', { symbol })}
+      open={open}
+      locked={editing || confirmingDelete}
+      onToggle={onToggle}
+      details={<CombinedDetails row={row} real={real} currency={currency} />}
+    >
     <div className="space-y-1.5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <SymbolCell row={row} real={real}>
+          <SymbolCell row={row} real={real} linked={false}>
             {sentiments.shown && <SentimentCell inline holding={sentiments.byInstrument.get(row.instrument.id)} />}
           </SymbolCell>
         </div>
@@ -290,10 +314,12 @@ function CombinedCard({ row, real, currency, updateHolding, removeHolding }: Row
           {row.weightPct !== null && t('holdings.ofPortfolio', { share: formatShare(row.weightPct) })}
         </p>
         {!editing && !confirmingDelete && (
-          <RowMenu row={row} real={real} onEdit={() => setEditing(true)} onRemove={() => setConfirmingDelete(true)} />
+          <div className="flex shrink-0 items-center gap-1">
+            <ExpandMark open={open} />
+            <RowMenu row={row} real={real} onEdit={() => setEditing(true)} onRemove={() => setConfirmingDelete(true)} />
+          </div>
         )}
       </div>
-      {row.positions.length > 1 && <BreakdownList row={row} currency={currency} />}
       {row.uncosted && <CostWarning symbol={symbol} onSet={real?.costBasisMinor === null ? () => setEditing(true) : undefined} />}
       {editing && real ? (
         <RealHoldingEditor holding={real} updateHolding={updateHolding} onDone={() => setEditing(false)} />
@@ -317,6 +343,51 @@ function CombinedCard({ row, real, currency, updateHolding, removeHolding }: Row
         )
       )}
     </div>
+    </ExpandingCard>
+  );
+}
+
+/**
+ * What an open card adds: the figures the three lines leave out, each holder's
+ * part, and the way to the holding's page. A stock only an agent holds has no
+ * such page, so no button.
+ */
+function CombinedDetails({ row, real, currency }: { row: CombinedHolding; real: HoldingView | null; currency: string }) {
+  const { t } = useTranslation();
+  // A cost per unit is one holder's: with several, the split below says each part.
+  const only = row.positions.length === 1 ? row.positions[0] : undefined;
+  return (
+    <>
+      <dl className="space-y-1">
+        <CardDetail label={t('holdings.columns.pnl')}>
+          <Delta value={row.pnlMinor}>
+            {row.pnlMinor === null || row.pnlPct === null
+              ? '—'
+              : t('holdings.pnl', { money: formatMoney(row.pnlMinor, currency), percent: formatPercent(row.pnlPct) })}
+          </Delta>
+        </CardDetail>
+        <CardDetail label={t('holdings.columns.cost')}>
+          {row.costMinor === null ? '—' : formatMoney(row.costMinor, currency)}
+          {only && only.costBasisMinor !== null && (
+            <span className="block text-text-muted">
+              {t('holdings.details.perUnit', { money: formatMoney(only.costBasisMinor, only.costCurrency) })}
+            </span>
+          )}
+        </CardDetail>
+        <CardDetail label={t('holdings.details.priceUpdated')}>{formatAge(row.quote?.asOf)}</CardDetail>
+      </dl>
+      {row.positions.length > 1 && <BreakdownList row={row} currency={currency} />}
+      {real && (
+        <Link
+          to="/holdings/$holdingId"
+          params={{ holdingId: real.id }}
+          aria-label={t('holdings.details.openPageFor', { symbol: row.instrument.symbol })}
+          className={buttonClass('secondary', 'w-full text-center')}
+        >
+          {t('holdings.details.openPage')}
+        </Link>
+      )}
+    </>
   );
 }
 
@@ -347,29 +418,40 @@ function RowMenu({
 }
 
 /** The symbol, linked to the real holding's page when there is one, with its warnings and pending count. */
-function SymbolCell({ row, real, children }: { row: CombinedHolding; real: HoldingView | null; children?: ReactNode }) {
+function SymbolCell({
+  row,
+  real,
+  linked = true,
+  children,
+}: {
+  row: CombinedHolding;
+  real: HoldingView | null;
+  /** A phone's card opens where it is tapped, so its symbol is not a second, different target. */
+  linked?: boolean;
+  children?: ReactNode;
+}) {
   const { t } = useTranslation();
   const symbol = <bdi>{row.instrument.symbol}</bdi>;
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        {real ? (
+        {real && linked ? (
           <Link to="/holdings/$holdingId" params={{ holdingId: real.id }} className="font-medium text-accent hover:underline">
             {symbol}
           </Link>
         ) : (
-          <span className="font-medium">{symbol}</span>
+          <span className={real ? 'font-medium text-accent' : 'font-medium'}>{symbol}</span>
         )}
         {row.quote?.stale && (
           <span
             title={t('holdings.staleTitle', { when: formatExactTime(row.quote.asOf) })}
-            className="flex items-center gap-1 rounded bg-warn/15 px-1.5 py-0.5 text-[10px] text-warn"
+            className="flex items-center gap-1 rounded bg-warn/15 px-1.5 py-0.5 text-3xs text-warn"
           >
             <Clock className="size-3" aria-hidden /> {t('holdings.stale')}
           </span>
         )}
         {row.pending.length > 0 && (
-          <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-medium text-accent">
+          <span className="rounded-full bg-accent/15 px-2 py-0.5 text-3xs font-medium text-accent">
             {t('consolidated.pending.badge', { count: row.pending.length })}
           </span>
         )}
@@ -391,7 +473,7 @@ function Holders({ positions }: { positions: ConsolidatedPosition[] }) {
             <Link
               to="/holdings/$holdingId"
               params={{ holdingId: position.holdingId }}
-              className="inline-block rounded-full bg-accent/15 px-2 py-0.5 text-[11px] font-medium text-accent hover:underline"
+              className="tap-compact tap-tight inline-block rounded-full bg-accent/15 px-2 py-0.5 text-2xs font-medium text-accent hover:underline"
             >
               {t('agents.real')}
             </Link>
@@ -400,7 +482,7 @@ function Holders({ positions }: { positions: ConsolidatedPosition[] }) {
               to="/agents/$agentId"
               params={{ agentId: position.agentId }}
               title={t('agents.simulated')}
-              className="inline-flex items-center gap-1 rounded-full border border-border-subtle px-2 py-0.5 text-[11px] text-text-muted hover:text-text-primary hover:underline"
+              className="tap-compact tap-tight inline-flex items-center gap-1 rounded-full border border-border-subtle px-2 py-0.5 text-2xs text-text-muted hover:text-text-primary hover:underline"
             >
               <bdi>{position.agentName}</bdi>
               {position.state === 'paused' && <span className="text-warn">· {agentStateWord('paused')}</span>}

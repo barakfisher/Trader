@@ -185,7 +185,7 @@ export function KeySpendDetails({ spend }: { spend: KeySpend }) {
         </p>
       )}
       {reading && (
-        <p className="text-[11px] text-text-muted">
+        <p className="text-2xs text-text-muted">
           {t('spendIndicator.readAt', { time: formatClockTime(reading.readAt) })}
         </p>
       )}
