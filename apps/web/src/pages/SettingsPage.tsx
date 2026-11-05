@@ -7,6 +7,7 @@ import { SAFETY_LIMIT_CEILING_MICRO_USD, type MonthlySpend } from '@traders/shar
 import { AccountDeletionCard } from '../components/AccountDeletionCard.tsx';
 import { AccountExportCard } from '../components/AccountExportCard.tsx';
 import { AccountResetCard } from '../components/AccountResetCard.tsx';
+import { CollapsingCards } from '../components/CollapsingCards.tsx';
 import { DevicesCard } from '../components/DevicesCard.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { Drawer } from '../components/Drawer.tsx';
@@ -94,8 +95,9 @@ export const SettingsPage = observer(function SettingsPage() {
       {/* A failed save leaves the form and the typing in it; Save is the retry. */}
       {settings.error && <ErrorNote message={settings.error} />}
 
+      {/* On a phone every card is a closed line (D385). The save bar is no card, so it stays in sight. */}
       {draft !== null && (
-        <>
+        <CollapsingCards>
           <Card title={t('settings.language')}>
             <Field label={t('settings.interfaceLanguage')} hint={t('settings.languageHint')}>
               <select
@@ -331,7 +333,7 @@ export const SettingsPage = observer(function SettingsPage() {
           {/* D264: take the data out, then leave - in that order on the page. */}
           <AccountExportCard />
           <AccountDeletionCard />
-        </>
+        </CollapsingCards>
       )}
 
       <Disclaimer />
@@ -370,7 +372,7 @@ const SignInCard = observer(function SignInCard() {
   const close = () => setOpen(null);
   const oauthOutcome = useOAuthOutcome();
   return (
-    <Card title={t('settings.signIn')}>
+    <Card title={t('settings.signIn')} attention={oauthOutcome === 'signed_in' ? null : oauthOutcome}>
       {oauthOutcome !== null && (
         <div className="mb-3">
           <OAuthOutcomeNotice outcome={oauthOutcome} />

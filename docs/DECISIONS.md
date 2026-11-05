@@ -395,3 +395,4 @@ while this file is out of date.
 | 382 | A phone moves between places on a bottom bar, and its header holds the name and the account |
 | 383 | A field's currency is written `($)`, and "Not chosen" does not name the model |
 | 384 | A phone's holding card opens where it is tapped, and every control on a phone is 44 px |
+| 385 | A long phone page opens as a list of what is on it |

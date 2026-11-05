@@ -1,8 +1,67 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode, type RefObject } from 'react';
 import { ChevronDown } from 'lucide-react';
 
 /** As long as the open transition below, so the scroll sees the card at its final height. */
 const OPEN_MS = 200;
+
+/**
+ * Keeps what just opened on screen. Closing the one above moves it up, possibly
+ * under the header. A new touch cancels it: the page must not move under a thumb
+ * that has gone on to something else, and a scroll would close a "⋮" menu it just
+ * opened.
+ */
+export function useRevealOnOpen(target: RefObject<HTMLElement | null>, open: boolean) {
+  useEffect(() => {
+    if (!open) return;
+    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const timer = window.setTimeout(() => target.current?.scrollIntoView?.({ block: 'nearest' }), still ? 0 : OPEN_MS);
+    const cancel = () => window.clearTimeout(timer);
+    window.addEventListener('pointerdown', cancel, { once: true });
+    return () => {
+      cancel();
+      window.removeEventListener('pointerdown', cancel);
+    };
+  }, [open, target]);
+}
+
+/**
+ * What opens: stays mounted so closing can animate and typing in it survives;
+ * closed, it is out of the tab order and the accessibility tree. With `active`
+ * off (a wide screen) it is two plain wrappers around content that is simply
+ * there, and the same two, so crossing the width never remounts what is inside.
+ */
+export function ExpandingPanel({
+  id,
+  open,
+  active = true,
+  className = '',
+  clipClassName = '',
+  children,
+}: {
+  id?: string;
+  open: boolean;
+  active?: boolean;
+  className?: string;
+  /** On the clipping element: room a focus ring needs, which the clip would otherwise cut. */
+  clipClassName?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      id={id}
+      aria-hidden={active ? !open : undefined}
+      className={
+        active
+          ? `grid transition-[grid-template-rows,visibility] duration-200 motion-reduce:transition-none ${
+              open ? 'visible grid-rows-[1fr]' : 'invisible grid-rows-[0fr]'
+            } ${className}`
+          : className
+      }
+    >
+      <div className={active ? `min-h-0 overflow-hidden ${clipClassName}` : undefined}>{children}</div>
+    </div>
+  );
+}
 
 /**
  * A phone's holding card: a tap anywhere opens the details under it (D384).
@@ -34,20 +93,7 @@ export function ExpandingCard({
 }) {
   const root = useRef<HTMLDivElement>(null);
 
-  // Closing the card above moves this one up, possibly under the header. A new
-  // touch cancels it: the page must not move under a thumb that has gone on to
-  // something else, and a scroll would close a "⋮" menu it just opened.
-  useEffect(() => {
-    if (!open) return;
-    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    const timer = window.setTimeout(() => root.current?.scrollIntoView?.({ block: 'nearest' }), still ? 0 : OPEN_MS);
-    const cancel = () => window.clearTimeout(timer);
-    window.addEventListener('pointerdown', cancel, { once: true });
-    return () => {
-      cancel();
-      window.removeEventListener('pointerdown', cancel);
-    };
-  }, [open]);
+  useRevealOnOpen(root, open);
 
   return (
     <div ref={root} className="relative scroll-mt-16">
@@ -61,17 +107,13 @@ export function ExpandingCard({
         />
       )}
       <div className="[&_a]:relative [&_a]:z-[2] [&_button]:relative [&_button]:z-[2]">{children}</div>
-      <div
-        aria-hidden={!open}
-        className={`grid transition-[grid-template-rows,visibility] duration-200 motion-reduce:transition-none ${
-          open ? 'visible grid-rows-[1fr]' : 'invisible grid-rows-[0fr]'
-        } [&_a]:relative [&_a]:z-[2] [&_button]:relative [&_button]:z-[2]`}
+      <ExpandingPanel
+        open={open}
+        className="[&_a]:relative [&_a]:z-[2] [&_button]:relative [&_button]:z-[2]"
+        clipClassName="-mx-1 -mb-1 px-1 pb-1"
       >
-        {/* The padding is room for the page button's focus ring, which the clip would cut. */}
-        <div className="-mx-1 -mb-1 min-h-0 overflow-hidden px-1 pb-1">
-          <div className="mt-2 space-y-2 border-t border-border-subtle/60 pt-2">{details}</div>
-        </div>
-      </div>
+        <div className="mt-2 space-y-2 border-t border-border-subtle/60 pt-2">{details}</div>
+      </ExpandingPanel>
     </div>
   );
 }
