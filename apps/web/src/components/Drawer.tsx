@@ -39,14 +39,16 @@ export function Drawer({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-black/40" onClick={onClose}>
+    // `m-0`: a parent's `space-y-*` gives this a margin, which a fixed box takes out
+    // of its height - and the bottom bar then shows beneath the panel (D382).
+    <div className="fixed inset-0 z-40 m-0 flex justify-end bg-black/40 safe-inline" onClick={onClose}>
       <aside
         ref={panel}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="h-full w-full max-w-md overflow-y-auto border-s border-border-subtle bg-surface-raised p-4 shadow-xl"
+        className="h-full w-full max-w-md overflow-y-auto border-s border-border-subtle bg-surface-raised p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl"
         onClick={(event) => event.stopPropagation()}
       >
         <header className="mb-4 flex items-center justify-between">

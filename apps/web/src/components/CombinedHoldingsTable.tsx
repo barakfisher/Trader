@@ -507,7 +507,7 @@ function PositionsBreakdown({ row, currency, children }: { row: CombinedHolding;
         <span
           role="tooltip"
           style={{ position: 'fixed', top: at.top, left: at.left, width: PANEL_WIDTH }}
-          className="z-30 block rounded-lg border border-border-subtle bg-surface-raised p-3 text-start shadow-xl"
+          className="z-40 block rounded-lg border border-border-subtle bg-surface-raised p-3 text-start shadow-xl"
         >
           <BreakdownList row={row} currency={currency} />
         </span>

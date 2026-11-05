@@ -73,7 +73,7 @@ it('marks the current place, and keeps it marked below it', async () => {
 
 it('opens the menu, ends it with Sign out, and closes it with Escape back onto its button', async () => {
   renderAt('/');
-  const button = await screen.findByRole('button', { name: 'Menu' });
+  const button = await screen.findByRole('button', { name: 'Account' });
   expect(button.getAttribute('aria-expanded')).toBe('false');
 
   fireEvent.click(button);
@@ -91,11 +91,11 @@ it('opens the menu, ends it with Sign out, and closes it with Escape back onto i
 
 it('closes the menu when one of its links is followed', async () => {
   const { router } = renderAt('/');
-  const button = await screen.findByRole('button', { name: 'Menu' });
+  const button = await screen.findByRole('button', { name: 'Account' });
   fireEvent.click(button);
   const panel = document.getElementById(button.getAttribute('aria-controls')!)!;
 
-  fireEvent.click(within(panel).getByRole('link', { name: 'Research' }));
-  await vi.waitFor(() => expect(router.state.location.pathname).toBe('/research'));
+  fireEvent.click(within(panel).getByRole('link', { name: 'Settings' }));
+  await vi.waitFor(() => expect(router.state.location.pathname).toBe('/settings'));
   expect(button.getAttribute('aria-expanded')).toBe('false');
 });

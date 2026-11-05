@@ -53,7 +53,7 @@ export const ConceptDialog = observer(function ConceptDialog() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:p-8"
+      className="fixed inset-0 z-50 m-0 flex items-start justify-center overflow-y-auto bg-black/50 overlay-gutter pt-4 sm:pt-8"
       // The backdrop closes, but only when the backdrop itself is the target:
       // without the check, a click that starts on the text and drifts onto the
       // overlay closes the dialog mid-selection.

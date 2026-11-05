@@ -30,7 +30,7 @@ export const ImportWizard = observer(function ImportWizard() {
   if (!store.open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 sm:p-8">
+    <div className="fixed inset-0 z-50 m-0 flex items-start justify-center overflow-y-auto bg-black/60 overlay-gutter pt-4 sm:pt-8">
       <div className="w-full max-w-4xl rounded-xl border border-border-subtle bg-surface-raised">
         <header className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
           <h2 className="text-sm font-semibold">{t('import.title')}</h2>

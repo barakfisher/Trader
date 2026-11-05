@@ -1,29 +1,18 @@
 import type { ReactNode } from 'react';
 import { observer } from 'mobx-react-lite';
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
-import {
-  Bot,
-  CircleUser,
-  Lightbulb,
-  LogOut,
-  Menu,
-  MessageCircleQuestion,
-  Microscope,
-  Settings,
-  ShieldCheck,
-  X,
-} from 'lucide-react';
+import { CircleUser, LogOut, Settings, ShieldCheck } from 'lucide-react';
 
 import { useTranslation } from '../i18n/index.ts';
 import { APP_VERSION, type AppVersion, versionStamp } from '../lib/appVersion.ts';
 import { getDisplayTimeZone } from '../lib/relativeTime.ts';
+import { useBottomBarViewport } from '../lib/viewport.ts';
 import { Disclosure } from './Disclosure.tsx';
 import { SpendIndicator } from './SpendIndicator.tsx';
 import { useAdminSignupCountQuery } from '../queries/admin.ts';
-import { unreadCount, useInsightsDaysQuery } from '../queries/insightsDays.ts';
-import { openProposals, useProposalsQuery } from '../queries/proposals.ts';
 import { useStore } from '../stores/context.tsx';
 import { BrandMark } from './BrandMark.tsx';
+import { type Place, isCurrent, useMainPlaces } from './places.ts';
 
 /**
  * The bar every signed-in page shares, rendered once by the root route.
@@ -34,36 +23,25 @@ import { BrandMark } from './BrandMark.tsx';
  * stay on their page; this bar holds only places. Targets and Import act on
  * the holdings, so they are on the holdings card (UX5).
  *
- * At `md` and up the places sit in a row and the account items (Settings,
- * Admin, Sign out) behind one button; below `md` everything is behind a
- * hamburger, with Sign out last behind a divider so it is never the item a
- * thumb lands on by accident. Both are disclosures - a button that shows a
- * list of links - rather than ARIA menus: links need no arrow-key model, Tab
- * walks them, and Escape closes and returns focus to the button.
+ * At `md` and up the places sit in a row here; below it they are on the bottom
+ * bar (D382), so this bar says the product's name rather than repeating
+ * "Portfolio" on every page, and its logo still leads there. The account items
+ * (Settings, Admin, Sign out) are behind one button at every width, Sign out
+ * last behind a divider so it is never the item a thumb lands on by accident.
+ * That button is a disclosure - a button that shows a list of links - rather
+ * than an ARIA menu: links need no arrow-key model, Tab walks them, and Escape
+ * closes and returns focus to the button.
  */
 export const AppBar = observer(function AppBar() {
   const { auth } = useStore();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  // Open questions, on Insights: a question that expires unanswered because
-  // nobody knew it was there is what the inbox exists to prevent.
-  const openCount = openProposals(useProposalsQuery().data).length;
-  // Unread findings are a dot beside the count, not a second number (the user,
-  // 2026-10-11): the number is what has a deadline.
-  const hasUnread = unreadCount(useInsightsDaysQuery().data) > 0;
+  const phone = useBottomBarViewport();
   const isAdmin = auth.user?.role === 'admin';
   // Sign-up requests waiting for the admin (D188), so one is noticed without Telegram.
   const pendingSignups = useAdminSignupCountQuery(isAdmin).data?.pending ?? 0;
 
-  const places: Place[] = [
-    // Proposals is a tab of Insights (decision 134), so its count is here.
-    { to: '/insights', label: t('nav.insights'), icon: Lightbulb, count: openCount, dot: hasUnread },
-    { to: '/agents', label: t('nav.agents'), icon: Bot },
-    { to: '/research', label: t('nav.research'), icon: Microscope },
-    { to: '/ask', label: t('nav.ask'), icon: MessageCircleQuestion },
-    // Targets is on the holdings card (UX5): it is about those rows.
-  ];
   const account: Place[] = [
     { to: '/settings', label: t('nav.settings'), icon: Settings },
     // Hiding it is courtesy: the server refuses every /admin request from anyone else (decision 83).
@@ -85,70 +63,46 @@ export const AppBar = observer(function AppBar() {
           aria-current={pathname === '/' ? 'page' : undefined}
         >
           <BrandMark className="size-5" />
-          {t('nav.portfolio')}
+          {phone ? t('nav.brand') : t('nav.portfolio')}
         </Link>
 
         <VersionLabel version={APP_VERSION} timeZone={getDisplayTimeZone()} />
 
-        <ul className="hidden flex-1 items-center gap-1 md:flex">
-          {places.map((place) => (
-            <li key={place.to}>
-              <PlaceLink place={place} pathname={pathname} />
-            </li>
-          ))}
-        </ul>
+        {!phone && <HeaderPlaces pathname={pathname} />}
 
         {/* Beside the account menu at every width (D247); the chip itself is narrower on a phone. */}
         <div className="ms-auto md:ms-0">
           <SpendIndicator />
         </div>
 
-        <div className="hidden md:block">
-          <Disclosure
-            label={t('nav.account')}
-            icon={<Flagged show={pendingSignups > 0}><CircleUser className="size-5" aria-hidden /></Flagged>}
-          >
-            {account.map((place) => (
-              <li key={place.to}>
-                <PlaceLink place={place} pathname={pathname} wide />
-              </li>
-            ))}
-            <SignOutItem label={t('nav.signOut')} onSignOut={signOut} />
-          </Disclosure>
-        </div>
-
-        <div className="md:hidden">
-          <Disclosure
-            label={t('nav.menu')}
-            icon={<Flagged show={pendingSignups > 0}><Menu className="size-5" aria-hidden /></Flagged>}
-            openIcon={<X className="size-5" aria-hidden />}
-          >
-            {[...places, ...account].map((place) => (
-              <li key={place.to}>
-                <PlaceLink place={place} pathname={pathname} wide />
-              </li>
-            ))}
-            <SignOutItem label={t('nav.signOut')} onSignOut={signOut} />
-          </Disclosure>
-        </div>
+        <Disclosure
+          label={t('nav.account')}
+          icon={<Flagged show={pendingSignups > 0}><CircleUser className="size-5" aria-hidden /></Flagged>}
+        >
+          {account.map((place) => (
+            <li key={place.to}>
+              <PlaceLink place={place} pathname={pathname} wide />
+            </li>
+          ))}
+          <SignOutItem label={t('nav.signOut')} onSignOut={signOut} />
+        </Disclosure>
       </nav>
     </header>
   );
 });
 
-type Place = {
-  to: '/insights' | '/agents' | '/research' | '/ask' | '/settings' | '/admin';
-  label: string;
-  icon: typeof Bot;
-  count?: number;
-  /** Something new to read there (decision 133), shown beside the count. */
-  dot?: boolean;
-};
-
-/** A place is current on its own address and below it: /agents/x is still Agents. */
-function isCurrent(to: string, pathname: string): boolean {
-  return pathname === to || pathname.startsWith(`${to}/`);
-}
+const HeaderPlaces = observer(function HeaderPlaces({ pathname }: { pathname: string }) {
+  const places = useMainPlaces();
+  return (
+    <ul className="flex flex-1 items-center gap-1">
+      {places.map((place) => (
+        <li key={place.to}>
+          <PlaceLink place={place} pathname={pathname} />
+        </li>
+      ))}
+    </ul>
+  );
+});
 
 function PlaceLink({ place, pathname, wide = false }: { place: Place; pathname: string; wide?: boolean }) {
   const { t } = useTranslation();

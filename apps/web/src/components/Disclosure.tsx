@@ -13,12 +13,10 @@ import { useRouterState } from '@tanstack/react-router';
 export function Disclosure({
   label,
   icon,
-  openIcon,
   children,
 }: {
   label: string;
   icon: ReactNode;
-  openIcon?: ReactNode;
   /** `<li>` items. */
   children: ReactNode;
 }) {
@@ -60,7 +58,7 @@ export function Disclosure({
         onClick={() => setOpen(!open)}
         className="flex items-center rounded-lg p-1.5 text-text-muted transition hover:bg-surface-hover hover:text-text-primary"
       >
-        {open && openIcon ? openIcon : icon}
+        {icon}
       </button>
       {open && (
         <ul
