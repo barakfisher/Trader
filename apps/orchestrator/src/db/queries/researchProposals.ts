@@ -4,7 +4,7 @@ import { query, transaction } from '../pool.js';
 
 /**
  * Research views raised as acknowledge-only proposals on the real portfolio
- * (D390, migration 0085). The AI service writes the ratings; the proposal
+ * (D392, migration 0085). The AI service writes the ratings; the proposal
  * sweep reads them here and writes the observation and proposal of each view
  * that asks for an action.
  */
@@ -65,7 +65,7 @@ export interface ResearchProposalToCreate {
   payload: ResearchProposalPayload;
   expiresAt: Date;
   headline: string;
-  /** The rationale, in the language the agent wrote it (D390). */
+  /** The rationale, in the language the agent wrote it (D392). */
   rationale: string;
   localized: LocalizedTexts;
   ratedAt: Date;
@@ -135,7 +135,7 @@ export interface SupersededResearchProposalRow {
 
 /**
  * Open research proposals whose stock the same agent has rated differently
- * since (D390: a change closes the open view). A newer rating in the same word
+ * since (D392: a change closes the open view). A newer rating in the same word
  * leaves it open: the view still stands.
  */
 export function listSupersededResearchProposals(): Promise<SupersededResearchProposalRow[]> {

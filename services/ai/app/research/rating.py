@@ -1,10 +1,10 @@
-"""A research rating: what the model wrote, and the checks that keep its figures true (D254, D390).
+"""A research rating: what the model wrote, and the checks that keep its figures true (D254, D392).
 
 The model answers with one JSON object per stock:
 
     {"rating": "trim", "rationale": "...", "findings": ["...", "..."]}
 
-Since D390 (D387 case 1) a rating is a view on what to do, like an advisor's:
+Since D392 (D387 case 1) a rating is a view on what to do, like an advisor's:
 **Buy more / Hold / Trim / Sell** for a stock the real portfolio holds, and
 **Buy / Wait / Avoid** for one researched on its own that it does not (D369).
 D254's guardrail 1 - no "you", no buy or sell wording - is gone with it; the
@@ -17,13 +17,13 @@ others stand, and two of them are here:
 2. **The figures** (guardrail 2): every number in the rationale and the
    findings is sourced from the stock's evidence by the evidence validator, as
    a scan's thesis is (guideline 7). It reads figures the same way in every
-   language, which is what lets the rationale be in the user's (D390).
+   language, which is what lets the rationale be in the user's (D392).
 
 A problem is a reason string, never an exception: the run stores a refused
 rating with its reasons, and the research page says it was refused.
 
-The ratings stored before D390 (Bullish / Bearish / Neutral) stay in the table
-and on the page until a newer rating replaces them (D390): `LEGACY_RATINGS` is
+The ratings stored before D392 (Bullish / Bearish / Neutral) stay in the table
+and on the page until a newer rating replaces them (D392): `LEGACY_RATINGS` is
 part of the column's CHECK, never of what a model may answer.
 """
 
@@ -46,13 +46,13 @@ Rating = HeldRating | UnheldRating
 HELD_RATINGS: tuple[HeldRating, ...] = ("buy_more", "hold", "trim", "sell")
 #: What a model may answer about a stock researched on its own, not held (D369).
 UNHELD_RATINGS: tuple[UnheldRating, ...] = ("buy", "wait", "avoid")
-#: Stored before D390, shown until replaced, never answered again.
+#: Stored before D392, shown until replaced, never answered again.
 LEGACY_RATINGS: tuple[LegacyRating, ...] = ("bullish", "bearish", "neutral")
 #: Every value `research_ratings.rating` may hold: `0085_research_advice.RATINGS`;
 #: a test holds the two equal, and the web's `RESEARCH_RATINGS` says the same.
 RATINGS: tuple[str, ...] = (*HELD_RATINGS, *UNHELD_RATINGS, *LEGACY_RATINGS)
 #: The ratings that ask for an action, and so raise an acknowledge-only proposal
-#: on the real portfolio (D390). Hold, Wait and Avoid are a bottom line on the
+#: on the real portfolio (D392). Hold, Wait and Avoid are a bottom line on the
 #: research page only.
 ACTIONABLE_RATINGS: tuple[Rating, ...] = ("buy_more", "trim", "sell", "buy")
 

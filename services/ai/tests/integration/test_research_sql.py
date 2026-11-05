@@ -306,7 +306,7 @@ def test_one_stock_is_found_whether_or_not_the_user_holds_it(
     assert (found.instrument_id, found.symbol, found.held) == (unheld, "UEC", False)
     held = main_holdings(loaded, agent.user_id)[0]
     again = instrument_to_rate(loaded, agent.user_id, held.instrument_id)
-    assert again is not None and again.held, "a held stock is rated in the holding's words (D390)"
+    assert again is not None and again.held, "a held stock is rated in the holding's words (D392)"
     assert instrument_to_rate(loaded, agent.user_id, "10000000-0000-0000-0000-0000000000ff") is None
 
 

@@ -188,7 +188,7 @@ describe("a proposal's page", () => {
   });
 });
 
-describe('a research view on the real portfolio (D390)', () => {
+describe('a research view on the real portfolio (D392)', () => {
   const VIEW = proposal({
     id: 'p-view',
     kind: 'research',

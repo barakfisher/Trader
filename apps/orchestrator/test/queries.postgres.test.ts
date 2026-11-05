@@ -2807,7 +2807,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
-  describe('research views as acknowledge-only proposals (0085, D390)', () => {
+  describe('research views as acknowledge-only proposals (0085, D392)', () => {
     it('reads the latest view with the word before it, writes one proposal per rating, and finds a changed one', async () => {
       const pool = getPool();
       const mark = USER.slice(0, 8);

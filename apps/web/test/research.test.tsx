@@ -92,14 +92,14 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('the research page', () => {
-  it('heads with the disclaimer and the not-advice line (D390)', async () => {
+  it('heads with the disclaimer and the not-advice line (D392)', async () => {
     renderPage(<ResearchPage />);
     await screen.findByText('CCJ');
     expect(screen.getByText(t('disclaimer'))).toBeTruthy();
     expect(screen.getByText(t('research.notAdvice'))).toBeTruthy();
   });
 
-  it("shows each rating's word, agent and date, a stale mark, and a pre-D390 rationale as English", async () => {
+  it("shows each rating's word, agent and date, a stale mark, and a pre-D392 rationale as English", async () => {
     renderPage(<ResearchPage />);
     expect(await screen.findByText(t('research.ratings.bullish'))).toBeTruthy();
     expect(screen.getByText(t('research.ratings.trim'))).toBeTruthy();
@@ -107,7 +107,7 @@ describe('the research page', () => {
     expect(screen.getAllByText(t('research.staleLong'))).toHaveLength(1);
     const rationale = screen.getByText('CCJ trades at 54.32.');
     expect(rationale.getAttribute('lang')).toBe('en');
-    // Since D390 the rationale is in the user's language: no `lang` of its own.
+    // Since D392 the rationale is in the user's language: no `lang` of its own.
     expect(screen.getByText('NXE fell.').getAttribute('lang')).toBeNull();
     expect(screen.getByText(/The latest attempt, .*, was refused/)).toBeTruthy();
   });

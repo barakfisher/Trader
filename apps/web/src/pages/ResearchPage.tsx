@@ -272,7 +272,7 @@ function HoldingResearch({
   const { t } = useTranslation();
   const root = useRef<HTMLElement>(null);
   const latest = holding.latest;
-  // A rating stored before D390 was written in English; one since, in the user's language.
+  // A rating stored before D392 was written in English; one since, in the user's language.
   const textLang = latest !== null && isLegacyRating(latest.rating) ? SERVER_ENGLISH : {};
   const panelId = useId();
   // With no rating there is nothing behind the line, so it offers nothing to open.

@@ -384,12 +384,12 @@ export interface Messages {
    */
   tradeNotAdvice: string;
   /**
-   * A research view's headline on the real portfolio (D390): the agent and its
+   * A research view's headline on the real portfolio (D392): the agent and its
    * word, from the catalogue; the rationale under it is the model's.
    */
   researchProposalHeadline: (agent: string, action: ActionableRating, symbol: string) => string;
   /**
-   * Under every research proposal (D390, D387): approving it only acknowledges -
+   * Under every research proposal (D392, D387): approving it only acknowledges -
    * nothing is placed and no holding changes until the user records their trade.
    */
   researchAcknowledgeOnly: string;

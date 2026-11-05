@@ -263,7 +263,7 @@ def test_the_primary_is_asked_to_acknowledge_never_to_trade(connection: Connecti
 
 
 def test_the_primary_may_be_asked_to_acknowledge_a_research_view(connection: Connection) -> None:
-    """0085, D390: `research` is admitted on the primary, never a fill, never elsewhere."""
+    """0085, D392: `research` is admitted on the primary, never a fill, never elsewhere."""
     primary = _primary(connection, SEED_USER)
     _propose(connection, primary, "research")
     for agent, kind, payload, refusal_text in (

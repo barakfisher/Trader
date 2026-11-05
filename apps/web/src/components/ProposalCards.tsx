@@ -149,7 +149,7 @@ export const ProposalCard = observer(function ProposalCard({
 });
 
 /**
- * Under a research view on the real portfolio (D390): its figures are the
+ * Under a research view on the real portfolio (D392): its figures are the
  * rating's, on the research page; approving only acknowledges; and the
  * catalogue's not-advice line, never the model's (D385).
  */

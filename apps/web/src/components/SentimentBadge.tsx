@@ -14,10 +14,10 @@ const FLAT = 'border-border-subtle bg-surface-hover text-text-muted';
 const LOSS_LIGHT = 'border-loss/40 bg-transparent text-loss';
 
 /**
- * A research rating's word on its colour (D254, D390): green to add or buy, red
+ * A research rating's word on its colour (D254, D392): green to add or buy, red
  * to sell or avoid, outlined red to trim, gray to hold or wait - never the
  * colour alone (guardrail 4), and gray rather than yellow, which already means
- * a warning here. The words stored before D390 keep their colours.
+ * a warning here. The words stored before D392 keep their colours.
  */
 const TONE: Record<RatingWord, string> = {
   buy_more: GAIN,

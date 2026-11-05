@@ -35,7 +35,7 @@ class MainHolding:
     """A stock a run rates: a main-portfolio holding, or the one stock asked for (D369).
 
     `held` is whether the real portfolio holds it, which picks the rating's
-    vocabulary: Buy more / Hold / Trim / Sell, or Buy / Wait / Avoid (D390).
+    vocabulary: Buy more / Hold / Trim / Sell, or Buy / Wait / Avoid (D392).
     """
 
     instrument_id: str
@@ -76,7 +76,7 @@ def main_holdings(engine: Engine, user_id: str) -> list[MainHolding]:
 
 def instrument_to_rate(engine: Engine, user_id: str, instrument_id: str) -> MainHolding | None:
     """One known instrument, whoever holds it (D369), and whether the user's real
-    portfolio holds it (D390): the shared list, then the user's primary rows."""
+    portfolio holds it (D392): the shared list, then the user's primary rows."""
     with engine.connect() as connection:
         row = connection.execute(
             text(
