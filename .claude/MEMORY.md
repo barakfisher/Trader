@@ -6608,6 +6608,28 @@ failure they prevent.
     focus ring; an independent QA pass found that, the hidden Save and the run failure.
     To sweep tap targets in a hidden browser pane, turn transitions off first: frames do not advance,
     so panels stay at height 0 and the sweep reports false failures.
+390. **A phone's holding card keeps its menu in the top corner and its arrow in the bottom corner, on
+    one line** (the user, 2026-11-05). Both sat together in the third line's end, so "⋮" was low and
+    the arrow floated beside it. "⋮" now ends the top line, after the value, and the arrow ends the
+    third line, indented so the two icons share one vertical axis (measured: the same x on every card).
+    Height does not change. The top line gives up 28 px. Measured with the real 22 holdings in Hebrew:
+    no line wraps at 360 and 375 px; at 320 px all 22 symbol lines wrap, against 6 before, which is
+    accepted because such phones are rare and a wrapped line loses nothing. *Rejected:* **no arrow** -
+    the total P&L and the cost live only in the open card (D381, D384), so a new user would have
+    nothing saying they exist. **A centred arrow under the card** - a line more on each of 22 cards.
+391. **The app installs from a manifest alone, with no service worker** (the user, 2026-11-05). Added
+    to a phone's home screen, the app opened with its title and address in a bar above it, because
+    there was no manifest: production answered `/manifest.webmanifest` with `index.html`. Now a static
+    `public/manifest.webmanifest` with `display: standalone`, icons at 192 and 512, a maskable one, an
+    `apple-touch-icon` and `theme-color`. The PNGs are drawn from the SVGs with `sips -s format png -z`;
+    the Apple icon is the logo without its rounded corners, since iOS paints transparency black.
+    nginx's `mime.types` does not know `.webmanifest`, so it has its own `location`. No `description`
+    in the manifest: it cannot follow the user's language and would be the one English sentence
+    outside the catalogue. *Rejected:* **a service worker** - web.dev's install criteria (updated
+    2024-09-19) do not list one, and all it would add here is the means to show old prices offline,
+    against guideline 7. **`vite-plugin-pwa`** - it writes a manifest and a service worker; this needs
+    a short static file and no worker. **A phone with the old shortcut must remove it and install
+    again**: a shortcut does not become an app.
 **Three PRs for the polish:** bugs first, then tap targets and text, then collapsing Research and
 Settings, because a collapsed row's height depends on the sizing rule (the user, 2026-11-05).
 ---

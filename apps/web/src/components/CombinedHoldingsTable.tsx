@@ -305,6 +305,11 @@ function CombinedCard({
             <DayChange pct={row.quote?.dayChangePct} />
           </p>
         </div>
+        {!editing && !confirmingDelete && (
+          <div className="-ms-5 shrink-0">
+            <RowMenu row={row} real={real} onEdit={() => setEditing(true)} onRemove={() => setConfirmingDelete(true)} />
+          </div>
+        )}
       </div>
       {row.positions.some((position) => !position.isPrimary) && <Holders positions={row.positions} />}
       <div className="flex items-center justify-between gap-2">
@@ -313,12 +318,7 @@ function CombinedCard({
           {row.quote ? formatMoney(row.quote.priceMinor, row.quote.currency) : t('holdings.noPrice')}
           {row.weightPct !== null && t('holdings.ofPortfolio', { share: formatShare(row.weightPct) })}
         </p>
-        {!editing && !confirmingDelete && (
-          <div className="flex shrink-0 items-center gap-1">
-            <ExpandMark open={open} />
-            <RowMenu row={row} real={real} onEdit={() => setEditing(true)} onRemove={() => setConfirmingDelete(true)} />
-          </div>
-        )}
+        {!editing && !confirmingDelete && <ExpandMark open={open} className="me-1.5" />}
       </div>
       {row.uncosted && <CostWarning symbol={symbol} onSet={real?.costBasisMinor === null ? () => setEditing(true) : undefined} />}
       {editing && real ? (
