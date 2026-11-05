@@ -18,7 +18,7 @@
  * orders first.
  *
  * The rating column orders by the latest rating's word, from adding to exiting
- * (D389: Buy more and Buy, then Hold and Wait, Trim, Sell and Avoid; the words
+ * (D390: Buy more and Buy, then Hold and Wait, Trim, Sell and Avoid; the words
  * stored before it in between), so its first click shows the strongest buy
  * first like any figure's. A
  * holding no agent has rated sorts last, as a missing figure does; a stale

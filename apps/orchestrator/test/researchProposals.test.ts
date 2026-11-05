@@ -1,5 +1,5 @@
 /**
- * Research views as acknowledge-only proposals on the real portfolio (D389).
+ * Research views as acknowledge-only proposals on the real portfolio (D390).
  *
  * The database is mocked: what is under test is the policy - which ratings
  * raise a proposal, which close one, when it expires, and what the alert says.
@@ -74,13 +74,13 @@ describe('which views raise a proposal', () => {
     }
   });
 
-  it('raises nothing on Hold, Wait or Avoid, nor on a word stored before D389', () => {
+  it('raises nothing on Hold, Wait or Avoid, nor on a word stored before D390', () => {
     for (const rating of ['hold', 'wait', 'avoid', 'bullish', 'bearish', 'neutral']) {
       expect(raisesProposal({ rating, previous_rating: 'trim' }), rating).toBe(false);
     }
   });
 
-  it('counts a word stored before D389 as a different word', () => {
+  it('counts a word stored before D390 as a different word', () => {
     expect(raisesProposal({ rating: 'sell', previous_rating: 'bearish' })).toBe(true);
   });
 

@@ -315,7 +315,7 @@ async function proposalScreen(
   if (row.scan_id !== null) lines.push('', messages.evidenceChecked(evidenceCheckedFrom(row.scan_tool_calls ?? [])));
   // As its alert ends (D385): a trade is not advice, and is for the simulation only.
   if (isTradeProposalKind(row.kind)) lines.push('', messages.tradeNotAdvice);
-  // A research view (D389): approving only acknowledges, and it is not advice.
+  // A research view (D390): approving only acknowledges, and it is not advice.
   if (row.kind === RESEARCH_PROPOSAL_KIND) lines.push('', messages.researchAcknowledgeOnly, '', messages.researchNotAdvice);
   lines.push(
     '',

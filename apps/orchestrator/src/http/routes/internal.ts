@@ -255,7 +255,7 @@ async function runForInstallation(context: Context, request: RunRequest): Promis
     if (kind === 'proposal_sweep') {
       // A deadline is a deadline for everybody: one sweep expires every
       // account's proposals.
-      // Research views first (D389): a view a newer rating changed closes here,
+      // Research views first (D390): a view a newer rating changed closes here,
       // and the new ones are raised and announced.
       const research = await sweepResearchProposals(context.get('notifier'));
       return done(runId, 'ok', { expired: (await sweepExpiredProposals()).length, research });

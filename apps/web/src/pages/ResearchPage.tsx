@@ -198,7 +198,7 @@ function ResearchList({ holdings }: { holdings: ResearchHolding[] }) {
 function HoldingResearch({ holding }: { holding: ResearchHolding }) {
   const { t } = useTranslation();
   const latest = holding.latest;
-  // A rating stored before D389 was written in English; one since, in the user's language.
+  // A rating stored before D390 was written in English; one since, in the user's language.
   const textLang = latest !== null && isLegacyRating(latest.rating) ? SERVER_ENGLISH : {};
   return (
     <article className="space-y-2">

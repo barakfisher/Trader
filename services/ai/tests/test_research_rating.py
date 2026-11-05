@@ -1,4 +1,4 @@
-"""A research rating's checks: the form and the figures (D254, D292, D389)."""
+"""A research rating's checks: the form and the figures (D254, D292, D390)."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ def test_a_well_formed_answer_parses() -> None:
 
 
 def test_each_vocabulary_is_its_own() -> None:
-    """A held stock is never rated "buy", one not held never "trim" (D389)."""
+    """A held stock is never rated "buy", one not held never "trim" (D390)."""
     for rating in HELD_RATINGS:
         assert parse_rating(_answer(rating=rating), held=True)[0] is not None
         assert parse_rating(_answer(rating=rating), held=False)[0] is None
@@ -94,7 +94,7 @@ def test_a_malformed_answer_says_why(raw: str, problem: str) -> None:
 
 
 def test_advice_wording_passes_and_unsourced_figures_are_refused() -> None:
-    """D254 guardrail 1 is gone (D389): "you" and "trim" pass; guardrail 2 stays."""
+    """D254 guardrail 1 is gone (D390): "you" and "trim" pass; guardrail 2 stays."""
     parsed, _ = parse_rating(
         _answer(
             rating="trim",

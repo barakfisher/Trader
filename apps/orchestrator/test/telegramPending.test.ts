@@ -217,7 +217,7 @@ describe('a proposal opened from the list', () => {
     expect(decodeMenuData(buttonsOf(lastEdit()).at(-1)!.callback_data!)).toEqual({ view: 'pending' });
   });
 
-  it('a research view (D389): acknowledged like an observation, ending with what approving does and the not-advice line', async () => {
+  it('a research view (D390): acknowledged like an observation, ending with what approving does and the not-advice line', async () => {
     row = proposalRow({ id: OBSERVATION, kind: 'research', scan_id: null, scan_tool_calls: null });
     await tap(encodeMenuData({ view: 'proposal', proposalId: OBSERVATION }));
     const en = messagesFor('en');

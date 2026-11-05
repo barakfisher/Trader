@@ -6510,7 +6510,7 @@ failure they prevent.
        D244).
     - **Order, one PR each, on the user's word:** case 1 (the migration and the new kinds land
       here, and the others reuse them), then case 4, then case 5. Case 3's button later.
-    - **Case 1 is built as D389** (migration `0085`, kind `research`).
+    - **Case 1 is built as D390** (migration `0085`, kind `research`).
     - *Rejected:* "record as if done" on approval (holdings drift from the broker when the
       user never trades); a paper copy of the real portfolio (a second ledger to explain);
       simulated agents on the real portfolio (the user's "no"; each scan would also cost more).
@@ -6524,7 +6524,7 @@ failure they prevent.
     mode the UI hides but Telegram ignores is no mode. **Consequence for D387's PRs:** each reads
     "is this user advisory?" from one function that returns true for now, so M13 changes one place
     instead of every prompt. Open questions are listed in `docs/MILESTONES.md` M13.
-389. **D387 case 1 as built: research gives a view, and a view that asks for action is an
+390. **D387 case 1 as built: research gives a view, and a view that asks for action is an
     acknowledge-only proposal on the real portfolio** (the user, 2026-11-05, seven questions one at
     a time; migration `0085`). Reverses D254 guardrail 1 and D291's English-only rationale, and the
     wording guard of D292; D254 guardrails 2-5 stand.
@@ -6577,7 +6577,7 @@ failure they prevent.
     - **D388's one function:** `services/advisoryMode.ts` `isAdvisory()` returns true and gates the
       raising. *Known gap for M13:* the vocabulary is chosen in the AI service's prompt, which does
       not read the mode; Observation mode will need the mode passed to the research run and a
-      wording guard again (git history: `app/research/rating.py` before D389).
+      wording guard again (git history: `app/research/rating.py` before D390).
     - **Not yet seen with a real model:** the next scheduled research run is the first; read its
       Langfuse trace and the refused count (a held/unheld vocabulary mix-up is the likely failure).
 **Three PRs for the polish:** bugs first, then tap targets and text, then collapsing Research and

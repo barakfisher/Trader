@@ -125,8 +125,8 @@ describe('compareDecimal', () => {
   });
 });
 
-describe('the rating order (D389)', () => {
-  it('runs from adding to exiting, with the words stored before D389 in between', () => {
+describe('the rating order (D390)', () => {
+  it('runs from adding to exiting, with the words stored before D390 in between', () => {
     const order = ['buy_more', 'bullish', 'hold', 'trim', 'sell'] as const;
     const ranks = order.map((rating) => sentimentRank(rating)!);
     expect([...ranks].sort((a, b) => b - a)).toEqual(ranks);

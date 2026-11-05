@@ -1,31 +1,31 @@
 /**
- * Research on the main portfolio as the browser sees it (D254, D289-D293, D389):
+ * Research on the main portfolio as the browser sees it (D254, D289-D293, D390):
  * the agent assigned to it, its latest run, and each holding's latest rating.
  *
- * Since D389 a rating is the agent's view, like an advisor's: Buy more / Hold /
+ * Since D390 a rating is the agent's view, like an advisor's: Buy more / Hold /
  * Trim / Sell on a holding, Buy / Wait / Avoid on a stock researched on its own.
  * The research page carries the not-advice line, and the *Rating* column always
  * shows the word beside its colour (D254's guardrails 4 and 5).
  */
 
-/** What a holding is rated (D389). */
+/** What a holding is rated (D390). */
 export const HELD_RATINGS = ['buy_more', 'hold', 'trim', 'sell'] as const;
-/** What a stock the real portfolio does not hold is rated (D369, D389). */
+/** What a stock the real portfolio does not hold is rated (D369, D390). */
 export const UNHELD_RATINGS = ['buy', 'wait', 'avoid'] as const;
-/** Stored before D389, shown until a newer rating replaces them. */
+/** Stored before D390, shown until a newer rating replaces them. */
 export const LEGACY_RATINGS = ['bullish', 'bearish', 'neutral'] as const;
 /** `0085_research_advice.RATINGS`; the AI service's `rating.RATINGS` says the same. */
 export const RESEARCH_RATINGS = [...HELD_RATINGS, ...UNHELD_RATINGS, ...LEGACY_RATINGS] as const;
 export type RatingWord = (typeof RESEARCH_RATINGS)[number];
 
-/** A rating stored before D389: its rationale is in English. */
+/** A rating stored before D390: its rationale is in English. */
 export function isLegacyRating(rating: string): boolean {
   return (LEGACY_RATINGS as readonly string[]).includes(rating);
 }
 
 /**
  * The ratings that ask for an action and so raise an acknowledge-only proposal
- * on the real portfolio (D389); the AI service's `ACTIONABLE_RATINGS` says the same.
+ * on the real portfolio (D390); the AI service's `ACTIONABLE_RATINGS` says the same.
  * Hold, Wait and Avoid are a bottom line on the research page only.
  */
 export const ACTIONABLE_RATINGS = ['buy_more', 'trim', 'sell', 'buy'] as const;
@@ -36,7 +36,7 @@ export function isActionableRating(rating: string): rating is ActionableRating {
 }
 
 /**
- * The proposal kind a research view raises on the real portfolio (0085, D389):
+ * The proposal kind a research view raises on the real portfolio (0085, D390):
  * acknowledged, never filled - approving it changes no holding.
  */
 export const RESEARCH_PROPOSAL_KIND = 'research';
@@ -93,7 +93,7 @@ export interface ResearchAgent {
 
 export interface ResearchRating {
   rating: RatingWord;
-  /** Model-written, in the user's language since D389 (English before), checked by the evidence validator. */
+  /** Model-written, in the user's language since D390 (English before), checked by the evidence validator. */
   rationale: string;
   findings: string[];
   agentName: string;

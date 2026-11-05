@@ -1,6 +1,6 @@
-"""Research gives a view, and a view that asks for action is an acknowledge-only proposal (D389).
+"""Research gives a view, and a view that asks for action is an acknowledge-only proposal (D390).
 
-D387 case 1, as D389 builds it:
+D387 case 1, as D390 builds it:
 
 - **`research_ratings.rating`** widens from Bullish / Bearish / Neutral to the
   advisor's words: Buy more / Hold / Trim / Sell for a stock the real portfolio
@@ -32,7 +32,7 @@ down_revision = "0084_index_article_duplicates"
 branch_labels = None
 depends_on = None
 
-#: 0070's ratings, kept: stored before D389 and shown until replaced.
+#: 0070's ratings, kept: stored before D390 and shown until replaced.
 PREVIOUS_RATINGS = ("bullish", "bearish", "neutral")
 #: `app/research/rating.py` RATINGS; the web's `RESEARCH_RATINGS` says the same.
 RATINGS = ("buy_more", "hold", "trim", "sell", "buy", "wait", "avoid", *PREVIOUS_RATINGS)
@@ -102,7 +102,7 @@ def downgrade() -> None:
         BEGIN
             IF EXISTS (SELECT 1 FROM research_ratings
                         WHERE rating NOT IN ({_sql_list(PREVIOUS_RATINGS)})) THEN
-                RAISE EXCEPTION 'research ratings use D389''s words; 0084 cannot hold them';
+                RAISE EXCEPTION 'research ratings use D390''s words; 0084 cannot hold them';
             END IF;
             IF EXISTS (SELECT 1 FROM proposals WHERE kind = 'research') THEN
                 RAISE EXCEPTION 'research proposals exist; 0084''s trigger would refuse them';

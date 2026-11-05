@@ -347,7 +347,7 @@ INSERT INTO research_ratings (run_id, user_id, agent_id, instrument_id, symbol, 
   ('62000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000001', 'EQTY', 'failed', NULL, NULL, '[]', '["the model call failed: timeout"]', NULL);
 INSERT INTO research_ratings (run_id, user_id, agent_id, instrument_id, symbol, status, rating, rationale) VALUES
   ('62000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000006', 'MYST', 'rated', 'neutral', 'Mixed signals.');
--- D389 (0085): one rating in each of the advisor's words, and the acknowledge-only
+-- D390 (0085): one rating in each of the advisor's words, and the acknowledge-only
 -- research proposal a Trim raises on the real portfolio; 0085's downgrade refuses both.
 INSERT INTO research_ratings (run_id, user_id, agent_id, instrument_id, symbol, status, rating, rationale)
 SELECT '62000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1',

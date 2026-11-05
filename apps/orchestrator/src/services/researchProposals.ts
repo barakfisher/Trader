@@ -1,6 +1,6 @@
 /**
  * A research view that asks for an action becomes an acknowledge-only proposal
- * on the real portfolio (D389, D387 case 1).
+ * on the real portfolio (D390, D387 case 1).
  *
  * **What raises one:** the assigned research agent's latest rating of a stock
  * is Buy more, Trim or Sell (a holding) or Buy (a stock researched on its
@@ -115,7 +115,7 @@ async function raise(view: ResearchViewRow, notifier: Notifier, now: Date): Prom
     researchAgentName: view.agent_name,
   };
   const headlineIn = (language: string) => messagesFor(language).researchProposalHeadline(view.agent_name, action, view.symbol);
-  // The rationale is in the language the agent wrote it (the user's, D389):
+  // The rationale is in the language the agent wrote it (the user's, D390):
   // every UI language shows the catalogue's headline over the same words.
   const localized: LocalizedTexts = Object.fromEntries(
     UI_LANGUAGES.filter((language): language is TranslatedLanguage => language !== 'en').map((language) => [

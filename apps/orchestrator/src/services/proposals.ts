@@ -73,7 +73,7 @@ export function isProposableKind(kind: string): boolean {
  * the database's own trigger (migration 0038) has to. An allowlist, matching
  * the trigger: a new kind is refused on the real portfolio until someone argues
  * here, and in a migration, that it belongs there. `research` is a research
- * view to acknowledge (0085, D389; `researchProposals.ts` raises it).
+ * view to acknowledge (0085, D390; `researchProposals.ts` raises it).
  */
 export const PRIMARY_PROPOSAL_KINDS: ReadonlySet<string> = new Set(['rebalance', RESEARCH_PROPOSAL_KIND]);
 

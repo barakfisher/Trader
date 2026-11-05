@@ -73,7 +73,7 @@ export interface NotifiableFinding {
    */
   trade?: boolean;
   /**
-   * The proposal is a research view on the real portfolio (D389): pushed
+   * The proposal is a research view on the real portfolio (D390): pushed
    * whatever the severity floor, like a trade, and ending with the catalogue's
    * acknowledge-only and not-advice lines.
    */
@@ -159,7 +159,7 @@ function toOutbound(finding: NotifiableFinding, userId: string, language: string
     finding,
     messages,
   );
-  // A research view ends with what approving does and the not-advice line (D389).
+  // A research view ends with what approving does and the not-advice line (D390).
   const body =
     finding.trade === true
       ? appendLine(text.explanation, messages.tradeNotAdvice)

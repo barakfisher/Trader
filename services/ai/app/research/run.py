@@ -6,7 +6,7 @@ fails the form or figure checks goes back once with its problems, so a
 holding costs one call, or two at most (`RESEARCH_ATTEMPTS`). The run writes
 only its own rows: a Buy more, Trim, Sell or Buy becomes an acknowledge-only
 proposal on the real portfolio afterwards, raised by the orchestrator's
-proposal sweep (D389), and nothing ever trades (guideline 2).
+proposal sweep (D390), and nothing ever trades (guideline 2).
 
 **The limits, whatever the model does:**
 
@@ -84,7 +84,7 @@ CALL_FAILED = "the model call failed"
 EVIDENCE_FAILED = "the evidence could not be read"
 
 
-#: How the prompt names each rating, by vocabulary (D389).
+#: How the prompt names each rating, by vocabulary (D390).
 _HELD_SCALE = (
     '"buy_more" (add to the position), "hold" (keep it as it is), "trim" (reduce it) or'
     ' "sell" (exit it)'
@@ -95,7 +95,7 @@ _UNHELD_SCALE = '"buy" (open a position), "wait" (not now) or "avoid" (stay away
 def instructions(agent: ScanAgent, *, held: bool) -> str:
     """The system prompt: the agent's lens, then the rules the server enforces.
 
-    Since D389 the agent speaks like an advisor: its rating is what it would do
+    Since D390 the agent speaks like an advisor: its rating is what it would do
     with the stock - in the real portfolio's position when it is held, as a new
     position when it is not - and why. The not-advice line is the catalogue's,
     added wherever a rating is shown (D385), so the model is told not to write
