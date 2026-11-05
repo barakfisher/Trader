@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useLocation } from '@tanstack/react-router';
 import { Microscope, Play } from 'lucide-react';
 
-import { RESEARCH_STOPS, type ResearchHolding, type ResearchRunSummary, type ResearchStop } from '@traders/shared';
+import { RESEARCH_STOPS, isLegacyRating, type ResearchHolding, type ResearchRunSummary, type ResearchStop } from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
 import { Disclaimer } from '../components/Disclaimer.tsx';
@@ -198,6 +198,8 @@ function ResearchList({ holdings }: { holdings: ResearchHolding[] }) {
 function HoldingResearch({ holding }: { holding: ResearchHolding }) {
   const { t } = useTranslation();
   const latest = holding.latest;
+  // A rating stored before D389 was written in English; one since, in the user's language.
+  const textLang = latest !== null && isLegacyRating(latest.rating) ? SERVER_ENGLISH : {};
   return (
     <article className="space-y-2">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -217,11 +219,11 @@ function HoldingResearch({ holding }: { holding: ResearchHolding }) {
       </div>
       {latest && (
         <>
-          <p {...SERVER_ENGLISH} className="text-sm">
+          <p {...textLang} className="text-sm">
             {latest.rationale}
           </p>
           {latest.findings.length > 0 && (
-            <ul {...SERVER_ENGLISH} className="list-disc space-y-0.5 ps-5 text-xs text-text-muted">
+            <ul {...textLang} className="list-disc space-y-0.5 ps-5 text-xs text-text-muted">
               {latest.findings.map((finding, index) => (
                 <li key={index}>{finding}</li>
               ))}

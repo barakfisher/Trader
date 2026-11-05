@@ -1,24 +1,38 @@
 import { Link } from '@tanstack/react-router';
 
-import type { ResearchHolding, SentimentRating } from '@traders/shared';
+import type { RatingWord, ResearchHolding } from '@traders/shared';
 
 import { formatDate } from '../i18n/format.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { getDisplayTimeZone } from '../lib/relativeTime.ts';
 import { useResearchQuery } from '../queries/research.ts';
 
+const GAIN = 'border-gain/40 bg-gain/10 text-gain';
+const LOSS = 'border-loss/40 bg-loss/10 text-loss';
+const FLAT = 'border-border-subtle bg-surface-hover text-text-muted';
+/** Trim is a lighter red than Sell: reduce, not exit. */
+const LOSS_LIGHT = 'border-loss/40 bg-transparent text-loss';
+
 /**
- * A research rating's word on its colour (D254): green Bullish, red Bearish,
- * gray Neutral - never the colour alone (guardrail 4), and gray rather than
- * yellow, which already means a warning here.
+ * A research rating's word on its colour (D254, D389): green to add or buy, red
+ * to sell or avoid, outlined red to trim, gray to hold or wait - never the
+ * colour alone (guardrail 4), and gray rather than yellow, which already means
+ * a warning here. The words stored before D389 keep their colours.
  */
-const TONE: Record<SentimentRating, string> = {
-  bullish: 'border-gain/40 bg-gain/10 text-gain',
-  bearish: 'border-loss/40 bg-loss/10 text-loss',
-  neutral: 'border-border-subtle bg-surface-hover text-text-muted',
+const TONE: Record<RatingWord, string> = {
+  buy_more: GAIN,
+  hold: FLAT,
+  trim: LOSS_LIGHT,
+  sell: LOSS,
+  buy: GAIN,
+  wait: FLAT,
+  avoid: LOSS,
+  bullish: GAIN,
+  bearish: LOSS,
+  neutral: FLAT,
 };
 
-export function SentimentBadge({ rating }: { rating: SentimentRating }) {
+export function SentimentBadge({ rating }: { rating: RatingWord }) {
   const { t } = useTranslation();
   return (
     <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${TONE[rating]}`}>

@@ -2807,6 +2807,98 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe('research views as acknowledge-only proposals (0085, D389)', () => {
+    it('reads the latest view with the word before it, writes one proposal per rating, and finds a changed one', async () => {
+      const pool = getPool();
+      const mark = USER.slice(0, 8);
+      const analyst = (
+        await pool.query<{ id: string }>(
+          `INSERT INTO agents (user_id, slug, name, budget_minor) VALUES ($1, 'view-analyst', 'View analyst', 1000) RETURNING id`,
+          [USER],
+        )
+      ).rows[0]!.id;
+      try {
+        expect(await queries.setResearchAgent(USER, analyst)).toBe(true);
+        const instrument = (
+          await pool.query<{ id: string }>(
+            `INSERT INTO instruments (symbol, asset_class, name) VALUES ($1, 'equity', 'View Corp') RETURNING id`,
+            [`V${mark}`.slice(0, 12).toUpperCase()],
+          )
+        ).rows[0]!.id;
+        const run = (
+          await pool.query<{ id: string }>(
+            `INSERT INTO research_runs (user_id, agent_id, trigger, status, finished_at) VALUES ($1, $2, 'manual', 'done', now()) RETURNING id`,
+            [USER, analyst],
+          )
+        ).rows[0]!.id;
+        const rate = async (rating: string, age: string) =>
+          (
+            await pool.query<{ id: string }>(
+              `INSERT INTO research_ratings (run_id, user_id, agent_id, instrument_id, symbol, status, rating, rationale, created_at)
+               VALUES ($1, $2, $3, $4, 'V', 'rated', $5, $6, now() - $7::interval) RETURNING id`,
+              [run, USER, analyst, instrument, rating, `${rating} reasons`, age],
+            )
+          ).rows[0]!.id;
+        await rate('bearish', '30 days');
+        await rate('hold', '2 days');
+        const trim = await rate('trim', '1 hour');
+        const since = new Date(Date.now() - 7 * 86_400_000);
+        const mine = async () =>
+          (await queries.listLatestResearchViews(since)).filter((row) => row.instrument_id === instrument);
+
+        expect(await mine()).toEqual([
+          expect.objectContaining({
+            rating_id: trim,
+            user_id: USER,
+            agent_id: analyst,
+            agent_name: 'View analyst',
+            primary_agent_id: AGENT,
+            rating: 'trim',
+            previous_rating: 'hold',
+          }),
+        ]);
+
+        const payload = {
+          action: 'trim' as const,
+          symbol: 'V',
+          instrumentId: instrument,
+          ratingId: trim,
+          researchAgentId: analyst,
+          researchAgentName: 'View analyst',
+        };
+        const toCreate = {
+          userId: USER,
+          primaryAgentId: AGENT,
+          payload,
+          expiresAt: new Date(Date.now() + 86_400_000),
+          headline: 'View analyst recommends: trim V',
+          rationale: 'trim reasons',
+          localized: {},
+          ratedAt: new Date(),
+        };
+        const created = await queries.createResearchProposal(toCreate);
+        expect(created).not.toBeNull();
+        // One per rating, ever: a second sweep writes nothing.
+        expect(await queries.createResearchProposal(toCreate)).toBeNull();
+        const found = await queries.findProposal(USER, created!.proposalId);
+        expect(found).toMatchObject({ kind: 'research', state: 'pending', agent_is_primary: true, payload });
+
+        // The same word again leaves it open; another word closes it.
+        await rate('trim', '30 minutes');
+        const open = async () =>
+          (await queries.listSupersededResearchProposals()).filter((row) => row.id === created!.proposalId);
+        expect(await open()).toEqual([]);
+        await rate('hold', '10 minutes');
+        expect(await open()).toEqual([expect.objectContaining({ user_id: USER, state: 'pending' })]);
+      } finally {
+        await pool.query(`DELETE FROM proposals WHERE user_id = $1 AND kind = 'research'`, [USER]);
+        await pool.query(`DELETE FROM observations WHERE user_id = $1 AND kind = 'research_view'`, [USER]);
+        await queries.setResearchAgent(USER, null);
+        await pool.query('DELETE FROM agents WHERE id = $1', [analyst]);
+      }
+    });
+  });
+
   describe('sessions (0071, D261)', async () => {
     const { sessionTokenHash } = await import('../src/http/auth.js');
     const TTL_HOURS = 1;

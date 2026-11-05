@@ -1,4 +1,4 @@
-import { RESEARCH_ABANDONED_AFTER_MINUTES } from '@traders/shared';
+import { RESEARCH_ABANDONED_AFTER_MINUTES, type RatingWord } from '@traders/shared';
 
 import { query, queryOne } from '../pool.js';
 
@@ -83,7 +83,7 @@ export interface ResearchHoldingRow {
   name: string | null;
   /** In the main portfolio; false for a stock researched on its own (D370). */
   held: boolean;
-  rating: 'bullish' | 'bearish' | 'neutral' | null;
+  rating: RatingWord | null;
   rationale: string | null;
   findings: unknown;
   rated_at: Date | null;

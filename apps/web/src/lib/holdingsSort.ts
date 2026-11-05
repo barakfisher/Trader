@@ -17,13 +17,15 @@
  * currency: prices in two currencies are not one scale, so the currency code
  * orders first.
  *
- * Sentiment orders by the latest rating's word, Bullish above Neutral above
- * Bearish (D254), so its first click shows Bullish first like any figure's. A
+ * The rating column orders by the latest rating's word, from adding to exiting
+ * (D389: Buy more and Buy, then Hold and Wait, Trim, Sell and Avoid; the words
+ * stored before it in between), so its first click shows the strongest buy
+ * first like any figure's. A
  * holding no agent has rated sorts last, as a missing figure does; a stale
  * rating sorts by its word, since the column still shows it, marked stale.
  */
 
-import type { SentimentRating } from '@traders/shared';
+import type { RatingWord } from '@traders/shared';
 
 export const SORT_KEYS = ['symbol', 'quantity', 'price', 'day', 'value', 'cost', 'pnl', 'pnlPct', 'weight', 'sentiment'] as const;
 export type SortKey = (typeof SORT_KEYS)[number];
@@ -49,10 +51,21 @@ export interface SortFields {
   sentiment: number | null;
 }
 
-const SENTIMENT_RANK: Record<SentimentRating, number> = { bearish: -1, neutral: 0, bullish: 1 };
+const SENTIMENT_RANK: Record<RatingWord, number> = {
+  buy_more: 2,
+  buy: 2,
+  bullish: 1,
+  hold: 0,
+  wait: 0,
+  neutral: 0,
+  bearish: -1,
+  trim: -1,
+  sell: -2,
+  avoid: -2,
+};
 
-/** A rating's place in the Sentiment order; null when there is no rating. */
-export function sentimentRank(rating: SentimentRating | null | undefined): number | null {
+/** A rating's place in the rating column's order; null when there is no rating. */
+export function sentimentRank(rating: RatingWord | null | undefined): number | null {
   return rating ? SENTIMENT_RANK[rating] : null;
 }
 

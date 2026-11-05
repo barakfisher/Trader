@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 
-import type { HoldingView, PortfolioResponse, ResearchResponse, SentimentRating } from '@traders/shared';
+import type { HoldingView, PortfolioResponse, ResearchResponse, RatingWord } from '@traders/shared';
 
 const get = vi.fn();
 
@@ -97,7 +97,7 @@ describe('the real holdings table', () => {
   });
 });
 
-function rated(symbol: string, rating: SentimentRating) {
+function rated(symbol: string, rating: RatingWord) {
   return {
     instrumentId: `i-${symbol}`,
     symbol,
@@ -108,21 +108,21 @@ function rated(symbol: string, rating: SentimentRating) {
 }
 
 function withResearch(agent: ResearchResponse['agent']) {
-  const research = { agent, run: null, holdings: [rated('BBB', 'bearish'), rated('CCC', 'bullish')] } as unknown as ResearchResponse;
+  const research = { agent, run: null, holdings: [rated('BBB', 'trim'), rated('CCC', 'buy_more')] } as unknown as ResearchResponse;
   get.mockImplementation(async (path: string) =>
     path === '/portfolio' ? PORTFOLIO : path === '/research' ? research : new Promise(() => {}),
   );
 }
 
-describe('the Sentiment column', () => {
-  it('sorts Bullish first, an unrated holding last, and asks for it on a header click', async () => {
+describe('the Rating column', () => {
+  it('sorts Buy more first, an unrated holding last, and asks for it on a header click', async () => {
     withResearch({ id: 'a1', name: 'Analyst', state: 'active' } as ResearchResponse['agent']);
     const onSort = vi.fn();
     renderPage(<HoldingsTable sort={{ key: 'sentiment', direction: 'desc' }} onSort={onSort} />);
-    const header = await screen.findByRole('columnheader', { name: /Sentiment/ });
+    const header = await screen.findByRole('columnheader', { name: /Rating/ });
     expect(header.getAttribute('aria-sort')).toBe('descending');
     expect(symbolsInOrder()).toEqual(['CCC', 'BBB', 'AAA']);
-    fireEvent.click(screen.getByRole('button', { name: 'Sentiment' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rating' }));
     expect(onSort).toHaveBeenLastCalledWith({ key: 'sentiment', direction: 'asc' });
   });
 
@@ -133,6 +133,6 @@ describe('the Sentiment column', () => {
     // Settled, not merely not yet loaded: the research answer has arrived and says no agent.
     await waitFor(() => expect(get.mock.calls.some(([path]) => path === '/research')).toBe(true));
     await act(async () => {});
-    expect(screen.queryByRole('columnheader', { name: /Sentiment/ })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: /Rating/ })).toBeNull();
   });
 });

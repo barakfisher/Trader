@@ -113,6 +113,12 @@ KNOWN_REFUSALS: dict[str, tuple[str, str]] = {
         "agent_scans holds re-checks",
         "DELETE FROM agent_scans WHERE trigger = 'refresh'",
     ),
+    # D389's rating words and research proposals: 0084's CHECK and trigger refuse them.
+    "0085_research_advice": (
+        "research ratings use D389",
+        "DELETE FROM proposals WHERE kind = 'research'; "
+        "DELETE FROM research_ratings WHERE rating NOT IN ('bullish', 'bearish', 'neutral')",
+    ),
     # Research calls are the agent's spend records (D254); 0069 cannot name them.
     "0070_holding_research": (
         "llm_calls holds research calls",

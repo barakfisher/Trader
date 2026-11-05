@@ -347,6 +347,17 @@ INSERT INTO research_ratings (run_id, user_id, agent_id, instrument_id, symbol, 
   ('62000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000001', 'EQTY', 'failed', NULL, NULL, '[]', '["the model call failed: timeout"]', NULL);
 INSERT INTO research_ratings (run_id, user_id, agent_id, instrument_id, symbol, status, rating, rationale) VALUES
   ('62000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000006', 'MYST', 'rated', 'neutral', 'Mixed signals.');
+-- D389 (0085): one rating in each of the advisor's words, and the acknowledge-only
+-- research proposal a Trim raises on the real portfolio; 0085's downgrade refuses both.
+INSERT INTO research_ratings (run_id, user_id, agent_id, instrument_id, symbol, status, rating, rationale)
+SELECT '62000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1',
+       '10000000-0000-0000-0000-000000000001', 'EQTY', 'rated', rating, 'A view.'
+  FROM unnest(ARRAY['buy_more', 'hold', 'trim', 'sell', 'buy', 'wait', 'avoid']) AS rating;
+INSERT INTO observations (id, user_id, agent_id, kind, severity, subject_kind, subject_ref, headline, dedupe_key) VALUES
+  ('30000000-0000-0000-0000-000000000031', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'research_view', 'notable', 'instrument', 'instrument:EQTY', 'Trim EQTY', 'research:seed');
+INSERT INTO proposals (id, user_id, agent_id, observation_id, kind, payload, state, expires_at) VALUES
+  ('50000000-0000-0000-0000-000000000031', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', '30000000-0000-0000-0000-000000000031', 'research',
+   '{"action": "trim", "symbol": "EQTY"}', 'pending', now() + interval '7 days');
 INSERT INTO llm_calls (user_id, agent_id, purpose, provider, model, outcome, latency_ms, prompt) VALUES
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'research',
    'openrouter', 'm', 'ok', 900, 'p');

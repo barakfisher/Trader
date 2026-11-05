@@ -1,15 +1,57 @@
 /**
- * Research on the main portfolio as the browser sees it (D254, D289-D293): the
- * agent assigned to it, its latest run, and each holding's latest rating.
+ * Research on the main portfolio as the browser sees it (D254, D289-D293, D389):
+ * the agent assigned to it, its latest run, and each holding's latest rating.
  *
- * A rating is about the stock's outlook, never the user's position; the
- * research page carries the disclaimer, and the Dashboard's *Sentiment* column
- * always shows the word beside its colour (D254's guardrails 4 and 5).
+ * Since D389 a rating is the agent's view, like an advisor's: Buy more / Hold /
+ * Trim / Sell on a holding, Buy / Wait / Avoid on a stock researched on its own.
+ * The research page carries the not-advice line, and the *Rating* column always
+ * shows the word beside its colour (D254's guardrails 4 and 5).
  */
 
-/** `0070_holding_research.RATINGS`; the AI service's `rating.RATINGS` says the same. */
-export const SENTIMENT_RATINGS = ['bullish', 'bearish', 'neutral'] as const;
-export type SentimentRating = (typeof SENTIMENT_RATINGS)[number];
+/** What a holding is rated (D389). */
+export const HELD_RATINGS = ['buy_more', 'hold', 'trim', 'sell'] as const;
+/** What a stock the real portfolio does not hold is rated (D369, D389). */
+export const UNHELD_RATINGS = ['buy', 'wait', 'avoid'] as const;
+/** Stored before D389, shown until a newer rating replaces them. */
+export const LEGACY_RATINGS = ['bullish', 'bearish', 'neutral'] as const;
+/** `0085_research_advice.RATINGS`; the AI service's `rating.RATINGS` says the same. */
+export const RESEARCH_RATINGS = [...HELD_RATINGS, ...UNHELD_RATINGS, ...LEGACY_RATINGS] as const;
+export type RatingWord = (typeof RESEARCH_RATINGS)[number];
+
+/** A rating stored before D389: its rationale is in English. */
+export function isLegacyRating(rating: string): boolean {
+  return (LEGACY_RATINGS as readonly string[]).includes(rating);
+}
+
+/**
+ * The ratings that ask for an action and so raise an acknowledge-only proposal
+ * on the real portfolio (D389); the AI service's `ACTIONABLE_RATINGS` says the same.
+ * Hold, Wait and Avoid are a bottom line on the research page only.
+ */
+export const ACTIONABLE_RATINGS = ['buy_more', 'trim', 'sell', 'buy'] as const;
+export type ActionableRating = (typeof ACTIONABLE_RATINGS)[number];
+
+export function isActionableRating(rating: string): rating is ActionableRating {
+  return (ACTIONABLE_RATINGS as readonly string[]).includes(rating);
+}
+
+/**
+ * The proposal kind a research view raises on the real portfolio (0085, D389):
+ * acknowledged, never filled - approving it changes no holding.
+ */
+export const RESEARCH_PROPOSAL_KIND = 'research';
+
+/** A `research` proposal's `payload`: the view, and the rating it came from. No quantity, no price. */
+export interface ResearchProposalPayload {
+  action: ActionableRating;
+  symbol: string;
+  instrumentId: string;
+  /** The `research_ratings` row: its rationale, findings and evidence. */
+  ratingId: string;
+  /** The research agent that gave the view, named on every surface (D387). */
+  researchAgentId: string;
+  researchAgentName: string;
+}
 
 /** D293: a rating older than this many days is marked stale, beside its date. */
 export const RESEARCH_STALE_DAYS = 7;
@@ -50,8 +92,8 @@ export interface ResearchAgent {
 }
 
 export interface ResearchRating {
-  rating: SentimentRating;
-  /** Model-written, in English (D291), checked by the evidence validator. */
+  rating: RatingWord;
+  /** Model-written, in the user's language since D389 (English before), checked by the evidence validator. */
   rationale: string;
   findings: string[];
   agentName: string;

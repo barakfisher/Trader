@@ -32,11 +32,16 @@ class ResearchAlreadyRunningError(RuntimeError):
 
 @dataclass(frozen=True)
 class MainHolding:
-    """A stock a run rates: a main-portfolio holding, or the one stock asked for (D369)."""
+    """A stock a run rates: a main-portfolio holding, or the one stock asked for (D369).
+
+    `held` is whether the real portfolio holds it, which picks the rating's
+    vocabulary: Buy more / Hold / Trim / Sell, or Buy / Wait / Avoid (D389).
+    """
 
     instrument_id: str
     symbol: str
     name: str | None
+    held: bool = True
 
 
 def research_agent_id(engine: Engine, user_id: str) -> str | None:
@@ -66,20 +71,31 @@ def main_holdings(engine: Engine, user_id: str) -> list[MainHolding]:
             ),
             {"user": user_id},
         ).all()
-    return [MainHolding(row.instrument_id, row.symbol, row.name) for row in rows]
+    return [MainHolding(row.instrument_id, row.symbol, row.name, held=True) for row in rows]
 
 
-def instrument_to_rate(engine: Engine, instrument_id: str) -> MainHolding | None:
-    """One known instrument, whoever holds it (D369): the shared list, not the user's rows."""
+def instrument_to_rate(engine: Engine, user_id: str, instrument_id: str) -> MainHolding | None:
+    """One known instrument, whoever holds it (D369), and whether the user's real
+    portfolio holds it (D389): the shared list, then the user's primary rows."""
     with engine.connect() as connection:
         row = connection.execute(
             text(
-                "SELECT id::text AS instrument_id, symbol, name FROM instruments "
-                "WHERE id = CAST(:instrument AS uuid)"
+                """
+                SELECT i.id::text AS instrument_id, i.symbol, i.name,
+                       EXISTS (SELECT 1 FROM holdings h
+                                 JOIN agents a ON a.id = h.agent_id AND a.user_id = h.user_id
+                                              AND a.is_primary
+                                WHERE h.user_id = CAST(:user AS uuid)
+                                  AND h.instrument_id = i.id) AS held
+                  FROM instruments i
+                 WHERE i.id = CAST(:instrument AS uuid)
+                """
             ),
-            {"instrument": instrument_id},
+            {"user": user_id, "instrument": instrument_id},
         ).one_or_none()
-    return None if row is None else MainHolding(row.instrument_id, row.symbol, row.name)
+    if row is None:
+        return None
+    return MainHolding(row.instrument_id, row.symbol, row.name, held=bool(row.held))
 
 
 def claim_run(

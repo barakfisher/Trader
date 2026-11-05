@@ -1180,9 +1180,12 @@ async def get_research(context: ToolContext, arguments: Mapping[str, Any]) -> di
         ],
         "link": "/research",
         "note": (
-            "a rating describes the stock's outlook from the evidence the agent read; it says "
-            f"nothing about the user's position and is no recommendation. Older than "
-            f"{RESEARCH_STALE_DAYS} days is stale. The rationale is model-written, in English"
+            "a rating is the research agent's view on the holding - buy_more, hold, trim or "
+            "sell (bullish, bearish or neutral before 2026-11-05) - from the evidence it read, "
+            "and is not financial advice; a buy_more, trim or sell is also an "
+            "acknowledge-only proposal in the inbox, and the holding changes only when the user "
+            f"records the trade they made at their broker. Older than {RESEARCH_STALE_DAYS} "
+            "days is stale. The rationale is model-written, in the user's language"
         ),
     }
     if agent is None:
@@ -1257,7 +1260,7 @@ OWN_TOOLS: tuple[Tool, ...] = (
         ToolSpec(
             "get_research",
             "Research on the real portfolio: which agent the user assigned to it, its latest "
-            "run, and each real holding's latest Bullish, Bearish or Neutral rating with the "
+            "run, and each real holding's latest rating - Buy more, Hold, Trim or Sell - with the "
             "agent's reasons, its date and whether it is stale. Give a symbol for one holding.",
             _object({"symbol": _TEXT}, []),
         ),
