@@ -310,7 +310,7 @@ function SettingsForm({ agent }: { agent: AgentView }) {
     );
   };
 
-  // On a phone the card closes (D385), and the save must not close with it: a
+  // On a phone the card closes (D389), and the save must not close with it: a
   // changed form out of sight, and nothing to say so, is an edit a tab switch loses.
   const saving = (
     <>

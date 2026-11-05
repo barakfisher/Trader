@@ -18,7 +18,8 @@ five, so this is one late).
     P&L; every field is 16 px on a phone (D381).
 - **Deployed:** production (`https://app.tiklens.com`) and compose both run `e71b463` (#374) at
   `0084_index_article_duplicates`, read 2026-11-05. Nothing merged is undeployed.
-- **Decisions reach 382** (next: **383**). **Migrations:** `0084` head; next free `0085`.
+- **Decisions reach 388** (next: **389**). D386 (advisory character, 2026-11-05): the agents'
+  voice and Ask are built; D387 designs the real portfolio case by case - its PRs are owed. **Migrations:** `0084` head; next free `0085`.
 - **The phone view is three PRs, agreed with the user 2026-11-04, and #374 is the first.** Measured
   on production at 375 px in Hebrew: no sideways scroll on any screen, so the problem is density,
   not breakage. The portfolio went from 8.1 screens to 4.7 on real data.
@@ -27,7 +28,7 @@ five, so this is one late).
     nothing sits under the notch in landscape, and what the bar does with the keyboard open.
   - **PR 3 became three PRs** (the user, 2026-11-05). Bugs: D383 #377, deployed. Sizes and the opening
     card: D384. Last: collapsing Research (13.2 screens) and Settings (7.0), measured after D384:
-    D385. The user put off the iPhone checks on 2026-11-05.
+    D389. The user put off the iPhone checks on 2026-11-05.
 - **Owed by the user, on the phone:** tap a field in Settings and confirm the page does not zoom;
   type `12.5` on Targets and confirm it shows whole. Neither has been seen on a real iPhone.
 - **Owed by a session:** re-measure Ask from a week of production Langfuse traces (~2026-11-11),
@@ -6432,7 +6433,97 @@ failure they prevent.
     QA pass found all of this after the first commit; the sweep (`elementFromPoint` up and down from
     each control's centre) is what proves it, at 375 px over Portfolio, Insights, Settings, Research,
     a holding, Agents and an agent, on synthetic data.
-385. **A long phone page opens as a list of what is on it** (the user, 2026-11-05). Measured on
+385. **Every trade proposal ends with the catalogue's not-advice line, in the app, in its alert and
+    on `/pending`** (the user, 2026-11-05: "a text that stresses the proposal is not financial
+    advice, no substitute for a professional, and is only for simulation inside the app").
+    `proposal.trade.notAdvice` on the card, below `paperOnly`; `tradeNotAdvice` in
+    `notify/messages.ts`, appended by `toOutbound` to a `trade: true` finding (so a digest entry
+    carries it too) and by the `/pending` proposal screen for a trade kind. **The line is the
+    catalogue's, never the model's**: a thesis can be told to add a disclaimer and forget, soften
+    or translate it, and the one sentence that must always be there would then be the one nobody
+    checked. It is the first piece of D386 and holds whatever D386 becomes. *Rejected:* folding it
+    into `paperOnly` (two facts - nothing is placed, nothing is advice - and a lawyer will reword
+    the second, not the first); the global footer `disclaimer` alone (it is not beside the
+    sentence that reads like advice, and Telegram has no footer).
+386. **Agents and the assistant may behave and research like an advisor, everywhere, while every
+    such output says it is not advice; guideline 2 is amended accordingly** (the user,
+    2026-11-05: "all places - behave and research like an advisor but stress that it is not
+    advice; the exact wording with a lawyer", gate: "record only"). The agents' voice and Ask were built 2026-11-05 on D385's branch
+    (the user: start without opening the PR first); the real portfolio is not yet. It reverses the "no personalized advice" half of guideline 2 and the guardrails that
+    implemented it:
+    - **Simulated agents:** the thesis may be written as a recommendation, in the advisor's voice.
+    - **The real portfolio:** agents may propose buy, sell, trim or accumulate on the user's real
+      holdings, as simulation only - recorded and approvable in the app, never sent anywhere
+      (guideline 2's first half, no execution, stands unchanged). This reverses D254 guardrail 1
+      ("never says you, your position, buy, sell, hold...") and D253's rejection of a model's
+      rebalance ideas.
+    - **Ask:** the assistant may answer "should I buy X?" with a view and its reasons instead of
+      declining; the `advice` refusal reason and the never-do line "act as the user's financial
+      advisor" in `assistant/instructions.py` go.
+    - **What does not move:** guideline 7 (every figure from evidence, the validator unchanged);
+      no execution; the not-advice line (D385) beside each output, from the catalogue.
+    - **Gate: none in code** (the user chose "record only" over an owner-only switch that
+      production would refuse while signup is open). What stands between this and a stranger is
+      D265: public signup stays closed until the legal text exists, and the not-advice wording is
+      to be settled with a lawyer as part of it. *Residual risk, recorded:* a disclaimer does not
+      make advice-in-substance into something else; whether this is regulated advice where users
+      live (in Israel, the Investment Advice Law) is the lawyer's question, and this decision makes
+      it a sharper one than D254 did.
+    - **Built:** the scan prompt asks for the thesis as a first-person recommendation and tells
+      the model not to write its own disclaimer (the card and alert add D385's). Ask's rule 9
+      answers "should I buy X?" with a view, its reasons from the tools and the main risk -
+      never a bare yes or no and never a price prediction; the `advice` decline reason stays,
+      narrowed to personal financial planning beyond investing (budgets, tax, pensions), so
+      stored replies keep a valid reason and the wire enum does not move. Every Ask *answer*
+      (not a decline or a clarify) ends with `ask.notAdvice`, on the page and in Telegram.
+      The eval set's advice cases now expect a view (their `or_decline` and "I recommend"
+      patterns are gone), and `attack-advisor-role` expects an answer.
+    - **Not yet measured:** no model has run the changed prompts. The next Ask re-measurement
+      (~2026-11-11) covers the advice group; a scan's theses are seen on the next scheduled run.
+    - **The real portfolio:** designed case by case in D387.
+    - *Rejected:* an owner-only switch (offered; the user chose to rely on D265); keeping guideline
+      2 and widening only the agents' voice (the user asked for every place).
+387. **D386 on the real portfolio, case by case: who may give a view, and what a view may write**
+    (the user, 2026-11-05, answering five cases one at a time). **Approving a real-portfolio
+    proposal only acknowledges it:** the real holdings change only when the user records the
+    trade they made at the broker (the row menu), so the app never drifts from the broker and
+    nothing is placed. The `0038` trigger (primary agent: `rebalance` only) is widened to admit the
+    new acknowledge-only kinds, never `buy`/`sell` fills.
+    1. **The research agent - recommends and proposes.** Its rating becomes Buy more / Hold /
+       Trim / Sell with reasons (D254 guardrail 1 goes; guardrails 2-5 stay: figures validated,
+       agent and date on each rating, stale past its age, the word beside the color). A Buy more,
+       Trim or Sell also raises an acknowledge-only proposal in the inbox and Telegram, naming
+       the agent, with the not-advice line.
+    2. **The simulated agents - no.** Their scans stay on their own paper accounts; the real
+       holdings are not in their briefing.
+    3. **Targets - only when explicitly asked.** For now in Ask only ("what targets should I
+       have?" gets a suggested allocation with reasons, already allowed by D386); nothing is
+       written to `/targets`. A "Suggest targets" button on `/targets` is planned for later.
+    4. **Ask - may raise a proposal, only when explicitly asked to.** It drafts an
+       acknowledge-only proposal in the conversation with two buttons - add to the inbox, or
+       close (labels to be named later) - and writes nothing until the user taps the first. Its
+       first write tool, so the never-change-anything rule gets exactly this exception; the
+       write itself is the user's tap, not the model's call.
+    5. **Alert narration - adds a view.** A move or drawdown explanation on a real holding may
+       add one sentence of view, and the alert then shows the not-advice line and the view's
+       origin: which agent's model wrote it (the "Main portfolio" agent's explanations model,
+       D244).
+    - **Order, one PR each, on the user's word:** case 1 (the migration and the new kinds land
+      here, and the others reuse them), then case 4, then case 5. Case 3's button later.
+    - *Rejected:* "record as if done" on approval (holdings drift from the broker when the
+      user never trades); a paper copy of the real portfolio (a second ledger to explain);
+      simulated agents on the real portfolio (the user's "no"; each scan would also cost more).
+388. **Planned (M13): advice or observation, per user, and only a user who accepted the advisory
+    terms may choose advice** (the user, 2026-11-05: "advice or observation mode in a future plan;
+    only whoever accepts the terms can use the advice mode"). Observation is the default and is
+    the behaviour before D386; advice is what D386 and D387 allow. It replaces D386's "no gate in
+    code" once built; until then advice is everyone's behaviour and D265 is the only gate.
+    Acceptance is versioned and append-only like `legal_acceptances` (0077), and the server
+    enforces the mode in every prompt and every real-portfolio proposal, never the UI alone - a
+    mode the UI hides but Telegram ignores is no mode. **Consequence for D387's PRs:** each reads
+    "is this user advisory?" from one function that returns true for now, so M13 changes one place
+    instead of every prompt. Open questions are listed in `docs/MILESTONES.md` M13.
+389. **A long phone page opens as a list of what is on it** (the user, 2026-11-05). Measured on
     production at 375 px in Hebrew after D384: Research 13.2 screens (22 holdings, 92% of it the
     list, an entry averaging 443 px of which 31 is its line), Settings 7.0 (13 cards, none dominant),
     an agent's Settings tab 4.8. Below 640 px, a Research entry is a closed line and a tap opens its

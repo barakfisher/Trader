@@ -8,6 +8,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { messagesFor } from '../src/notify/messages.js';
 
 const USER = '00000000-0000-0000-0000-000000000001';
 const TRADE = '11111111-0000-0000-0000-000000000001';
@@ -191,6 +192,7 @@ describe('a proposal opened from the list', () => {
     expect(text).toContain('Tech Stocks proposes to buy 3 AAPL at 232.14');
     expect(text).toContain('Earnings momentum.');
     expect(text).toContain('Checked:');
+    expect(text).toContain(messagesFor('en').tradeNotAdvice);
     expect(text).toMatch(/Open until .*\d{2}:\d{2}\./);
     const buttons = buttonsOf(edit);
     const decisions = buttons.map((b) => (b.callback_data ? decodeCallbackData(b.callback_data, SIGNING_SECRET) : null));
@@ -210,6 +212,7 @@ describe('a proposal opened from the list', () => {
       .map((d) => d!.action);
     expect(actions).toEqual(['approve', 'reject', 'snooze']);
     expect(String(lastEdit()?.text)).not.toContain('Checked:');
+    expect(String(lastEdit()?.text)).not.toContain(messagesFor('en').tradeNotAdvice);
     expect(String(lastEdit()?.text)).toMatch(/As of \d{2}:\d{2}/);
     expect(decodeMenuData(buttonsOf(lastEdit()).at(-1)!.callback_data!)).toEqual({ view: 'pending' });
   });

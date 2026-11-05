@@ -31,7 +31,7 @@ import { useAssignResearchAgent, useResearchQuery, useStartResearch } from '../q
  * A stock researched on its own from a holding row (D369) is listed under the
  * holdings, in a section of its own (D370): it is rated, but not held.
  *
- * On a phone (D385) each entry is a closed line that still states the rating, its
+ * On a phone (D389) each entry is a closed line that still states the rating, its
  * agent and its date (guardrails 3-4); a tap opens the reasons, one entry at a
  * time. The agent's card closes too, and takes the intro with it. The disclaimer
  * and the note that a rating is not advice are never folded away.

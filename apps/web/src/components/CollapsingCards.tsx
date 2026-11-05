@@ -20,7 +20,7 @@ export function useCardGroup(): CardGroup | null {
 
 /**
  * On a phone, every titled `Card` inside is a closed line, and a tap opens one at
- * a time (D385). A long page of settings is read for one card, so the first thing
+ * a time (D389). A long page of settings is read for one card, so the first thing
  * it owes a phone is the list of what is there.
  *
  * Whatever is inside stays mounted when closed, and crossing the width (a phone

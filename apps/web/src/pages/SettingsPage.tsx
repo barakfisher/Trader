@@ -95,7 +95,7 @@ export const SettingsPage = observer(function SettingsPage() {
       {/* A failed save leaves the form and the typing in it; Save is the retry. */}
       {settings.error && <ErrorNote message={settings.error} />}
 
-      {/* On a phone every card is a closed line (D385). The save bar is no card, so it stays in sight. */}
+      {/* On a phone every card is a closed line (D389). The save bar is no card, so it stays in sight. */}
       {draft !== null && (
         <CollapsingCards>
           <Card title={t('settings.language')}>

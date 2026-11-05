@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * The long phone pages close (D385). Research: an entry is a line that still
+ * The long phone pages close (D389). Research: an entry is a line that still
  * states the rating, its agent and its date, and the agent's card holds the
  * intro. Settings and an agent's Settings tab: every card is a line. A wide
  * screen sees none of it. Nothing typed is lost to a close or to a turned phone.
