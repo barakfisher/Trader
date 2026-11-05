@@ -14,7 +14,7 @@ import { Disclosure } from './Disclosure.tsx';
 const ICON_BUTTON =
   'inline-flex size-9 items-center justify-center rounded-lg border border-border-subtle text-text-muted transition hover:border-accent hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border-subtle disabled:hover:text-text-muted';
 const MENU_ITEM =
-  'flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-start text-sm text-text-muted transition hover:bg-surface-hover hover:text-text-primary';
+  'flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-start text-sm text-text-muted transition hover:bg-surface-hover hover:text-text-primary max-sm:min-h-11';
 
 /**
  * An agent's quick actions on its row of the Agents page (D252): *Run a scan

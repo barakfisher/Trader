@@ -56,7 +56,7 @@ export function Disclosure({
         aria-label={label}
         title={label}
         onClick={() => setOpen(!open)}
-        className="flex items-center rounded-lg p-1.5 text-text-muted transition hover:bg-surface-hover hover:text-text-primary"
+        className="flex items-center justify-center rounded-lg p-1.5 text-text-muted transition hover:bg-surface-hover hover:text-text-primary"
       >
         {icon}
       </button>

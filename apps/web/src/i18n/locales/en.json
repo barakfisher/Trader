@@ -306,6 +306,13 @@
     "observedViaDelayed": "Observed {{when}} via {{source}}, on a {{minutes}}-minute delayed feed",
     "delay": " · {{minutes}}m delay",
     "pnl": "{{money}} ({{percent}})",
+    "details": {
+      "toggle": "Details for {{symbol}}",
+      "perUnit": "{{money}} per unit",
+      "priceUpdated": "Price updated",
+      "openPage": "Holding page",
+      "openPageFor": "Holding page for {{symbol}}"
+    },
     "editSymbol": "Edit {{symbol}}",
     "removeConfirm": "Remove {{symbol}}?",
     "staleTitle": "Last known price, observed {{when}}. No provider could refresh it.",

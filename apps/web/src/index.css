@@ -14,6 +14,9 @@
   --color-loss: #f4676b;
   --color-accent: #6d8bff;
   --color-warn: #f2b544;
+  /* Below Tailwind's `xs`, named so a phone can raise them in one place. */
+  --text-2xs: 0.6875rem;
+  --text-3xs: 0.625rem;
 }
 
 html,
@@ -105,6 +108,70 @@ body {
   select,
   textarea {
     font-size: 1rem;
+  }
+}
+
+/* A box this small is reached through its words. In the base layer, unlike the rest
+   of a phone's sizes: only the height is the point, and a label that says how its
+   lines sit (`items-start` above a long sentence) is right about that. */
+@layer base {
+  @media (max-width: 639px) {
+    label:has(> input[type='checkbox'], > input[type='radio']) {
+      display: flex;
+      min-height: 2.75rem;
+      align-items: center;
+    }
+  }
+}
+
+/* A phone's sizes (D384), one place to tune them; a wide screen never sees this.
+   Unlayered, like the rule above, so it wins over every utility and a new control
+   cannot forget it. 639 px is NARROW_QUERY. Line heights follow, being ratios. */
+@media (max-width: 639px) {
+  :root {
+    --text-3xs: 0.75rem;
+    --text-2xs: 0.75rem;
+    --text-xs: 0.8125rem;
+    --text-sm: 0.9375rem;
+  }
+
+  button,
+  select,
+  input:not([type='checkbox'], [type='radio'], [type='file']) {
+    min-height: 2.75rem;
+  }
+
+  button {
+    min-width: 2.75rem;
+  }
+
+  summary {
+    min-height: 2.75rem;
+    padding-block: 0.75rem;
+  }
+
+  /* A control in a tight row keeps how it looks and takes the 44 px from the air
+     around it, centred on it. Physical on purpose: centred has no direction.
+     Between lines of a card there is less air than that, and a target that reached
+     into the next line would take its taps: `.tap-tight` stops at the gap. */
+  .tap-tight {
+    --tap-size: 2.125rem;
+  }
+
+  .tap-compact {
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .tap-compact::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--tap-size, 2.75rem));
+    height: max(100%, var(--tap-size, 2.75rem));
+    transform: translate(-50%, calc(-50% + var(--tap-shift, 0px)));
+    content: '';
   }
 }
 

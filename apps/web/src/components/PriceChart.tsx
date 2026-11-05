@@ -104,7 +104,7 @@ export function PriceChart({
             </div>
             <button
               type="button"
-              className="text-xs text-text-muted underline hover:text-text-primary"
+              className="tap-compact text-xs text-text-muted underline hover:text-text-primary"
               onClick={() => setAsTable(!asTable)}
             >
               {asTable ? t('price.chart') : t('price.table')}
@@ -165,14 +165,14 @@ export function PriceChart({
                 <XAxis
                   dataKey="day"
                   tickFormatter={tickDay}
-                  tick={{ fill: '#94a0c0', fontSize: 11 }}
+                  tick={{ fill: '#94a0c0', fontSize: 'var(--text-2xs)' }}
                   axisLine={false}
                   tickLine={false}
                   minTickGap={32}
                 />
                 <YAxis
                   tickFormatter={(value: number) => formatCompactMoney(value, currency)}
-                  tick={{ fill: '#94a0c0', fontSize: 11 }}
+                  tick={{ fill: '#94a0c0', fontSize: 'var(--text-2xs)' }}
                   axisLine={false}
                   tickLine={false}
                   width={56}

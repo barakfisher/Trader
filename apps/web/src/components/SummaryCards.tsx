@@ -98,7 +98,7 @@ export const SummaryCards = observer(function SummaryCards({
           type="button"
           onClick={() => setOpen(true)}
           aria-haspopup="dialog"
-          className="flex items-center gap-1 text-xs text-accent hover:underline"
+          className="tap-compact flex items-center gap-1 text-xs text-accent hover:underline"
         >
           <ChevronDown className="size-3.5" aria-hidden />
           {pendingTrades.length > 0
@@ -326,8 +326,8 @@ export function SourceBadge({ isPrimary }: { isPrimary: boolean }) {
     <span
       className={
         isPrimary
-          ? 'rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-medium text-accent'
-          : 'rounded-full border border-border-subtle px-2 py-0.5 text-[10px] text-text-muted'
+          ? 'rounded-full bg-accent/15 px-2 py-0.5 text-3xs font-medium text-accent'
+          : 'rounded-full border border-border-subtle px-2 py-0.5 text-3xs text-text-muted'
       }
     >
       {isPrimary ? t('agents.real') : t('agents.simulated')}

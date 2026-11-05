@@ -311,6 +311,13 @@
     "observedViaDelayed": "נצפה {{when}} דרך {{source}}, בהזנה מעוכבת ב-{{minutes}} דקות",
     "delay": " · עיכוב {{minutes}} ד׳",
     "pnl": "{{money}} ({{percent}})",
+    "details": {
+      "toggle": "פרטים על {{symbol}}",
+      "perUnit": "{{money}} ליחידה",
+      "priceUpdated": "המחיר עודכן",
+      "openPage": "לדף האחזקה",
+      "openPageFor": "לדף האחזקה של {{symbol}}"
+    },
     "editSymbol": "עריכת {{symbol}}",
     "removeConfirm": "להסיר את {{symbol}}?",
     "staleTitle": "המחיר הידוע האחרון, נצפה {{when}}. אף ספק לא הצליח לרענן אותו.",

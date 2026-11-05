@@ -95,7 +95,7 @@ export const AlertsList = observer(function AlertsList({
             <button
               type="button"
               onClick={() => onSourceChange(undefined)}
-              className="text-xs text-accent underline"
+              className="tap-compact text-xs text-accent underline"
             >
               {t('feed.showAll')}
             </button>

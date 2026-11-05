@@ -11,7 +11,7 @@ import { SERVER_ENGLISH } from '../lib/textDirection.ts';
 export function NewsList({ articles }: { articles: NewsArticle[] }) {
   const { t } = useTranslation();
   return (
-    <ul className="space-y-2">
+    <ul className="space-y-2 max-sm:space-y-0">
       {articles.map((article) => (
         <li key={article.id} className="text-sm">
           <a
@@ -19,7 +19,7 @@ export function NewsList({ articles }: { articles: NewsArticle[] }) {
             href={article.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="break-words hover:text-accent hover:underline"
+            className="break-words hover:text-accent hover:underline max-sm:block max-sm:py-3"
           >
             {article.title}
           </a>

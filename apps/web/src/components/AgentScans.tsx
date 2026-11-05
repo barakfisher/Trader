@@ -172,7 +172,7 @@ function RunResult({ result }: { result: RunScanResult }) {
               key={proposalId}
               to="/proposals/$proposalId"
               params={{ proposalId }}
-              className="font-medium text-accent hover:underline"
+              className="tap-compact font-medium text-accent hover:underline"
             >
               {kept[index] ? label(kept[index]) : t('agents.scans.openProposal')}
             </Link>
@@ -325,7 +325,7 @@ function ScanSettings({ agent }: { agent: AgentView }) {
             <button
               type="button"
               onClick={() => apply(suggested, suggestedDecisions)}
-              className="font-medium text-accent hover:underline"
+              className="tap-compact font-medium text-accent hover:underline"
             >
               {t('agents.scans.useSuggestion')}
             </button>

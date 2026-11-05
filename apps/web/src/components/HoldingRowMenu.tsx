@@ -129,7 +129,7 @@ export function HoldingRowMenu({
     ask.setDraft(t('holdings.menu.askDraft', { symbol }));
     void navigate({ to: '/ask' });
   };
-  const note = (text: string) => <li className="px-3 pb-1 text-[11px] text-text-muted">{text}</li>;
+  const note = (text: string) => <li className="px-3 pb-1 text-2xs text-text-muted">{text}</li>;
 
   return (
     <>
@@ -141,8 +141,8 @@ export function HoldingRowMenu({
         aria-label={t('holdings.menu.label', { symbol })}
         title={t('holdings.menu.label', { symbol })}
         onClick={() => setOpen(!open)}
-        // A thumb's 40 px on a phone card, with margins that keep its line a line of text.
-        className="rounded-lg p-1.5 text-text-muted transition hover:bg-surface-hover hover:text-text-primary max-sm:-my-3 max-sm:-me-2 max-sm:grid max-sm:size-10 max-sm:place-items-center"
+        // A thumb's 44 px on a phone card, with margins that keep its line a line of text.
+        className="rounded-lg p-1.5 text-text-muted transition hover:bg-surface-hover hover:text-text-primary max-sm:-my-3 max-sm:-me-2 max-sm:grid max-sm:size-11 max-sm:place-items-center"
       >
         <EllipsisVertical className="size-4" aria-hidden />
       </button>

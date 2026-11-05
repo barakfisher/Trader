@@ -276,7 +276,7 @@ function Folded({ label, value }: { label: string; value: unknown }) {
   return (
     <details>
       <summary className="cursor-pointer text-text-muted">{label}</summary>
-      <pre dir="ltr" className="mt-1 max-h-72 overflow-auto rounded bg-surface-hover p-2 text-[11px] text-start">
+      <pre dir="ltr" className="mt-1 max-h-72 overflow-auto rounded bg-surface-hover p-2 text-2xs text-start">
         {JSON.stringify(value, null, 2)}
       </pre>
     </details>

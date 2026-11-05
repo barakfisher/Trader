@@ -184,7 +184,7 @@ export function TaxonomyPicker({
                 <span className="text-text-muted">· {kindLabel(choice.kind)}</span>
                 <button
                   type="button"
-                  className="rounded-full hover:text-loss"
+                  className="tap-compact tap-tight rounded-full hover:text-loss"
                   aria-label={t('agents.mandate.remove', { name: taxonomyLabel(choice.name).text })}
                   onClick={(event) => {
                     event.stopPropagation();
@@ -230,7 +230,7 @@ export function TaxonomyPicker({
               <li
                 key={key(choice)}
                 {...getItemProps({ item: choice, index })}
-                className={`flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 ${
+                className={`flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 max-sm:min-h-11 ${
                   highlightedIndex === index ? 'bg-surface-hover' : ''
                 } ${choice.kind === 'sector' ? 'font-medium' : 'ps-6'}`}
               >

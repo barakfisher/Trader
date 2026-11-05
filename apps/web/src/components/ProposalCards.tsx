@@ -29,7 +29,7 @@ function ProposalHeadline({ proposal, link, headline }: { proposal: Proposal; li
     <Link
       to="/proposals/$proposalId"
       params={{ proposalId: proposal.id }}
-      className="hover:text-accent hover:underline"
+      className="hover:text-accent hover:underline max-sm:inline-flex max-sm:min-h-11 max-sm:items-center"
     >
       {headline}
     </Link>

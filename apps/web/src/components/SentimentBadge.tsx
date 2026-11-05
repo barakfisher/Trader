@@ -63,7 +63,7 @@ export function SentimentCell({
     <Link
       to="/research"
       hash={holding.symbol}
-      className={`inline-flex hover:opacity-80 ${inline ? 'flex-wrap items-center gap-1' : 'flex-col items-start gap-0.5'}`}
+      className={`tap-compact inline-flex hover:opacity-80 ${inline ? 'tap-tight [--tap-shift:-0.375rem] flex-wrap items-center gap-1' : 'flex-col items-start gap-0.5'}`}
       aria-label={t('research.cellLabel', {
         rating: t(`research.ratings.${latest.rating}`),
         agent: latest.agentName,
@@ -71,7 +71,7 @@ export function SentimentCell({
       })}
     >
       <SentimentBadge rating={latest.rating} />
-      <span className="text-[11px] text-text-muted">
+      <span className="text-2xs text-text-muted">
         {t('research.byOn', byOn(latest.agentName, latest.ratedAt))}
         {latest.stale && <span className="ms-1 text-warn">{t('research.stale')}</span>}
       </span>

@@ -40,7 +40,7 @@ export function ApproveProposalButton({ trade }: { trade: ConsolidatedPendingTra
           side: t(`consolidated.pending.sides.${trade.side}`),
           symbol: trade.symbol,
         })}
-        className="flex items-center gap-1 rounded-lg border border-accent/40 px-2 py-1 text-xs font-medium text-accent hover:bg-accent/10"
+        className="tap-compact tap-tight flex items-center gap-1 rounded-lg border border-accent/40 px-2 py-1 text-xs font-medium text-accent hover:bg-accent/10"
       >
         <Check className="size-3.5" aria-hidden />
         {t('combined.approve.button')}

@@ -70,7 +70,7 @@ export const TradeProposalCard = observer(function TradeProposalCard({
                 <Link
                   to="/proposals/$proposalId"
                   params={{ proposalId: proposal.id }}
-                  className="hover:text-accent hover:underline"
+                  className="hover:text-accent hover:underline max-sm:inline-flex max-sm:min-h-11 max-sm:items-center"
                 >
                   {text.headline}
                 </Link>
@@ -82,7 +82,7 @@ export const TradeProposalCard = observer(function TradeProposalCard({
               <Link
                 to="/agents/$agentId"
                 params={{ agentId: proposal.agentId }}
-                className="hover:text-accent hover:underline"
+                className="tap-compact hover:text-accent hover:underline"
               >
                 {proposal.agentName}
               </Link>

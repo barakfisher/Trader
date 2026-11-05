@@ -49,13 +49,13 @@ export const HoldingPage = observer(function HoldingPage() {
                 {holding.quote?.stale && (
                   <span
                     title={t('holdings.staleTitle', { when: formatExactTime(holding.quote.asOf) })}
-                    className="flex items-center gap-1 rounded bg-warn/15 px-1.5 py-0.5 text-[10px] font-normal text-warn"
+                    className="flex items-center gap-1 rounded bg-warn/15 px-1.5 py-0.5 text-3xs font-normal text-warn"
                   >
                     <Clock className="size-3" aria-hidden /> {t('holdings.stale')}
                   </span>
                 )}
                 {holding.valueMinor === null && (
-                  <span className="rounded bg-loss/15 px-1.5 py-0.5 text-[10px] font-normal text-loss">
+                  <span className="rounded bg-loss/15 px-1.5 py-0.5 text-3xs font-normal text-loss">
                     {t('holdings.unpriced')}
                   </span>
                 )}
@@ -180,7 +180,7 @@ function PositionCard({ holding, baseCurrency }: { holding: HoldingView; baseCur
           {target ? (
             t('holding.targetValue', { value: unitsToPercent(weightToUnits(target.weight)) })
           ) : (
-            <Link to="/targets" className="text-sm text-text-muted underline hover:text-text-primary">
+            <Link to="/targets" className="tap-compact text-sm text-text-muted underline hover:text-text-primary">
               {t('holding.noTarget')}
             </Link>
           )}
@@ -204,7 +204,7 @@ function Figure({ label, note, children }: { label: string; note?: string; child
     <div className="min-w-0">
       <dt className="text-xs uppercase tracking-wide text-text-muted">{label}</dt>
       <dd className="text-sm font-medium tabular-nums">{children}</dd>
-      {note && <dd className="text-[11px] text-text-muted">{note}</dd>}
+      {note && <dd className="text-2xs text-text-muted">{note}</dd>}
     </div>
   );
 }

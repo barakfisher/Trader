@@ -66,7 +66,7 @@ export function EquityCurve() {
         points.length > 0 && (
           <button
             type="button"
-            className="text-xs text-text-muted underline hover:text-text-primary"
+            className="tap-compact text-xs text-text-muted underline hover:text-text-primary"
             onClick={() => setAsTable(!asTable)}
           >
             {asTable ? t('equity.showChart') : t('equity.showTable')}
@@ -105,14 +105,14 @@ export function EquityCurve() {
                 <XAxis
                   dataKey="date"
                   tickFormatter={formatDay}
-                  tick={{ fill: '#94a0c0', fontSize: 11 }}
+                  tick={{ fill: '#94a0c0', fontSize: 'var(--text-2xs)' }}
                   axisLine={false}
                   tickLine={false}
                   minTickGap={24}
                 />
                 <YAxis
                   tickFormatter={(value: number) => formatCompactMoney(value, currency)}
-                  tick={{ fill: '#94a0c0', fontSize: 11 }}
+                  tick={{ fill: '#94a0c0', fontSize: 'var(--text-2xs)' }}
                   axisLine={false}
                   tickLine={false}
                   width={56}

@@ -232,7 +232,7 @@ function ReplyView({
 function Suggestions({ suggestions, onPick }: { suggestions: string[]; onPick: (text: string) => void }) {
   const { t } = useTranslation();
   return (
-    <div className="flex flex-wrap gap-1.5" aria-label={t('ask.suggestions')}>
+    <div className="flex flex-wrap gap-1.5 max-sm:gap-2.5" aria-label={t('ask.suggestions')}>
       {suggestions.map((suggestion) => (
         <button
           key={suggestion}
@@ -240,7 +240,7 @@ function Suggestions({ suggestions, onPick }: { suggestions: string[]; onPick: (
           dir="auto"
           type="button"
           onClick={() => onPick(suggestion)}
-          className="rounded-full bg-surface-hover px-2.5 py-1 text-xs text-text-muted hover:text-text-primary"
+          className="tap-compact rounded-full bg-surface-hover px-2.5 py-1 text-xs text-text-muted hover:text-text-primary max-sm:py-2"
         >
           {suggestion}
         </button>
@@ -255,7 +255,7 @@ function Sources({ sources }: { sources: AssistantSourceView[] }) {
   if (sources.length === 0) return null;
   return (
     <div className="space-y-1">
-      <p className="text-[11px] uppercase tracking-wide text-text-muted">{t('ask.sources', { count: sources.length })}</p>
+      <p className="text-2xs uppercase tracking-wide text-text-muted">{t('ask.sources', { count: sources.length })}</p>
       <ul className="space-y-0.5 text-xs text-text-muted">
         {sources.map((source, index) => (
           <li key={`${source.label}-${index}`} {...SERVER_ENGLISH}>
@@ -270,7 +270,7 @@ function Sources({ sources }: { sources: AssistantSourceView[] }) {
 function SourceLabel({ source }: { source: AssistantSourceView }) {
   if (source.url) {
     return (
-      <a href={source.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:underline">
+      <a href={source.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:underline max-sm:min-h-11">
         {source.label}
         <ExternalLink className="size-3" aria-hidden />
       </a>
@@ -278,7 +278,7 @@ function SourceLabel({ source }: { source: AssistantSourceView }) {
   }
   if (source.link) {
     return (
-      <Link to={source.link as never} className="hover:underline">
+      <Link to={source.link as never} className="hover:underline max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">
         {source.label}
       </Link>
     );
@@ -322,7 +322,7 @@ const History = observer(function History() {
               <span dir="auto" className="block truncate">
                 {conversation.title}
               </span>
-              <span className="block text-[11px]">{formatAge(conversation.updatedAt)}</span>
+              <span className="block text-2xs">{formatAge(conversation.updatedAt)}</span>
             </button>
             <button
               type="button"
@@ -335,7 +335,7 @@ const History = observer(function History() {
           </li>
         ))}
       </ul>
-      <p className="mt-2 text-[11px] text-text-muted">{t('ask.retention')}</p>
+      <p className="mt-2 text-2xs text-text-muted">{t('ask.retention')}</p>
     </Card>
   );
 });
