@@ -23,6 +23,7 @@ import {
 import { DeletionCancelledBanner } from './components/DeletionCancelledBanner.tsx';
 import { SpendReminder } from './components/SpendIndicator.tsx';
 import { AppBar } from './components/AppBar.tsx';
+import { BottomBar } from './components/BottomBar.tsx';
 import { ConceptDialog } from './components/ConceptDialog.tsx';
 import { AgentPage } from './pages/AgentPage.tsx';
 import { AgentsPage } from './pages/AgentsPage.tsx';
@@ -49,6 +50,7 @@ const rootRoute = createRootRoute({
       {/* D264: this sign-in cancelled the account's deletion. */}
       <DeletionCancelledBanner />
       <Outlet />
+      <BottomBar />
       {/* Mounted beside the routes rather than inside the feed: it is an
           overlay, and a concept opened from one view must not be unmounted by
           navigating to another. It renders nothing while no concept is open. */}

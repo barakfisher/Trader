@@ -18,13 +18,13 @@ five, so this is one late).
     P&L; every field is 16 px on a phone (D381).
 - **Deployed:** production (`https://app.tiklens.com`) and compose both run `e71b463` (#374) at
   `0084_index_article_duplicates`, read 2026-11-05. Nothing merged is undeployed.
-- **Decisions reach 381** (next: **382**). **Migrations:** `0084` head; next free `0085`.
+- **Decisions reach 382** (next: **383**). **Migrations:** `0084` head; next free `0085`.
 - **The phone view is three PRs, agreed with the user 2026-11-04, and #374 is the first.** Measured
   on production at 375 px in Hebrew: no sideways scroll on any screen, so the problem is density,
   not breakage. The portfolio went from 8.1 screens to 4.7 on real data.
-  - **PR 2, next: a bottom navigation bar.** Not designed: put the design questions to the user one
-    at a time. Today every place is behind a hamburger with 32 px rows, and the portfolio is
-    reachable only through the logo. `AppBar.tsx`'s comment explains the present choice.
+  - **PR 2: a bottom navigation bar** (D382), designed with the user 2026-11-05. Owed on a real
+    iPhone, because emulation reports every safe-area inset as 0: the bar clears the home indicator,
+    nothing sits under the notch in landscape, and what the bar does with the keyboard open.
   - **PR 3: polish.** Tap targets (85 of the portfolio's 108 controls were under 40 px before #374)
     and text (76% was 12 px or less), collapsing Research (10.7 screens) and Settings (6.1), and
     the small bugs: Ask's intro still says answers are in English and its examples are English
@@ -6365,6 +6365,27 @@ failure they prevent.
     Settings (every new account would start on the model that declines and mixes languages more);
     Sonnet 5.5 (35x the cost and still failed 2 of 11); an eval of one run is thin, so it is
     re-measured once Langfuse has a week of production Ask traces on the new default.
+382. **A phone moves between places on a bottom bar, and its header holds the name and the account**
+    (the user, 2026-11-05, after the measurement behind D381: every place behind a hamburger, the
+    portfolio reachable only through the logo). Below `md` (767 px) a bar fixed to the bottom has
+    five slots of icon and label: Portfolio, Insights, Agents, Research, Ask. Settings, Admin and
+    Sign out stay behind the account button, the same menu at every width. The header says
+    "TikLens" there, because "Portfolio" on every page read as the page's title; its logo still
+    leads to the portfolio. On a wide screen nothing looks different.
+    *Rejected:* **four slots and a "More"** - clears the header, but Research becomes two taps, Sign
+    out comes under the thumb, and it needs a new sheet. **Hiding the bar on scroll** - gives back
+    57 px, but the bar must be scrolled back before a tap, which is the friction it removes, and
+    Safari's own toolbar is moving at that moment; it needs a scroll listener and a threshold.
+    **Below `sm` like the other phone layouts** - 640-767 px would still need a hamburger of places,
+    because the header's row starts only at `md`.
+    The bar marks a slot on pages that belong to it without living under its address (`/holdings/x`
+    and `/targets` are Portfolio, `/proposals/x` is Insights). Only the bar does: the wide header
+    keeps its rule, so a wide screen stays unchanged. Structure is chosen with `useBottomBarViewport`
+    rather than `md:hidden`, as `viewport.ts` argues: rendering both puts every place in the page
+    twice. **Safe areas:** `viewport-fit=cover` is what makes `env(safe-area-inset-bottom)` non-zero,
+    and it also hands the sides to the page, so the body and the overlays pad for a landscape notch.
+    That padding is physical CSS on purpose (`.safe-inline`): the notch does not mirror with the
+    language. Neither has been seen on a real iPhone; emulation reports every inset as 0.
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -7171,6 +7192,12 @@ component starts a query app-wide, grep the tests for catch-all pending mocks; a
 awaits invalidation inherits every active query's fate.** Same shape in UX5: adding a holding waits
 for the equity curve's snapshots.
 
+**A parent's `space-y-*` shrinks a fixed overlay** (D382). Tailwind's `space-y-4` gives each child a
+bottom margin, and on a `fixed inset-0` box that margin comes out of its height: the Drawer on the
+Agents page stopped 16 px short of the screen. Nobody saw it while nothing lived at the bottom; the
+bar showed through. `getBoundingClientRect` looked like an emulation quirk until a probe appended to
+the same parent measured the full 667. The full-screen overlays now carry `m-0`.
+
 **`truncate` follows the block's direction, not the text's** (D381). On a right-to-left page a Latin
 name lost its beginning, `...t SPDR S&P 500 ETF Trust`, and jsdom cannot see it. **Lesson: a value
 in another script needs its own direction on the element that truncates (`InstrumentName`), and
@@ -7184,8 +7211,9 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 
 | Item | Where | Impact |
 |---|---|---|
+| **Tab can reach the page behind an open Drawer** | `Drawer.tsx` (D382) | It says `aria-modal` but has no focus trap, so a keyboard user can Tab onto a covered link, now including the bottom bar, and leave a half-filled form. Older than the bar; only a hardware keyboard reaches it. |
 | **A phone can sort by P&L but not see it** | `SortControl`, `CombinedCard`, `HoldingCard` (D381) | The card states today's percent, so sorting by P&L or P&L % orders the cards by a figure they do not show. Harmless, but it reads as a random order. The total is one tap away on the holding's page. |
-| **A phone's places are behind a hamburger, and much of the UI is under 40 px and 12 px** | `AppBar.tsx`, app-wide | Every move between pages is two taps with a thumb at the far corner. PR 2 and PR 3 of the phone view (top of this file). |
+| **Much of a phone's UI is under 40 px and 12 px** | App-wide | The account button and its rows are still 32 px, and so are many page controls. PR 3 of the phone view (top of this file). |
 | **A reset keeps the agent review's suggestions** | `reset_account` (0072), `agent_suggestions` (0079) | A reset of `agents_trading` erases the scans and fills a suggestion's evidence came from, but an open card stays until dismissed or superseded by the next window. Its Apply still checks the setting's current value, so it can change nothing unexpected; the figures are only out of date. Fix: add the table to the reset's `agents_trading` group (a `CREATE OR REPLACE` of the function, as 0072 did) |
 | **Consent records go with an erased account** | `0077` cascade, D317's erase | Once an account is erased there is no record of what it agreed to. Whether consent must outlive the account (and for how long) is a legal retention question for the user or a lawyer, raised by the PR 15 security review; keeping it would need the erase to keep an anonymised row |
 | ~~Telegram ignores the legal acceptance~~ | — | **Resolved** (2026-10-26, the PR after #332): messages and taps are answered with one sentence, `/stop` excepted, and pushes go nowhere until the account accepts (D321) |

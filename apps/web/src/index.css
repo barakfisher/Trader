@@ -22,7 +22,25 @@ body,
   height: 100%;
 }
 
+/* The bottom bar's row, its top border and the home indicator's strip (D382). */
+:root {
+  --bottom-bar-height: calc(3.5rem + 1px + env(safe-area-inset-bottom));
+}
+
+/* A field reached with Tab or a keyboard's Next must not land behind the bar.
+   767 px is BOTTOM_BAR_QUERY. */
+@media (max-width: 767px) {
+  html {
+    scroll-padding-bottom: var(--bottom-bar-height);
+  }
+}
+
 body {
+  /* `viewport-fit=cover` (for the bar's strip at the bottom) also hands the
+     sides to the page: in landscape nothing may sit under the notch. Physical
+     on purpose - the notch does not move with the language. */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
   background-color: var(--color-surface);
   color: var(--color-text-primary);
   font-feature-settings: 'tnum' 1; /* tabular figures keep price columns aligned */
@@ -36,6 +54,28 @@ body {
 @layer base {
   th {
     text-align: inherit;
+  }
+}
+
+/* The width of a landscape phone's notch, on each side of something fixed to the
+   viewport, which the body's padding does not reach. Physical like the body's,
+   and for the same reason: the notch does not mirror with the language. */
+@utility safe-inline {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* An overlay's margin around its dialog, at least the notch's width in landscape
+   and the home indicator's height: it is fixed to the viewport, so the body's
+   padding does not reach it. */
+@utility overlay-gutter {
+  --gutter: 1rem;
+  padding-left: max(var(--gutter), env(safe-area-inset-left));
+  padding-right: max(var(--gutter), env(safe-area-inset-right));
+  padding-bottom: max(var(--gutter), env(safe-area-inset-bottom));
+
+  @variant sm {
+    --gutter: 2rem;
   }
 }
 
