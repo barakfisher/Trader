@@ -25,11 +25,12 @@ five, so this is one late).
   - **PR 2: a bottom navigation bar** (D382), designed with the user 2026-11-05. Owed on a real
     iPhone, because emulation reports every safe-area inset as 0: the bar clears the home indicator,
     nothing sits under the notch in landscape, and what the bar does with the keyboard open.
-  - **PR 3: polish.** Tap targets (85 of the portfolio's 108 controls were under 40 px before #374)
-    and text (76% was 12 px or less), collapsing Research (10.7 screens) and Settings (6.1), and
-    the small bugs: Ask's intro still says answers are in English and its examples are English
-    (`AskPage.tsx`, against D220); `$` beside `USD` for one currency; the model select clipped on
-    the agent page; a gray bar at the end of the Insights tabs, which may be emulation only.
+  - **PR 3 became three PRs** (the user, 2026-11-05). Bugs first (D383). Then tap targets and
+    text: at 375 px in Hebrew, under 40 px are 63 of the portfolio's 93 controls, 37 of Settings'
+    43, 35 of the agent's Settings tab's 48; 81% of the portfolio's text is 12 px or less. 44 of the
+    portfolio's 63 are the symbol and rating links on holding cards, so 40 px each would undo D381:
+    that is a decision, not a rule. Then collapsing Research (14.3 screens with 22 rated holdings)
+    and Settings (7.6).
 - **Owed by the user, on the phone:** tap a field in Settings and confirm the page does not zoom;
   type `12.5` on Targets and confirm it shows whole. Neither has been seen on a real iPhone.
 - **Owed by a session:** re-measure Ask from a week of production Langfuse traces (~2026-11-11),
@@ -6386,6 +6387,24 @@ failure they prevent.
     and it also hands the sides to the page, so the body and the overlays pad for a landscape notch.
     That padding is physical CSS on purpose (`.safe-inline`): the notch does not mirror with the
     language. Neither has been seen on a real iPhone; emulation reports every inset as 0.
+383. **A field's currency is written `($)`, and "Not chosen" does not name the model** (the user,
+    2026-11-05, the first of three PRs that split the phone view's polish). Eight field labels said
+    `(USD)` on screens where every amount says `$`, so they now say `($)`; the account's base
+    currency stays `USD`, because there the code is the content. At the 16 px of D381 the option
+    "Not chosen: the default, Google: Gemini 3.5 Flash Lite" was cut in a 309 px field. It is now
+    "Not chosen: the default": "In use" above the field names the model, and the detail below names
+    the default when it is selected. **Tab strips** carry `overflow-y-hidden`: `-mb-px` on a tab with
+    `overflow-x-auto` alone is a one-pixel vertical scroll, and that scroll's bar was the gray bar
+    at the end of the tabs. Reproduced in Chromium's phone emulation, not on an iPhone; a strip that
+    really overflows still shows a passing sideways bar while scrolled. **Ask's examples** are in the
+    catalogue, because it answers in the language it is asked in (D220), and the two sentences that
+    still said its answers are English are gone. `research.notAdvice` stays: research reasons are
+    English. *Rejected:* **a `$` prefix inside the field** - needs a new field component with its
+    own right-to-left placement for one sign. **Keeping `(USD)`** - accurate, but two signs for one
+    currency on one screen. **Smaller type in the model select** - iOS zooms a field under 16 px.
+    **Truncating the name with an ellipsis** - a native select cannot, and half a name is the bug.
+**Three PRs for the polish:** bugs first, then tap targets and text, then collapsing Research and
+Settings, because a collapsed row's height depends on the sizing rule (the user, 2026-11-05).
 ---
 
 ## Bugs that cost real time, and the lesson from each

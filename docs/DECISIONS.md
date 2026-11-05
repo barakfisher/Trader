@@ -393,3 +393,4 @@ while this file is out of date.
 | 380 | Each use has its own default model; Ask's is Gemini 3.7 Flash |
 | 381 | A phone's holding card is three lines, and every field is 16 px on a phone |
 | 382 | A phone moves between places on a bottom bar, and its header holds the name and the account |
+| 383 | A field's currency is written `($)`, and "Not chosen" does not name the model |

@@ -153,7 +153,7 @@ function SimulatedAgent({ agent }: { agent: AgentView }) {
       </div>
       <AccountSummary agent={agent} />
       <AgentReviewCards agent={agent} />
-      <div role="tablist" className="flex gap-2 overflow-x-auto border-b border-border-subtle">
+      <div role="tablist" className="flex gap-2 overflow-x-auto overflow-y-hidden border-b border-border-subtle">
         {TABS.map((name) => (
           <button
             key={name}

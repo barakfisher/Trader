@@ -110,7 +110,7 @@ describe('the account card', () => {
     expect(within(drawer).getByText('$12.30')).toBeTruthy();
     expect(within(drawer).getByText('$4.00')).toBeTruthy();
 
-    const correct = within(drawer).getByLabelText('Cash your broker shows (USD)');
+    const correct = within(drawer).getByLabelText('Cash your broker shows ($)');
     fireEvent.change(correct, { target: { value: '1180.25' } });
     fireEvent.click(within(drawer).getByRole('button', { name: 'Set balance' }));
     await waitFor(() => expect(put).toHaveBeenCalledWith('/portfolio/cash', { amount: '1180.25' }));
@@ -128,7 +128,7 @@ describe('the account card', () => {
     ] as const) {
       const drawer = await openDrawer();
       fireEvent.click(within(drawer).getByRole('radio', { name: label }));
-      const amount = within(drawer).getByLabelText('Amount (USD)');
+      const amount = within(drawer).getByLabelText('Amount ($)');
       fireEvent.change(amount, { target: { value: '0' } });
       // A $0 movement is not offered.
       expect((within(drawer).getByRole('button', { name: submit }) as HTMLButtonElement).disabled).toBe(true);
@@ -145,7 +145,7 @@ describe('the account card', () => {
     renderWithServerState(<AccountCard summary={SUMMARY} />);
     const drawer = await openDrawer();
     fireEvent.click(within(drawer).getByRole('radio', { name: 'Withdrawal' }));
-    fireEvent.change(within(drawer).getByLabelText('Amount (USD)'), { target: { value: '99999' } });
+    fireEvent.change(within(drawer).getByLabelText('Amount ($)'), { target: { value: '99999' } });
     fireEvent.click(within(drawer).getByRole('button', { name: 'Record withdrawal' }));
     expect(await within(drawer).findByText('There is not that much cash in the account.')).toBeTruthy();
     expect(screen.getByRole('dialog')).toBeTruthy();

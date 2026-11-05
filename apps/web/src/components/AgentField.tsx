@@ -2,7 +2,7 @@ import { useId, type ReactElement, cloneElement } from 'react';
 
 /**
  * A labelled agent field whose hint is announced as a description, not as part
- * of the field's name - a screen reader says "Paper budget (USD)", then the hint.
+ * of the field's name - a screen reader says "Paper budget ($)", then the hint.
  *
  * `aligned`: one of a row of fields in a grid. Label, field and hint take the
  * row's three subgrid rows, labels sitting on the field, so a label that wraps

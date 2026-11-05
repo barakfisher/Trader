@@ -15,6 +15,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { createMemoryHistory } from '@tanstack/react-router';
 
+import en from '../src/i18n/locales/en.json';
+import he from '../src/i18n/locales/he.json';
 import type { AssistantConversationResponse, AssistantReplyView, OwnLlmKeyResponse } from '@traders/shared';
 
 const get = vi.fn();
@@ -28,6 +30,7 @@ vi.mock('../src/api/client.ts', async () => {
 
 const { ApiRequestError } = await import('../src/api/client.ts');
 const { App } = await import('../src/App.tsx');
+const { applyLanguage } = await import('../src/i18n/index.ts');
 const { createAppRouter } = await import('../src/router.tsx');
 const { renderWithServerState } = await import('./serverStateHarness.tsx');
 
@@ -80,6 +83,32 @@ beforeEach(() => {
   );
 });
 afterEach(cleanup);
+
+describe('an empty conversation', () => {
+  it('offers examples that fill the box and are not sent', async () => {
+    renderAsk();
+    const example = await screen.findByRole('button', { name: en.ask.examples.tour });
+    fireEvent.click(example);
+    expect((screen.getByLabelText('Your question') as HTMLTextAreaElement).value).toBe(en.ask.examples.tour);
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('speaks Hebrew on a Hebrew page: the examples, and no claim that answers are in English (D220)', async () => {
+    renderAsk();
+    try {
+      await screen.findByRole('button', { name: en.ask.examples.tour });
+      act(() => applyLanguage('he'));
+      for (const example of Object.values(he.ask.examples)) {
+        const button = await screen.findByRole('button', { name: example });
+        expect(button.getAttribute('lang')).toBe('he');
+      }
+      expect(screen.getByText(he.ask.intro)).toBeTruthy();
+      expect(he.ask.intro).not.toContain('באנגלית');
+    } finally {
+      applyLanguage('en');
+    }
+  });
+});
 
 describe('a reply', () => {
   it('renders its markdown, its sources and what to ask next', async () => {

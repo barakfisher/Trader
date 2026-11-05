@@ -109,7 +109,7 @@ describe('AgentsPage', () => {
     renderPage(<AgentsPage />);
     await openCreateForm();
     const submit = screen.getByRole('button', { name: 'Create agent' }) as HTMLButtonElement;
-    const budget = screen.getByLabelText('Paper budget (USD)') as HTMLInputElement;
+    const budget = screen.getByLabelText('Paper budget ($)') as HTMLInputElement;
     // The budget starts empty, with no placeholder that reads as a value.
     expect(budget.value).toBe('');
     expect(budget.placeholder).toBe('');
@@ -131,10 +131,10 @@ describe('AgentsPage', () => {
     renderPage(<AgentsPage />);
     await openCreateForm();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Value' } });
-    fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '10.005' } });
+    fireEvent.change(screen.getByLabelText('Paper budget ($)'), { target: { value: '10.005' } });
     const submit = screen.getByRole('button', { name: 'Create agent' }) as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
-    fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '2500.5' } });
+    fireEvent.change(screen.getByLabelText('Paper budget ($)'), { target: { value: '2500.5' } });
     expect(submit.disabled).toBe(false);
     fireEvent.click(submit);
     await waitFor(() =>
@@ -152,7 +152,7 @@ describe('AgentsPage', () => {
     renderPage(<AgentsPage />);
     await openCreateForm();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Momentum' } });
-    fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '100' } });
+    fireEvent.change(screen.getByLabelText('Paper budget ($)'), { target: { value: '100' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }));
     expect(await screen.findByText('You already have an agent with that name.')).toBeTruthy();
   });
@@ -172,7 +172,7 @@ describe('AgentsPage', () => {
     await openCreateForm();
     expect(screen.getByText('You have 3 of 3 active, so this agent will start paused. Pause another to resume it.')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Resting' } });
-    fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '100' } });
+    fireEvent.change(screen.getByLabelText('Paper budget ($)'), { target: { value: '100' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/agents', expect.objectContaining({ state: 'paused' })));
   });
@@ -191,7 +191,7 @@ describe('AgentsPage', () => {
     await openCreateForm();
     expect(screen.queryByText(/will start paused/)).toBeNull();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Many' } });
-    fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '100' } });
+    fireEvent.change(screen.getByLabelText('Paper budget ($)'), { target: { value: '100' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }));
     await waitFor(() => expect(post).toHaveBeenCalled());
     expect(post.mock.calls[0]![1]).not.toHaveProperty('state');
@@ -224,7 +224,7 @@ describe('AgentsPage', () => {
     renderPage(<AgentsPage />);
     await openCreateForm();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Racer' } });
-    fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '100' } });
+    fireEvent.change(screen.getByLabelText('Paper budget ($)'), { target: { value: '100' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }));
     expect(
       await screen.findByText(`You already have ${MAX_AGENTS_PER_USER_CEILING} agents, the most anyone may keep. Archive one to make room.`),
@@ -244,7 +244,7 @@ describe('AgentsPage', () => {
     expect(await screen.findByText('2 of 3 active')).toBeTruthy();
     await openCreateForm();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Third' } });
-    fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '100' } });
+    fireEvent.change(screen.getByLabelText('Paper budget ($)'), { target: { value: '100' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }));
     expect(await screen.findByText(/You already have as many active agents as this installation allows/)).toBeTruthy();
   });
@@ -297,7 +297,7 @@ describe('AgentsPage', () => {
     renderPage(<AgentsPage />);
     await openCreateForm();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Value' } });
-    fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '100' } });
+    fireEvent.change(screen.getByLabelText('Paper budget ($)'), { target: { value: '100' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await openCreateForm();
@@ -356,7 +356,7 @@ describe('AgentsPage', () => {
     renderPage(<AgentsPage />);
     await openCreateForm();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Miner' } });
-    fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '1000' } });
+    fireEvent.change(screen.getByLabelText('Paper budget ($)'), { target: { value: '1000' } });
     fireEvent.change(screen.getByLabelText('Max position (%)'), { target: { value: '12.555' } });
     const submit = screen.getByRole('button', { name: 'Create agent' }) as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
@@ -410,7 +410,7 @@ describe('AgentsPage', () => {
     renderPage(<AgentsPage />);
     await openCreateForm();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'A' } });
-    fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '100' } });
+    fireEvent.change(screen.getByLabelText('Paper budget ($)'), { target: { value: '100' } });
     fireEvent.change(screen.getByLabelText('Trading horizon'), { target: { value: 'long' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -418,7 +418,7 @@ describe('AgentsPage', () => {
 
     await openCreateForm();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'B' } });
-    fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '100' } });
+    fireEvent.change(screen.getByLabelText('Paper budget ($)'), { target: { value: '100' } });
     fireEvent.change(screen.getByLabelText('Trading horizon'), { target: { value: 'long' } });
     fireEvent.change(screen.getByLabelText('Additional instructions'), { target: { value: 'Day-trade momentum.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }));

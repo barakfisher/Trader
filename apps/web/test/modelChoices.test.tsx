@@ -10,6 +10,7 @@
 import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import en from '../src/i18n/locales/en.json';
 import type { ListedModelView, ModelChoicesResponse } from '@traders/shared';
 
 const get = vi.fn();
@@ -81,7 +82,7 @@ describe('the model picker', () => {
     const ask = (await screen.findByLabelText('Ask')) as HTMLSelectElement;
     const labels = [...ask.options].map((option) => option.textContent);
     expect(labels).toEqual([
-      expect.stringMatching(/^Not chosen: the default, .*Gemini 3\.7 Flash/),
+      en.models.notChosen,
       expect.stringMatching(/acme\/retired.*no longer offered/),
       'Google: Gemini 3.5 Flash-Lite (tested)',
       'Google: Gemini 3.7 Flash (tested)',
@@ -203,7 +204,9 @@ describe("an agent's model", () => {
     for (const role of ['user', 'admin'] as const) {
       render(<AgentModelCard agentId={AGENT} />, role);
       const select = (await screen.findByLabelText('The model this agent scans with')) as HTMLSelectElement;
-      expect(select.options[0]!.textContent).toMatch(/^Not chosen: the default, .*Gemini 3\.5 Flash-Lite/);
+      expect(select.options[0]!.textContent).toBe(en.models.notChosen);
+      // The option no longer names the default, so the line above the field does.
+      expect(screen.getByText(/^In use: .*Gemini 3\.5 Flash-Lite/)).toBeTruthy();
       // Tested for Ask only, so not marked tested for scans.
       expect([...select.options].map((option) => option.textContent)).toContain('Google: Gemini 3.7 Flash');
       cleanup();

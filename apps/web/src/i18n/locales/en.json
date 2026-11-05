@@ -853,6 +853,11 @@
     "opening": "Opening the conversation…",
     "openFailed": "Could not open that conversation.",
     "intro": "Ask about your portfolio, your agents and what they decided, a ticker, the news, an investing term, or how this app works. Every figure in an answer is checked against what the app looked up; it never tells you what to buy or sell.",
+    "examples": {
+      "portfolio": "How is my portfolio doing today?",
+      "tour": "Give me a tour in the app",
+      "tools": "What tools did my agent use in its last scan?"
+    },
     "label": "Your question",
     "placeholder": "Ask a question…",
     "tooLong": "{{length}} of {{max}} characters",
@@ -1106,7 +1111,7 @@
     "timezone": "Timezone",
     "timezoneNote": "Every time on screen is shown in it, and “today” - quiet hours, the daily summary, the daily snapshot - begins at midnight here.",
     "language": "Language",
-    "languageHint": "The language of this interface. Observations, explanations, answers and Telegram messages are written by the server and stay in English.",
+    "languageHint": "The language of this interface, of Telegram messages and of the daily digest. Agents write the reasons for their proposals in it, and Ask answers in the language you ask in. News, research reasons and concept explanations stay in English.",
     "interfaceLanguage": "Interface language",
     "signIn": "Sign-in",
     "spend": {
@@ -1150,7 +1155,7 @@
       "intro": "Optional. A ceiling on what this app may spend on your key in a calendar month, as a brake against an agent that runs away. At the limit, scans and questions stop until the month resets; alerts still arrive, explained by their templates. It works even on a key with no credit limit on OpenRouter.",
       "line": "This month: {{spent}} of your {{limit}} limit; it resets on {{date}}.",
       "reached": "Reached: {{spent}} of your {{limit}} limit this month. Scans and questions are stopped until {{date}}, or until you raise the limit.",
-      "label": "Limit per month (USD)",
+      "label": "Limit per month ($)",
       "save": "Save limit",
       "remove": "Remove limit",
       "bounds": "Any amount from {{min}} to {{max}}. Leave it unset for no limit.",
@@ -1445,7 +1450,7 @@
     "stateHint": "A paused agent keeps what it holds. An archived agent is kept, not deleted.",
     "fields": {
       "name": "Name",
-      "budget": "Paper budget (USD)",
+      "budget": "Paper budget ($)",
       "budgetHint": "Simulated money, not taken from your portfolio. Dollars and cents, e.g. 1000 or 1000.50.",
       "persona": "Additional instructions",
       "personaHint": "Optional, in your own words. Filled from the settings until you edit it; it never overrides them. An agent with neither instructions nor settings does not scan.",
@@ -1522,7 +1527,7 @@
     },
     "addCash": {
       "button": "Add cash",
-      "label": "Amount (USD)",
+      "label": "Amount ($)",
       "submit": "Add",
       "cancel": "Cancel",
       "failed": "Could not add cash."
@@ -1561,7 +1566,7 @@
       "typed": "My price",
       "marketHint": "The latest quote, about 15 minutes behind the market. Only while the market is open.",
       "typedHint": "Recorded as typed by you, at any time. You'll see how far it is from the last quote.",
-      "typedPrice": "Price per share (USD)",
+      "typedPrice": "Price per share ($)",
       "preview": "Preview",
       "previewTitle": "If you confirm",
       "previewFailed": "Could not preview the trade.",
@@ -1695,7 +1700,7 @@
       "scheduleElsewhere": "Scheduled scans don't run on this installation; here this agent scans only when you press Run a scan now.",
       "scheduleNext": "Next scheduled scan: {{when}}.",
       "scheduleNone": "No scheduled scan is coming: the agent is paused, has no persona, or the market calendar could not be read.",
-      "budget": "Model budget per day (USD)",
+      "budget": "Model budget per day ($)",
       "budgetHint": "Scans stop when it is spent and resume after midnight UTC. Spent today: {{spent}} of {{budget}}.",
       "budgetInvalid": "More than $0 and at most $100, dollars and cents.",
       "save": "Save scan settings"
@@ -2118,7 +2123,7 @@
     "fallback": "{{saved}} is no longer offered by OpenRouter, so {{effective}} is used until you choose another.",
     "search": "Search by name or id",
     "searchLabel": "Search the models for {{label}}",
-    "notChosen": "Not chosen: the default, {{model}}",
+    "notChosen": "Not chosen: the default",
     "noLongerOffered": "{{model}} (no longer offered)",
     "optionTested": "{{name}} (tested)",
     "matches_one": "{{count}} model matches.",
@@ -2331,11 +2336,11 @@
     "incomplete": "Some holdings are unpriced, so the value leaves them out.",
     "drawerTitle": "Cash at the broker",
     "openExplained": "Enter the cash available in your broker account now. Your holdings stay as they are; what they cost counts as money you already put in. Nothing here moves money anywhere.",
-    "openLabel": "Available cash (USD)",
+    "openLabel": "Available cash ($)",
     "openSubmit": "Set cash",
     "movementTitle": "Record a cash movement",
     "movementType": "What happened",
-    "movementAmount": "Amount (USD)",
+    "movementAmount": "Amount ($)",
     "movements": {
       "deposit": {
         "label": "Deposit",
@@ -2360,7 +2365,7 @@
     },
     "correctTitle": "Correct the balance",
     "correctExplained": "To fix a typo: set the cash to exactly what your broker shows. Until anything else is recorded, this changes the opening amount; after that, the difference counts as gain or loss, not as money put in.",
-    "correctLabel": "Cash your broker shows (USD)",
+    "correctLabel": "Cash your broker shows ($)",
     "correctSubmit": "Set balance",
     "saveFailed": "The cash could not be saved.",
     "errors": {

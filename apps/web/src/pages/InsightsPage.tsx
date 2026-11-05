@@ -96,7 +96,7 @@ export function InsightsPage() {
         <h1 className="text-base font-semibold">{t('insights.title')}</h1>
       </header>
 
-      <div role="tablist" className="flex gap-2 overflow-x-auto border-b border-border-subtle">
+      <div role="tablist" className="flex gap-2 overflow-x-auto overflow-y-hidden border-b border-border-subtle">
         {INSIGHTS_TABS.map((name) => (
           <button
             key={name}

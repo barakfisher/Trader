@@ -441,7 +441,7 @@ describe('AgentPage with the ledger', () => {
     fireEvent.change(within(panel).getByLabelText('Symbol'), { target: { value: 'AAPL' } });
     fireEvent.change(within(panel).getByLabelText('Shares (whole)'), { target: { value: '2' } });
     fireEvent.click(within(panel).getByLabelText('My price'));
-    fireEvent.change(within(panel).getByLabelText('Price per share (USD)'), { target: { value: '999' } });
+    fireEvent.change(within(panel).getByLabelText('Price per share ($)'), { target: { value: '999' } });
     fireEvent.click(within(panel).getByRole('button', { name: 'Preview' }));
     await waitFor(() =>
       expect(post).toHaveBeenCalledWith(`/agents/${AGENT_ID}/trades/preview`, {
@@ -466,7 +466,7 @@ describe('AgentPage with the ledger', () => {
     post.mockResolvedValue(AGENT);
     renderAgent();
     fireEvent.click(await screen.findByRole('button', { name: 'Add cash' }));
-    fireEvent.change(screen.getByLabelText('Amount (USD)'), { target: { value: '500' } });
+    fireEvent.change(screen.getByLabelText('Amount ($)'), { target: { value: '500' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith(`/agents/${AGENT_ID}/top-ups`, { amount: '500' }));
   });
@@ -698,7 +698,7 @@ describe('AgentPage with the ledger', () => {
     // New York 09:00 (pre-open), 10:00, 12:00, 14:00 is 16:00, 17:00, 19:00, 21:00 in Israel.
     expect(screen.getByText('On a trading day: 16:00, 17:00, 19:00, 21:00, your time.')).toBeTruthy();
     expect(screen.getByText(/4 scans a trading day · about \$0\.144 a day/)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Model budget per day (USD)'), { target: { value: '1.25' } });
+    fireEvent.change(screen.getByLabelText('Model budget per day ($)'), { target: { value: '1.25' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save scan settings' }));
     await waitFor(() =>
       expect(patch).toHaveBeenCalledWith(`/agents/${AGENT_ID}`, {
