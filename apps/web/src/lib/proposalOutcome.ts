@@ -25,23 +25,42 @@ function surfaceWords(surface: DecisionSurface | null): string {
   }
 }
 
+/**
+ * A view a newer one closed before its deadline (D392, D393): the only expiry
+ * recorded with its deadline still ahead. Nobody let this one lapse.
+ */
+export function closedByNewerView(
+  proposal: Pick<Proposal, 'state'> & Partial<Pick<Proposal, 'decidedAt' | 'expiresAt'>>,
+): boolean {
+  return (
+    proposal.state === 'expired' &&
+    proposal.decidedAt != null &&
+    proposal.expiresAt !== undefined &&
+    new Date(proposal.decidedAt).getTime() < new Date(proposal.expiresAt).getTime()
+  );
+}
+
 /** One history row's outcome: "Approved from Telegram", "Expired unanswered". */
-export function outcomeText(proposal: Pick<Proposal, 'state' | 'decidedVia'>): string {
+export function outcomeText(
+  proposal: Pick<Proposal, 'state' | 'decidedVia'> & Partial<Pick<Proposal, 'decidedAt' | 'expiresAt'>>,
+): string {
+  if (closedByNewerView(proposal)) return t('proposal.closedByNewerView');
   if (proposal.state === 'expired') return t('proposal.expiredUnanswered');
   const where = surfaceWords(proposal.decidedVia);
   return where ? t('proposal.outcome', { state: stateWord(proposal.state), where }) : stateWord(proposal.state);
 }
 
 /** One audit-trail entry: "Open → Approved, from Telegram", "Open → Expired, at its deadline". */
-export function transitionText(transition: ProposalTransition): string {
+export function transitionText(transition: ProposalTransition, expiresAt?: string): string {
   // The arrow is the catalogue's: it points along the reading direction.
   const move = t('proposal.move', { from: stateWord(transition.from), to: stateWord(transition.to) });
   if (!transition.byUser) {
     // Recorded when the sweep noticed, which can be hours after the deadline
     // itself - so the time beside this entry is not called the deadline.
-    return transition.to === 'expired'
-      ? t('proposal.recordedAfterDeadline', { move })
-      : t('proposal.bySystem', { move });
+    if (transition.to !== 'expired') return t('proposal.bySystem', { move });
+    return expiresAt !== undefined && new Date(transition.at).getTime() < new Date(expiresAt).getTime()
+      ? t('proposal.closedByNewerViewMove', { move })
+      : t('proposal.recordedAfterDeadline', { move });
   }
   const where = surfaceWords(transition.surface);
   // An approval moved back to Open is an undo; saying so beats an arrow backwards.
@@ -68,5 +87,6 @@ export function outcomeTone(state: ProposalState): 'accent' | 'warn' | 'muted' {
  * has been four hours later.
  */
 export function outcomeAt(proposal: Pick<Proposal, 'state' | 'decidedAt' | 'expiresAt'>): string | null {
+  if (closedByNewerView(proposal)) return proposal.decidedAt;
   return proposal.state === 'expired' ? proposal.expiresAt : proposal.decidedAt;
 }

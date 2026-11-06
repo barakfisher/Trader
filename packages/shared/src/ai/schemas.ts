@@ -365,6 +365,10 @@ export const assistantReplySchema = z.object({
     }),
   ),
   suggestions: z.array(z.string()),
+  proposal_draft: z
+    .object({ action: z.enum(['buy_more', 'trim', 'sell', 'buy']), symbol: z.string(), reason: z.string() })
+    .nullable()
+    .optional(),
   model: z.string().nullable(),
   fallback_from: z.string().nullable().optional(),
   cost_micro_usd: z.number().int(),

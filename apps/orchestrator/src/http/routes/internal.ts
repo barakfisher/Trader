@@ -42,6 +42,7 @@ import { EVERY_ACTIVE_USER, INSTALLATION_KINDS } from '../../runKinds.js';
 import { MARKET_BENCHMARK_SYMBOLS } from '../../services/marketBenchmarks.js';
 import { BENCHMARK_SYMBOL } from '../../services/performance.js';
 import { sweepExpiredProposals } from '../../services/proposals.js';
+import { sweepSupersededAssistantProposals } from '../../services/assistantProposals.js';
 import { sweepResearchProposals } from '../../services/researchProposals.js';
 import { planScheduledScans } from '../../services/scheduledScans.js';
 import { logger } from '../../logger.js';
@@ -258,7 +259,9 @@ async function runForInstallation(context: Context, request: RunRequest): Promis
       // Research views first (D392): a view a newer rating changed closes here,
       // and the new ones are raised and announced.
       const research = await sweepResearchProposals(context.get('notifier'));
-      return done(runId, 'ok', { expired: (await sweepExpiredProposals()).length, research });
+      // An Ask proposal a newer rating changed closes the same way (D393).
+      const assistantSuperseded = await sweepSupersededAssistantProposals();
+      return done(runId, 'ok', { expired: (await sweepExpiredProposals()).length, research, assistantSuperseded });
     }
 
     if (kind === 'auth_sweep') {

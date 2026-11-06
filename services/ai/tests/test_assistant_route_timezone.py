@@ -37,6 +37,7 @@ def asked(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, Any]]:
     async def fake_ask(**kwargs: Any) -> Any:
         state["kwargs"] = kwargs
         return SimpleNamespace(
+            proposal_draft=None,
             conversation_id=None,
             message_id=None,
             outcome="answer",

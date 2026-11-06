@@ -15,6 +15,11 @@ into a reply the user may see, or says why it may not:
   two read numbers the same way.
 - **Degenerate text**: a model stuck repeating itself passed the figure check
   once (#101); the same check runs here first.
+- **A drafted proposal** (D393): an answer may carry one when the user explicitly
+  asked for it. Its action must be one of research's words, and its reason passes
+  the same figure check. A malformed one goes back to the model; it is never
+  dropped, because the answer around it would then promise buttons that are not
+  there. `proposal_draft.py` checks it against the holdings.
 
 **Sources are the server's, never the model's.** They are built from the tools
 that actually ran this turn - a news article's own URL, the page a figure came
@@ -33,6 +38,7 @@ from typing import Any, Literal
 from app.assistant.product_guide import PAGES
 from app.llm.degenerate_text import is_degenerate
 from app.narration.evidence_validator import unsourced_figures
+from app.research.rating import ACTIONABLE_RATINGS
 
 Outcome = Literal["answer", "decline", "clarify"]
 OUTCOMES: tuple[Outcome, ...] = ("answer", "decline", "clarify")
@@ -40,6 +46,8 @@ DECLINE_REASONS = ("off_domain", "advice", "action", "prompt")
 #: Suggested next questions kept: the screen shows them as buttons.
 MAX_SUGGESTIONS = 3
 MAX_SUGGESTION_CHARS = 120
+#: A drafted proposal's reason: a sentence or two on a card, not the answer again.
+MAX_PROPOSAL_REASON_CHARS = 600
 
 _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.DOTALL)
 #: The `suggestions` member with the comma that joins it to its neighbour, whatever
@@ -53,11 +61,23 @@ _LIST_MARKER = re.compile(r"^(\s*)\d{1,2}[.)](?=\s)", re.MULTILINE)
 
 
 @dataclass(frozen=True)
+class ProposalDraft:
+    """What the model drafted (D393): no quantity and no price, by having no such field."""
+
+    action: str
+    symbol: str
+    reason: str
+
+
+@dataclass(frozen=True)
 class Reply:
     outcome: Outcome
     text: str
     reason: str | None = None
     suggestions: tuple[str, ...] = ()
+    proposal: ProposalDraft | None = None
+    #: The model wrote a `proposal` this module could not read.
+    proposal_malformed: bool = False
 
 
 @dataclass(frozen=True)
@@ -94,7 +114,30 @@ def parse(raw: str) -> Reply | None:
         for s in (raw_suggestions if isinstance(raw_suggestions, list) else [])
         if isinstance(s, str) and s.strip()
     )[:MAX_SUGGESTIONS]
-    return Reply(outcome=outcome, text=text_.strip(), reason=reason, suggestions=suggestions)
+    # Only an answer may carry one: a decline or a clarify has nothing to propose.
+    raw_proposal = data.get("proposal") if outcome == "answer" else None
+    proposal = _proposal(raw_proposal)
+    return Reply(
+        outcome=outcome,
+        text=text_.strip(),
+        reason=reason,
+        suggestions=suggestions,
+        proposal=proposal,
+        proposal_malformed=raw_proposal is not None and proposal is None,
+    )
+
+
+def _proposal(raw: Any) -> ProposalDraft | None:
+    if not isinstance(raw, dict):
+        return None
+    action, symbol, reason = raw.get("action"), raw.get("symbol"), raw.get("reason")
+    if action not in ACTIONABLE_RATINGS or not isinstance(symbol, str) or not symbol.strip():
+        return None
+    if not isinstance(reason, str) or not reason.strip():
+        return None
+    if len(reason.strip()) > MAX_PROPOSAL_REASON_CHARS:
+        return None
+    return ProposalDraft(action=action, symbol=symbol.strip().upper(), reason=reason.strip())
 
 
 def _loaded(body: str) -> Any:
@@ -167,10 +210,23 @@ def check(raw: str, *, tool_results: Sequence[Any], user_messages: Sequence[str]
     reply = parse(raw)
     if reply is None:
         return Checked(reply=None, problems=("malformed",))
+    if reply.proposal_malformed:
+        return Checked(
+            reply=reply,
+            problems=(
+                'the proposal is malformed: it needs "action" (one of '
+                f'{list(ACTIONABLE_RATINGS)}), "symbol", and a "reason" of at most '
+                f"{MAX_PROPOSAL_REASON_CHARS} characters",
+            ),
+        )
     evidence = {"tool_results": list(tool_results), "user": list(user_messages)}
     unsourced = tuple(
         figure
-        for written in (reply.text, *reply.suggestions)
+        for written in (
+            reply.text,
+            *reply.suggestions,
+            *((reply.proposal.reason,) if reply.proposal else ()),
+        )
         for figure in unsourced_figures(_as_checked(written), evidence)
     )
     if unsourced:

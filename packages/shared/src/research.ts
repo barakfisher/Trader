@@ -57,6 +57,31 @@ export interface ResearchProposalPayload {
 export const RESEARCH_STALE_DAYS = 7;
 
 /**
+ * The proposal kind Ask's draft becomes when the user taps Add to proposals
+ * (0086, D393): acknowledged like `research`, never filled.
+ */
+export const ASSISTANT_PROPOSAL_KIND = 'assistant';
+
+/**
+ * The real portfolio's acknowledge-only kinds: approving one records the assent
+ * and changes no holding (D387).
+ */
+export const ACKNOWLEDGED_PROPOSAL_KINDS: readonly string[] = [RESEARCH_PROPOSAL_KIND, ASSISTANT_PROPOSAL_KIND];
+
+/** A draft's reasons age as a rating's do; the proposal keeps the draft's deadline (D393). */
+export const ASSISTANT_DRAFT_VALID_DAYS = RESEARCH_STALE_DAYS;
+
+/** An `assistant` proposal's `payload`: the draft, and the reply it came from. No quantity, no price. */
+export interface AssistantProposalPayload {
+  action: ActionableRating;
+  symbol: string;
+  instrumentId: string;
+  /** Not a foreign key: deleting the conversation leaves the proposal standing (D393). */
+  messageId: string;
+  conversationId: string;
+}
+
+/**
  * A run still `running` after this long was cut short by a restart, and is read
  * as failed; the AI service's `store.ABANDONED_AFTER` closes it out the same way.
  */

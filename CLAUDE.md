@@ -29,7 +29,8 @@ and [docs/MILESTONES.md](docs/MILESTONES.md) before changing architecture.
    otherwise, and is marked `lang="en"` where the UI shows it.
 2. **No order execution, ever.** Approvals write to the virtual ledger only. No broker API.
    Agents and the assistant may research and speak like an advisor, on simulated accounts and on
-   the real portfolio (research views built, D392; a real-portfolio proposal is only acknowledged),
+   the real portfolio (research views built, D392; Ask's drafted proposals, D393; a real-portfolio
+   proposal is only acknowledged),
    but every such output carries the catalogue's
    not-advice line, never the model's (D385, D386); the line's final wording is the lawyer's,
    before public signup (D265).

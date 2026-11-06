@@ -1,5 +1,6 @@
 import type { AssistantDeclineReason, AssistantOutcome } from '@traders/shared';
 
+import type { StoredProposalDraft } from './assistantProposals.js';
 import { query, queryOne } from '../pool.js';
 
 /**
@@ -25,6 +26,9 @@ export interface AssistantMessageRow {
   sources: unknown;
   suggestions: unknown;
   created_at: Date;
+  proposal_draft: StoredProposalDraft | null;
+  proposal_draft_state: 'open' | 'added' | 'closed' | null;
+  proposal_draft_proposal_id: string | null;
 }
 
 export async function listAssistantConversations(
@@ -62,7 +66,8 @@ export async function listAssistantMessages(
   conversationId: string,
 ): Promise<AssistantMessageRow[]> {
   return query<AssistantMessageRow>(
-    `SELECT id, role, content, outcome, reason, sources, suggestions, created_at
+    `SELECT id, role, content, outcome, reason, sources, suggestions, created_at,
+            proposal_draft, proposal_draft_state, proposal_draft_proposal_id
        FROM assistant_messages
       WHERE user_id = $1 AND conversation_id = $2
       ORDER BY created_at, role DESC`,

@@ -4,6 +4,7 @@ import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
 import type { InsightsDaysResponse, Observation } from '@traders/shared';
 
+import { AcknowledgedNotAdvice } from './AcknowledgedNotAdvice.tsx';
 import {
   conceptLabel,
   kindLabel,
@@ -329,6 +330,7 @@ export const ObservationRow = observer(function ObservationRow({
 
         <p {...text.attributes} className="mt-1 text-sm font-medium text-text-primary">{text.headline}</p>
         <p {...text.attributes} className="mt-1 text-sm text-text-muted">{text.explanation}</p>
+        <AcknowledgedNotAdvice kind={observation.kind} />
 
         {observation.conceptRefs.length > 0 && (
           <p className="mt-2 flex flex-wrap items-center gap-1 text-2xs text-text-muted max-sm:gap-x-2 max-sm:gap-y-3.5">

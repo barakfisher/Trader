@@ -20,12 +20,10 @@ handoff #381; not yet the count of five).
   (a held/unheld vocabulary mix-up or a Hebrew figure the validator misreads are the likely causes),
   and whether a Trim/Sell/Buy more reached the inbox and Telegram within one proposal sweep (15 min).
   No real model has run the new prompt.
-- **Decisions reach 392** (next: **393**). **Migrations:** `0085` head; next free `0086`.
-- **Next, on the user's word: D387 case 4** - Ask drafts an acknowledge-only proposal in the
-  conversation, with two buttons (add to the inbox / close), only when explicitly asked; it reuses
-  the `research`-style acknowledge-only path or a kind of its own, which 0085's trigger allowlist
-  must then admit in a new migration. Read `isAdvisory()` (`services/advisoryMode.ts`) before the
-  write, as D388 requires. Then case 5 (alert narration's view). M13's gap from D392: research's
+- **Decisions reach 393** (next: **394**). **Migrations:** `0086` head; next free `0087`.
+- **D387 case 4 is built as D393** (kind `assistant`, migration `0086`). The next deploy carries
+  `0085` and `0086`. Read the first proposal request's Langfuse trace: no real model has run rule 11.
+- **Next, on the user's word:** case 5 (alert narration's view). M13's gap from D392: research's
   vocabulary is chosen in the AI service's prompt, which does not read the mode.
 - **Lesson - a decision number can be taken twice in one afternoon.** #383 was written as D389, lost
   it to #380, was renumbered D390, and lost that to #382 minutes before its merge. Fetch `main` and
@@ -6724,6 +6722,58 @@ failure they prevent.
       wording guard again (git history: `app/research/rating.py` before D392).
     - **Not yet seen with a real model:** the next scheduled research run is the first; read its
       Langfuse trace and the refused count (a held/unheld vocabulary mix-up is the likely failure).
+393. **D387 case 4 as built: Ask drafts an acknowledge-only proposal when explicitly asked, and only
+    the user's tap writes it** (the user, 2026-11-06, questions one at a time; migration `0086`).
+    - **The two buttons:** Add to proposals / Close (he: הוספה להצעות / סגירה). *Rejected:* "Add to
+      inbox" (the app's Hebrew has no such word); "Save / Not now" (the draft does not come back).
+      Neither says "Approve": that is the proposal's own button, and means something else.
+    - **Words and stocks:** research's four (D392): Buy more / Trim / Sell for a held stock, Buy for
+      one not held, on any stock in the universe, or held even if outside it (else a holding outside
+      the universe could not be trimmed; this reading is the session's, stated to the user). The app
+      makes no instrument from a reply. *Rejected:* real holdings only ("propose buying X" would get
+      no button although research raises Buy); any symbol (a reply would create an instrument).
+      A draft that fails goes back to the model once, then the whole reply is `failed`: dropped, the
+      answer around it would promise buttons that are not there.
+    - **Its own kind, `assistant`** (0086 widens the trigger on `research`'s terms: primary only, no
+      quantity or price, `buy`/`sell` still refused). *Rejected:* reusing `research`: D392's sweep
+      closes any research proposal not matching its agent's latest rating, and a draft has neither
+      agent nor rating, so it would have closed within 15 minutes.
+    - **Where it lives:** `assistant_messages.proposal_draft` on the reply, `proposal_draft_state`
+      (`open`/`added`/`closed`; `expired` is computed), `proposal_draft_proposal_id`. Observation
+      `assistant_view`, dedupe `assistant:<message id>`, so one proposal per reply, ever.
+    - **Tied to the message by id, not by a foreign key:** deleting a conversation (by hand or at 90
+      days) leaves the proposal and its decisions; the card's link to `/ask?conversation=<id>` hides
+      (`assistant_conversation_exists`). *Rejected:* a foreign key (the delete would take or orphan the
+      decision history); no link (no way back to why).
+    - **Expiry: 7 days from the writing** for draft and proposal alike (`ASSISTANT_DRAFT_VALID_DAYS`
+      = `RESEARCH_STALE_DAYS`), so a draft added on day 6 has one day left. An expired draft stays in
+      the conversation without buttons. *Rejected:* 24 hours for the draft (two clocks to explain);
+      no expiry (a three-month-old view in the inbox as if it were today's).
+    - **Telegram gets the same buttons, in a message of its own**, because a message has one keyboard
+      and the answer's holds the suggested questions. Signed (`assistantDraftToken.ts`) with no nonce:
+      both taps are idempotent, and the message is looked up under the chat's bound user, so a
+      forwarded button finds nothing. The frame's language is the draft's, from `writtenLanguage`.
+    - **One word per stock (D392 kept):** the same word already open (research or Ask) writes nothing
+      and says so; another word closes the open one as a system expiry and writes the new one. A newer
+      research rating in another word closes an Ask proposal in the proposal sweep. *Deliberate
+      asymmetry:* research raising the same word over an open Ask proposal is left alone: they agree,
+      and blocking it would need a second retry rule in the sweep.
+    - **No alert on adding** (the session's call, low risk): the user just pressed the button; it
+      waits in the inbox and on `/pending`.
+    - **Accepted limits (the session's calls, for the user to overrule):** held/not held is checked
+      when drafting, not at the tap, so a Sell drafted before the user recorded the sale can reach
+      the inbox; approving it only acknowledges, so it misleads at worst for 7 days. A rating written
+      between the draft and the tap does not close the proposal: the tap is the newer view.
+    - **`observationText` marks a reason by the page's language, not the question's** (D392's debt,
+      larger here: Ask's reason follows the question), so a Hebrew reason on an English page carries
+      `lang="en"`. The draft card itself marks it right.
+    - **"Explicitly asked" is the prompt's rule, not code's:** rule 11 and the eval cases
+      (`proposal-asked-for`, `proposal-not-asked-for`). What the code guarantees is that nothing is
+      written without the tap, so a model that over-offers costs a button, not a proposal.
+    - **D388:** `isAdvisory()` gates the reply's draft, the stored draft on read, the tap and the
+      Telegram message. *Known gap for M13:* the prompt does not read the mode.
+    - **Not yet seen with a real model:** read the first Langfuse traces for a proposal request; a
+      held/unheld mix-up should show as a `malformed` verdict followed by a repair.
 **Three PRs for the polish:** bugs first, then tap targets and text, then collapsing Research and
 Settings, because a collapsed row's height depends on the sizing rule (the user, 2026-11-05).
 ---

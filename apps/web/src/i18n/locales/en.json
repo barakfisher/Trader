@@ -499,7 +499,8 @@
     "drawdown": "Drawdown",
     "allocation_drift": "Allocation drift",
     "agent_trade": "Agent trade",
-    "research_view": "Research view"
+    "research_view": "Research view",
+    "assistant_view": "Assistant view"
   },
   "news": {
     "cashtag": "ticker ${{symbol}} in the text",
@@ -619,6 +620,8 @@
     "fromTelegram": "from Telegram",
     "inTheApp": "in the app",
     "expiredUnanswered": "Expired unanswered",
+    "closedByNewerView": "Closed by a newer view",
+    "closedByNewerViewMove": "{{move}}, closed by a newer view",
     "outcome": "{{state}} {{where}}",
     "move": "{{from}} → {{to}}",
     "recordedAfterDeadline": "{{move}}, recorded after its deadline passed",
@@ -730,6 +733,11 @@
       "acknowledgeOnly": "Approving only records that you saw it: no order is placed and no holding changes. When you trade at your broker, record the trade from the holding's menu.",
       "notAdvice": "Not financial or investment advice, and no substitute for a professional: a model's view, written by the research agent, for your own judgement.",
       "openResearch": "Read the full research"
+    },
+    "assistant": {
+      "acknowledgeOnly": "Approving only records that you saw it: no order is placed and no holding changes. When you trade at your broker, record the trade from the holding's menu.",
+      "notAdvice": "Not financial or investment advice, and no substitute for a professional: a model's view, written by the assistant, for your own judgement.",
+      "openConversation": "Open the conversation"
     }
   },
   "summary": {
@@ -895,6 +903,27 @@
     "suggestions": "Questions to ask next",
     "sources": "Sources ({{count}})",
     "notAdvice": "Not financial or investment advice, and no substitute for a professional: answers are for the simulation inside the app only.",
+    "draft": {
+      "title": "Drafted proposal",
+      "headline": {
+        "buy_more": "The assistant suggests: buy more {{symbol}}",
+        "trim": "The assistant suggests: trim {{symbol}}",
+        "sell": "The assistant suggests: sell {{symbol}}",
+        "buy": "The assistant suggests: buy {{symbol}}"
+      },
+      "acknowledgeOnly": "Approving it later only records that you saw it: no order is placed and no holding changes.",
+      "notAdvice": "Not financial or investment advice, and no substitute for a professional: a model's view, written by the assistant, for your own judgement.",
+      "add": "Add to proposals",
+      "adding": "Adding…",
+      "close": "Close",
+      "closing": "Closing…",
+      "added": "Added to your proposals.",
+      "alreadyOpen": "Already in your proposals.",
+      "openProposal": "Open the proposal",
+      "closed": "Closed. No proposal was written.",
+      "expired": "This draft has expired. Ask again for a fresh one.",
+      "failed": "That did not go through. Try again."
+    },
     "noReplyStored": "No reply was stored for this question.",
     "history": "Conversations",
     "historyLoading": "Loading conversations…",
@@ -1012,6 +1041,7 @@
     "loadFailed": "Could not load this proposal.",
     "notFoundTitle": "No such proposal",
     "notFoundBody": "This address does not match a proposal in your account. The link may be from another account, or mistyped.",
+    "closedByNewerView": "Closed by a newer view on {{when}}, before its deadline.",
     "unanswered": "Nobody answered it before its deadline, {{when}}.",
     "undoable": "{{outcome}}. It can be undone for a few seconds more.",
     "final": "{{outcome}}. It can no longer be changed.",

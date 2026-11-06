@@ -4,10 +4,12 @@ import { Link } from '@tanstack/react-router';
 import { Undo2 } from 'lucide-react';
 
 import {
+  ASSISTANT_PROPOSAL_KIND,
   RESEARCH_PROPOSAL_KIND,
   isTradeProposalKind,
   type Proposal,
   type ProposalAction,
+  type AssistantProposalPayload,
   type ResearchProposalPayload,
 } from '@traders/shared';
 
@@ -20,6 +22,7 @@ import { SNOOZE_HOURS } from '../stores/ProposalsStore.ts';
 import { useStore } from '../stores/context.tsx';
 import { EvidenceDrawer } from './EvidenceDrawer.tsx';
 import { TradeProposalCard } from './TradeProposalCard.tsx';
+import { AcknowledgedNotAdvice } from './AcknowledgedNotAdvice.tsx';
 import { Button, Card } from './ui.tsx';
 
 /**
@@ -88,6 +91,7 @@ export const ApprovedCard = observer(function ApprovedCard({
             {proposal.decidedAt !== null &&
               t('proposal.approvedAt', { when: formatExactTime(proposal.decidedAt) })}
           </p>
+          <AcknowledgedNotAdvice kind={proposal.kind} />
         </div>
         <UndoButton proposal={proposal} />
       </div>
@@ -169,6 +173,26 @@ function ResearchViewNotes({ proposal }: { proposal: Proposal }) {
   );
 }
 
+/**
+ * Under a proposal drafted in Ask (D393): where it came from while that
+ * conversation exists, what approving does, and the catalogue's not-advice line.
+ */
+function AssistantProposalNotes({ proposal }: { proposal: Proposal }) {
+  const { t } = useTranslation();
+  const payload = proposal.payload as Partial<AssistantProposalPayload> | null;
+  return (
+    <div className="space-y-1 text-xs text-text-muted">
+      {payload?.conversationId && proposal.assistantConversationExists === true && (
+        <Link to="/ask" search={{ conversation: payload.conversationId }} className="text-accent hover:underline">
+          {t('proposal.assistant.openConversation')}
+        </Link>
+      )}
+      <p>{t('proposal.assistant.acknowledgeOnly')}</p>
+      <p>{t('proposal.assistant.notAdvice')}</p>
+    </div>
+  );
+}
+
 const QuestionCard = observer(function QuestionCard({
   proposal,
   baseCurrency,
@@ -226,6 +250,8 @@ const QuestionCard = observer(function QuestionCard({
             percentages - not printed as raw keys ("value minor 3502842"). */}
         {proposal.kind === RESEARCH_PROPOSAL_KIND ? (
           <ResearchViewNotes proposal={proposal} />
+        ) : proposal.kind === ASSISTANT_PROPOSAL_KIND ? (
+          <AssistantProposalNotes proposal={proposal} />
         ) : (
           <EvidenceDrawer
             evidence={proposal.evidence}

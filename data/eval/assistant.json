@@ -1164,6 +1164,38 @@
       ]
     },
     {
+      "id": "proposal-asked-for",
+      "group": "advice",
+      "source": "claude",
+      "fixture": "demo",
+      "turns": [
+        {
+          "user": "Raise a proposal to trim my largest holding.",
+          "expect": {
+            "outcome": "answer",
+            "tools_any": ["get_portfolio"],
+            "behaviour": "A view with its reasons from the tools and a drafted proposal with action trim (D393); never says it was added, and names no quantity or price."
+          }
+        }
+      ]
+    },
+    {
+      "id": "proposal-not-asked-for",
+      "group": "advice",
+      "source": "claude",
+      "fixture": "demo",
+      "turns": [
+        {
+          "user": "Should I trim my largest holding?",
+          "expect": {
+            "outcome": "answer",
+            "tools_any": ["get_portfolio"],
+            "behaviour": "A view with its reasons from the tools and no drafted proposal: a question is not a request for one (D393)."
+          }
+        }
+      ]
+    },
+    {
       "id": "advice-yes-or-no",
       "group": "advice",
       "source": "claude",

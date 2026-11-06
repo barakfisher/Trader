@@ -11,10 +11,11 @@ import { Disclaimer } from '../components/Disclaimer.tsx';
 import { EvidenceDrawer } from '../components/EvidenceDrawer.tsx';
 import { ProposalCard, UndoButton } from '../components/ProposalCards.tsx';
 import { RecheckCard } from '../components/RecheckCard.tsx';
+import { AcknowledgedNotAdvice } from '../components/AcknowledgedNotAdvice.tsx';
 import { Card, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
 import { subjectLabel } from '../lib/observationPresentation.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
-import { outcomeAt, outcomeText, transitionText } from '../lib/proposalOutcome.ts';
+import { closedByNewerView, outcomeAt, outcomeText, transitionText } from '../lib/proposalOutcome.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
 import { observationText } from '../lib/observationText.ts';
 import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
@@ -93,7 +94,7 @@ export const ProposalPage = observer(function ProposalPage() {
             <RecheckCard proposalId={proposal.id} agentId={proposal.agentId} recheck={detail.data.recheck} />
           )}
           <SubjectLink proposal={proposal} />
-          <TrailCard transitions={detail.data?.transitions ?? []} createdAt={proposal.createdAt} />
+          <TrailCard transitions={detail.data?.transitions ?? []} createdAt={proposal.createdAt} expiresAt={proposal.expiresAt} />
           <AttemptsCard attempts={detail.data?.attempts ?? []} />
         </>
       )}
@@ -119,12 +120,15 @@ export function DecidedCard({ proposal, baseCurrency }: { proposal: Proposal; ba
           <p {...text.attributes} className="text-sm text-text-muted">{text.explanation}</p>
         )}
         <p className="text-xs text-text-muted">
-          {proposal.state === 'expired'
-            ? t('proposalPage.unanswered', { when: formatExactTime(proposal.expiresAt) })
-            : proposal.undoableUntil !== null
-              ? t('proposalPage.undoable', { outcome: outcomeText(proposal) })
-              : t('proposalPage.final', { outcome: outcomeText(proposal) })}
+          {closedByNewerView(proposal)
+            ? t('proposalPage.closedByNewerView', { when: formatExactTime(proposal.decidedAt) })
+            : proposal.state === 'expired'
+              ? t('proposalPage.unanswered', { when: formatExactTime(proposal.expiresAt) })
+              : proposal.undoableUntil !== null
+                ? t('proposalPage.undoable', { outcome: outcomeText(proposal) })
+                : t('proposalPage.final', { outcome: outcomeText(proposal) })}
         </p>
+        <AcknowledgedNotAdvice kind={proposal.kind} />
         {proposal.state === 'approved' && <UndoButton proposal={proposal} />}
         <EvidenceDrawer
           evidence={proposal.evidence}
@@ -159,7 +163,15 @@ function SubjectLink({ proposal }: { proposal: Proposal }) {
 }
 
 /** The audit trail: every state change, who or what made it, and when. Oldest first. */
-function TrailCard({ transitions, createdAt }: { transitions: ProposalTransition[]; createdAt: string }) {
+function TrailCard({
+  transitions,
+  createdAt,
+  expiresAt,
+}: {
+  transitions: ProposalTransition[];
+  createdAt: string;
+  expiresAt: string;
+}) {
   const { t } = useTranslation();
   const ordered = [...transitions].sort((a, b) => a.at.localeCompare(b.at));
   return (
@@ -171,7 +183,7 @@ function TrailCard({ transitions, createdAt }: { transitions: ProposalTransition
         </li>
         {ordered.map((transition) => (
           <li key={`${transition.at}-${transition.to}`} className="flex flex-wrap justify-between gap-x-3">
-            <span>{transitionText(transition)}</span>
+            <span>{transitionText(transition, expiresAt)}</span>
             <span className="text-xs text-text-muted">{formatExactTime(transition.at)}</span>
           </li>
         ))}

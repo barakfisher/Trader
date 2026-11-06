@@ -65,6 +65,7 @@ function proposal(overrides: Partial<Proposal> = {}): Proposal {
     agentId: 'agent-main',
     agentName: 'Main portfolio',
     agentIsPrimary: true,
+    assistantConversationExists: null,
     scanId: null,
     evidenceChecked: null,
     createdAt: '2026-09-30T05:20:00.000Z',
@@ -79,6 +80,8 @@ const EXPIRED = proposal({
   headline: 'BTC-USD drifted, never answered',
   decidedAt: '2026-09-29T05:20:00.000Z',
   decidedVia: 'system',
+  // Recorded by the sweep after the deadline: one still ahead would be a newer view closing it.
+  expiresAt: '2026-09-29T05:00:00.000Z',
 });
 const APPROVED = proposal({
   id: 'p-approved',
@@ -215,6 +218,51 @@ describe('a research view on the real portfolio (D392)', () => {
     );
     // Acknowledged like any question, never through a trade's preview.
     expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+  });
+});
+
+describe('a proposal drafted in Ask (D393)', () => {
+  const FROM_ASK = proposal({
+    id: 'p-ask',
+    kind: 'assistant',
+    payload: { action: 'trim', symbol: 'CCJ', instrumentId: 'i1', messageId: 'm1', conversationId: 'c1' },
+    headline: 'The assistant suggests: trim CCJ',
+    explanation: 'It ran hard.',
+    evidence: { symbol: 'CCJ' },
+    assistantConversationExists: true,
+  });
+
+  it('says approving only acknowledges, ends with the not-advice line, and links to the conversation', async () => {
+    serve({ '/proposals/p-ask': { proposal: FROM_ASK, transitions: [], attempts: [], recheck: null } });
+    renderAt('/proposals/p-ask');
+    expect(await screen.findByText(en.proposal.assistant.acknowledgeOnly)).toBeTruthy();
+    expect(screen.getByText(en.proposal.assistant.notAdvice)).toBeTruthy();
+    expect(screen.getByRole('link', { name: en.proposal.assistant.openConversation }).getAttribute('href')).toBe(
+      '/ask?conversation=c1',
+    );
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+  });
+
+  it('keeps the not-advice line once decided, and says when a newer view closed it', async () => {
+    const decided = { ...FROM_ASK, state: 'expired', decidedAt: '2026-09-30T06:00:00.000Z', expiresAt: '2026-10-05T06:00:00.000Z' } as const;
+    serve({ '/proposals/p-ask': { proposal: decided, transitions: [], attempts: [], recheck: null } });
+    renderAt('/proposals/p-ask');
+    expect(await screen.findByText(en.proposal.assistant.notAdvice)).toBeTruthy();
+    expect(screen.getAllByText(new RegExp(en.proposal.closedByNewerView)).length).toBeGreaterThan(0);
+  });
+
+  it('stops linking once the conversation is deleted, and the proposal stands', async () => {
+    serve({
+      '/proposals/p-ask': {
+        proposal: { ...FROM_ASK, assistantConversationExists: false },
+        transitions: [],
+        attempts: [],
+        recheck: null,
+      },
+    });
+    renderAt('/proposals/p-ask');
+    expect(await screen.findByText(en.proposal.assistant.acknowledgeOnly)).toBeTruthy();
+    expect(screen.queryByRole('link', { name: en.proposal.assistant.openConversation })).toBeNull();
   });
 });
 

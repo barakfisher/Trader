@@ -9,6 +9,7 @@
  */
 
 import type { LocalizedTexts, UiLanguage } from './language.js';
+import type { ActionableRating } from './research.js';
 
 export type AssetClass = 'equity' | 'etf' | 'crypto' | 'fx' | 'index' | 'unknown';
 
@@ -2013,6 +2014,8 @@ export interface Proposal {
   agentId: string;
   agentName: string;
   agentIsPrimary: boolean;
+  /** An `assistant` proposal: whether its conversation still exists (D393); null for other kinds. */
+  assistantConversationExists: boolean | null;
   /** The scan that proposed a trade (migration 0044); null for every other kind. */
   scanId: string | null;
   /** What that scan looked at before proposing, read from its transcript; null without a scan. */
@@ -2454,6 +2457,23 @@ export interface AssistantSourceView {
   published: string | null;
 }
 
+/** What became of a proposal the assistant drafted (D393). `expired` is computed from its age. */
+export type AssistantDraftState = 'open' | 'added' | 'closed' | 'expired';
+
+/** A proposal the assistant drafted, as a reply shows it: nothing is written until the user taps. */
+export interface AssistantProposalDraftView {
+  action: ActionableRating;
+  symbol: string;
+  /** In the language of the question; its figures were checked. */
+  reason: string;
+  state: AssistantDraftState;
+  expiresAt: string;
+  /** The proposal in the inbox, once added. */
+  proposalId: string | null;
+  /** The tap found the same word already open on this stock, so it wrote nothing new. */
+  alreadyOpen: boolean;
+}
+
 /** `POST /assistant/messages`. */
 export interface AssistantMessageInput {
   message: string;
@@ -2477,6 +2497,8 @@ export interface AssistantReplyView {
    * OpenRouter no longer lists it (D284); null otherwise. A model id: data, not copy.
    */
   fallbackFrom: string | null;
+  /** Only when the user explicitly asked for a proposal (D393). */
+  proposalDraft: AssistantProposalDraftView | null;
 }
 
 export interface AssistantConversationSummary {
@@ -2501,6 +2523,7 @@ export interface AssistantMessageView {
   sources: AssistantSourceView[];
   suggestions: string[];
   createdAt: string;
+  proposalDraft: AssistantProposalDraftView | null;
 }
 
 /** `GET /assistant/conversations/:id`. */

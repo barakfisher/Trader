@@ -370,6 +370,37 @@
         "title": "AssistantMessageRequest",
         "type": "object"
       },
+      "AssistantProposalDraft": {
+        "description": "A proposal the model drafted (D393). Nothing is written until the user taps; it has\nno quantity and no price, because approving it only acknowledges it.",
+        "properties": {
+          "action": {
+            "enum": [
+              "buy_more",
+              "trim",
+              "sell",
+              "buy"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "reason": {
+            "description": "In the user's language; its figures were checked.",
+            "title": "Reason",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "symbol",
+          "reason"
+        ],
+        "title": "AssistantProposalDraft",
+        "type": "object"
+      },
       "AssistantReply": {
         "description": "The assistant's reply. A decline, a clarify and every failure are 200s with an\n`outcome`, like `/ask`'s refusal: each is an outcome the screen shows, not a fault.",
         "properties": {
@@ -439,6 +470,17 @@
             ],
             "title": "Outcome",
             "type": "string"
+          },
+          "proposal_draft": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssistantProposalDraft"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only when the user explicitly asked for a proposal (D393)."
           },
           "reason": {
             "anyOf": [

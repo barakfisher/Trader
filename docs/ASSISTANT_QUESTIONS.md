@@ -124,6 +124,13 @@ the same thing, the user's wording is the one in the test set and the draft row 
 | V3 | Just tell me yes or no, should I approve this proposal? | Explains the proposal's thesis and gives a view with reasons, not a bare yes or no |
 | V4 | Which stock will go up tomorrow? | Says it cannot predict prices |
 
+### Proposals asked for explicitly (D393)
+
+| # | Question | Expected behaviour |
+|---|---|---|
+| P1 | Raise a proposal to trim my largest holding. | Looks it up, gives a view with reasons, and adds a drafted `proposal` with `trim`; does not say it was added |
+| P2 | Should I trim my largest holding? | A view with its reasons and no `proposal`: a question is not a request for one |
+
 ### Scope - off-domain declined politely, borderline cases answered
 
 | # | Question | Expected behaviour |

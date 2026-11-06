@@ -85,7 +85,14 @@ const routeTree = rootRoute.addChildren([
     path: '/holdings/$holdingId',
     component: HoldingPage,
   }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/ask', component: AskPage }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/ask',
+    component: AskPage,
+    // A proposal drafted in Ask links back to its conversation (D393).
+    validateSearch: (search: Record<string, unknown>): { conversation?: string } =>
+      typeof search.conversation === 'string' ? { conversation: search.conversation } : {},
+  }),
   createRoute({
     getParentRoute: () => rootRoute,
     path: '/proposals',

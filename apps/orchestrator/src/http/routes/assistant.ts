@@ -15,6 +15,10 @@
  * Listing, reading and deleting are this side's own SQL (`queries/assistant.ts`),
  * as for every table the screens read. A reply's tool transcript is not sent to
  * the browser: it is the review record, and the screen shows sources.
+ *
+ * **A drafted proposal (D393)** comes with its reply and is written only by
+ * `POST /assistant/messages/:id/proposal-draft/add`, the user's tap. A user who
+ * may not receive advice (`isAdvisory`, D388) is shown no draft at all.
  */
 
 import type { Hono } from 'hono';
@@ -24,6 +28,7 @@ import type {
   AssistantConversationResponse,
   AssistantConversationsResponse,
   AssistantConversationSummary,
+  AssistantProposalDraftView,
   AssistantReplyView,
   AssistantSourceView,
 } from '@traders/shared';
@@ -31,14 +36,18 @@ import { AiServiceError, type AssistantReply } from '@traders/shared/ai';
 
 import {
   deleteAssistantConversation,
+  findAssistantDraft,
   getAssistantConversation,
   listAssistantConversations,
   listAssistantMessages,
   type AssistantConversationRow,
+  type AssistantMessageRow,
 } from '../../db/queries.js';
 import { currentUserId, type AppEnv } from '../app.js';
 import { badRequest, notFound, upstreamFailure } from '../errors.js';
 import { limitPerUser } from '../rateLimits.js';
+import { isAdvisory } from '../../services/advisoryMode.js';
+import { addDraftToProposals, closeDraft, draftView } from '../../services/assistantProposals.js';
 import { announceModelFallbacks } from '../../services/modelFallbacks.js';
 
 /** The AI service's own bound (`AssistantMessageRequest.message`). */
@@ -88,6 +97,7 @@ export function registerAssistantRoutes(app: Hono<AppEnv>): void {
       sources: reply.sources.map(toSource),
       suggestions: reply.suggestions,
       fallbackFrom: reply.fallback_from ?? null,
+      proposalDraft: await draftOfReply(currentUserId(context), reply),
     };
     await announceModelFallbacks(currentUserId(context), context.get('notifier'));
     return context.json(body);
@@ -106,6 +116,8 @@ export function registerAssistantRoutes(app: Hono<AppEnv>): void {
     const conversation = await getAssistantConversation(userId, id);
     if (conversation === null) throw notFound('conversation not found');
     const messages = await listAssistantMessages(userId, id);
+    const advisory = await isAdvisory(userId);
+    const now = new Date();
     const body: AssistantConversationResponse = {
       conversation: toSummary(conversation),
       messages: messages.map((message) => ({
@@ -119,9 +131,28 @@ export function registerAssistantRoutes(app: Hono<AppEnv>): void {
           ? message.suggestions.filter((s): s is string => typeof s === 'string')
           : [],
         createdAt: message.created_at.toISOString(),
+        proposalDraft: advisory ? storedDraft(message, now) : null,
       })),
     };
     return context.json(body);
+  });
+
+  /** The user's tap: the one write behind a drafted proposal, and the only way it happens. */
+  app.post('/assistant/messages/:id/proposal-draft/add', async (context) => {
+    const id = context.req.param('id');
+    if (!conversationId.safeParse(id).success) throw notFound('draft not found');
+    const draft = await addDraftToProposals(currentUserId(context), id);
+    if (draft === null) throw notFound('draft not found');
+    return context.json(draft);
+  });
+
+  /** Close: marks the draft, and writes no proposal. */
+  app.post('/assistant/messages/:id/proposal-draft/close', async (context) => {
+    const id = context.req.param('id');
+    if (!conversationId.safeParse(id).success) throw notFound('draft not found');
+    const draft = await closeDraft(currentUserId(context), id);
+    if (draft === null) throw notFound('draft not found');
+    return context.json(draft);
   });
 
   /** "Delete this conversation": the conversation and every message in it. */
@@ -133,6 +164,26 @@ export function registerAssistantRoutes(app: Hono<AppEnv>): void {
     }
     return context.body(null, 204);
   });
+}
+
+/** A fresh reply's draft, read back from its row: the row is what a tap will act on. */
+async function draftOfReply(userId: string, reply: AssistantReply): Promise<AssistantProposalDraftView | null> {
+  if (!reply.proposal_draft || reply.message_id === null || !(await isAdvisory(userId))) return null;
+  const row = await findAssistantDraft(userId, reply.message_id);
+  return row === null ? null : draftView(row, new Date());
+}
+
+function storedDraft(message: AssistantMessageRow, now: Date): AssistantProposalDraftView | null {
+  if (message.proposal_draft === null || message.proposal_draft_state === null) return null;
+  return draftView(
+    {
+      created_at: message.created_at,
+      proposal_draft: message.proposal_draft,
+      proposal_draft_state: message.proposal_draft_state,
+      proposal_draft_proposal_id: message.proposal_draft_proposal_id,
+    },
+    now,
+  );
 }
 
 function toSummary(row: AssistantConversationRow): AssistantConversationSummary {

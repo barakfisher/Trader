@@ -280,5 +280,21 @@ def test_the_primary_may_be_asked_to_acknowledge_a_research_view(connection: Con
         assert refusal_text in str(refusal.value.orig), (kind, payload)
 
 
+def test_the_primary_may_be_asked_to_acknowledge_an_assistant_draft(connection: Connection) -> None:
+    """0086, D393: `assistant` holds research's terms: the primary only, and never a fill."""
+    primary = _primary(connection, SEED_USER)
+    _propose(connection, primary, "assistant")
+    for agent, payload, refusal_text in (
+        (primary, '{"quantity": "1"}', "never filled"),
+        (primary, '{"priceMinor": 100}', "never filled"),
+        (_simulated(connection), "{}", "on the real portfolio only"),
+    ):
+        savepoint = connection.begin_nested()
+        with pytest.raises(DBAPIError) as refusal:
+            _propose(connection, agent, "assistant", payload)
+        savepoint.rollback()
+        assert refusal_text in str(refusal.value.orig), payload
+
+
 def test_a_simulated_agent_may_receive_other_kinds(connection: Connection) -> None:
     _propose(connection, _simulated(connection), "trade")
