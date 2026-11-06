@@ -48,6 +48,12 @@ MAX_SUGGESTIONS = 3
 MAX_SUGGESTION_CHARS = 120
 #: A drafted proposal's reason: a sentence or two on a card, not the answer again.
 MAX_PROPOSAL_REASON_CHARS = 600
+#: An address in a drafted proposal's reason: a scheme, www, a markdown link, or a
+#: domain with a path. The reason sits directly above the Add button and outlives the
+#: conversation, and Telegram makes an address in it clickable, so an article's
+#: instruction must not be able to place a link there. A bare "Amazon.com" passes:
+#: telling it from a ticker like "TEVA.TA" would refuse real reasons.
+_ADDRESS_IN_REASON = re.compile(r"https?://|www\.|\]\(|[a-z0-9-]\.[a-z]{2,}/", re.IGNORECASE)
 
 _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.DOTALL)
 #: The `suggestions` member with the comma that joins it to its neighbour, whatever
@@ -137,6 +143,8 @@ def _proposal(raw: Any) -> ProposalDraft | None:
         return None
     if len(reason.strip()) > MAX_PROPOSAL_REASON_CHARS:
         return None
+    if _ADDRESS_IN_REASON.search(reason):
+        return None
     return ProposalDraft(action=action, symbol=symbol.strip().upper(), reason=reason.strip())
 
 
@@ -216,7 +224,7 @@ def check(raw: str, *, tool_results: Sequence[Any], user_messages: Sequence[str]
             problems=(
                 'the proposal is malformed: it needs "action" (one of '
                 f'{list(ACTIONABLE_RATINGS)}), "symbol", and a "reason" of at most '
-                f"{MAX_PROPOSAL_REASON_CHARS} characters",
+                f"{MAX_PROPOSAL_REASON_CHARS} characters with no link or web address",
             ),
         )
     evidence = {"tool_results": list(tool_results), "user": list(user_messages)}

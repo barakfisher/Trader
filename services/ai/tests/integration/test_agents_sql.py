@@ -296,5 +296,37 @@ def test_the_primary_may_be_asked_to_acknowledge_an_assistant_draft(connection: 
         assert refusal_text in str(refusal.value.orig), payload
 
 
+def test_an_update_cannot_turn_a_proposal_into_what_the_insert_refuses(
+    connection: Connection,
+) -> None:
+    """0086, D393: the trigger holds on UPDATE too, so `assistant` stays acknowledge-only."""
+    primary = _primary(connection, SEED_USER)
+    simulated = _simulated(connection)
+    _propose(connection, primary, "assistant")
+    _propose(connection, simulated, "trade")
+    raised = connection.execute(
+        text(
+            "SELECT id, agent_id FROM proposals WHERE agent_id IN "
+            "(CAST(:primary AS uuid), CAST(:simulated AS uuid))"
+        ),
+        {"primary": primary, "simulated": simulated},
+    ).all()
+    on_primary = next(row.id for row in raised if str(row.agent_id) == str(primary))
+    on_simulated = next(row.id for row in raised if str(row.agent_id) == str(simulated))
+    for proposal, assignment, refusal_text in (
+        (on_primary, 'payload = CAST(\'{"quantity": "1"}\' AS jsonb)', "never filled"),
+        (on_primary, "kind = 'buy'", "the primary agent is passive"),
+        (on_primary, f"agent_id = CAST('{simulated}' AS uuid)", "on the real portfolio only"),
+        (on_simulated, "kind = 'assistant'", "on the real portfolio only"),
+    ):
+        savepoint = connection.begin_nested()
+        with pytest.raises(DBAPIError) as refusal:
+            connection.execute(
+                text(f"UPDATE proposals SET {assignment} WHERE id = :id"), {"id": proposal}
+            )
+        savepoint.rollback()
+        assert refusal_text in str(refusal.value.orig), assignment
+
+
 def test_a_simulated_agent_may_receive_other_kinds(connection: Connection) -> None:
     _propose(connection, _simulated(connection), "trade")

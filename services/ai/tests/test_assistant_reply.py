@@ -368,6 +368,11 @@ def test_only_an_answer_carries_one() -> None:
             "symbol": "NVDA",
             "reason": " ".join(str(i) for i in range(MAX_PROPOSAL_REASON_CHARS)),
         },
+        {"action": "trim", "symbol": "NVDA", "reason": "Details: https://x.example/login"},
+        {"action": "trim", "symbol": "NVDA", "reason": "Details: HTTP://x.example"},
+        {"action": "trim", "symbol": "NVDA", "reason": "Details: www.x.example"},
+        {"action": "trim", "symbol": "NVDA", "reason": "Details: x.example/login"},
+        {"action": "trim", "symbol": "NVDA", "reason": "See [this](/insights)."},
         "trim NVDA",
     ],
 )
@@ -377,6 +382,18 @@ def test_a_malformed_proposal_goes_back_rather_than_being_dropped(proposal: Any)
 
     assert not checked.valid
     assert "the proposal is malformed" in checked.problems[0]
+
+
+@pytest.mark.parametrize(
+    "reason",
+    ["Listed as TEVA.TA and BRK.B, and it ran hard.", "It ran hard, so take some off."],
+)
+def test_a_reason_with_no_address_stands(reason: str) -> None:
+    """Only an address goes back: a dotted ticker is not one."""
+    reply = parse(_with_proposal({"action": "trim", "symbol": "NVDA", "reason": reason}))
+
+    assert reply is not None and reply.proposal is not None
+    assert reply.proposal.reason == reason
 
 
 def test_a_proposals_reason_is_checked_for_figures_like_the_answer() -> None:

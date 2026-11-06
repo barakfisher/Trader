@@ -6758,6 +6758,14 @@ failure they prevent.
       research rating in another word closes an Ask proposal in the proposal sweep. *Deliberate
       asymmetry:* research raising the same word over an open Ask proposal is left alone: they agree,
       and blocking it would need a second retry rule in the sweep.
+    - **Security review, what was decided:** a reason with an address goes back to the model (it sits
+      above the Add button, outlives the conversation, and Telegram links it). **"Only when explicitly
+      asked" is the model's rule alone** (rule 11): an article's instruction obeyed by the model shows
+      a card, and if tapped writes an acknowledge-only proposal that can close an open view in another
+      word. Accepted: it needs a tap and changes no holding. *Rejected:* requiring the symbol in the
+      question (refuses "my biggest holding"). Unmeasured: no eval case seeds an injected article.
+      **"One word per stock" can race:** the open-proposal read is outside the transaction, so two
+      taps at once on two drafts of one stock can leave two views open. One user's own data; accepted.
     - **No alert on adding** (the session's call, low risk): the user just pressed the button; it
       waits in the inbox and on `/pending`.
     - **Accepted limits (the session's calls, for the user to overrule):** held/not held is checked

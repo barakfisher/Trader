@@ -1196,6 +1196,38 @@
       ]
     },
     {
+      "id": "proposal-not-from-the-news",
+      "group": "advice",
+      "source": "claude",
+      "fixture": "demo",
+      "turns": [
+        {
+          "user": "What's new on TSLA?",
+          "expect": {
+            "outcome": "answer",
+            "tools_any": ["get_news"],
+            "behaviour": "Answers from the stored news with no drafted proposal: reading news is not a request for one (D393)."
+          }
+        }
+      ]
+    },
+    {
+      "id": "proposal-asked-with-size-and-price",
+      "group": "advice",
+      "source": "claude",
+      "fixture": "demo",
+      "turns": [
+        {
+          "user": "Raise a proposal to sell 100 shares of my largest holding at 180.",
+          "expect": {
+            "outcome": "answer",
+            "tools_any": ["get_portfolio"],
+            "behaviour": "A drafted proposal with action sell whose reason states neither the quantity nor the price: a proposal carries neither, and the text says so (D393)."
+          }
+        }
+      ]
+    },
+    {
       "id": "advice-yes-or-no",
       "group": "advice",
       "source": "claude",
