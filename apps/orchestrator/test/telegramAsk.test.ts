@@ -9,6 +9,7 @@
 
 import type { AssistantReply } from '@traders/shared/ai';
 import { AiServiceError } from '@traders/shared/ai';
+import { ASSISTANT_DRAFT_VALID_DAYS } from '@traders/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RATE_LIMITS, memoryRateLimits, userKey } from '../src/http/rateLimits.js';
 
@@ -23,12 +24,19 @@ vi.mock('../src/db/queries.js', () => ({
   setTelegramConversation: vi.fn(async () => undefined),
   getOrCreateUserSettings: vi.fn(async () => ({ language: 'en', notify_severity: 'high' })),
   getUser: vi.fn(async () => ({ id: USER, timezone: 'Asia/Jerusalem', base_currency: 'USD' })),
+  findAssistantDraft: vi.fn(async () => null),
+  closeAssistantDraft: vi.fn(async () => undefined),
+  createAssistantProposal: vi.fn(async () => 'p-new'),
+  listOpenAcknowledgedProposals: vi.fn(async () => []),
+  markAssistantDraftAdded: vi.fn(async () => undefined),
+  applyProposalTransition: vi.fn(async () => ({ applied: true, intentId: null })),
 }));
 
 const queries = await import('../src/db/queries.js');
 const { handleTelegramUpdate } = await import('../src/telegram/updates.js');
 const { MAX_QUESTION_CHARS, QUIET_HOURS, minutesOf, startQuestion } = await import('../src/telegram/assistantQuestion.js');
 const { TelegramNotifier } = await import('../src/telegram/client.js');
+const { encodeAssistantDraftData } = await import('../src/telegram/assistantDraftToken.js');
 const { MESSAGES } = await import('../src/notify/messages.js');
 const { MAX_NEWS_SOURCES, flattenMarkdown, plainAnswer } = await import('../src/telegram/plainAnswer.js');
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');
@@ -309,5 +317,154 @@ describe('the reply as plain text (D223)', () => {
     await askAndWait('לקנות NVDA?');
 
     expect(messagesSent()[0]!.text).toBe('אני לא אומר מה לקנות.');
+  });
+});
+
+describe('a proposal the assistant drafted (D393)', () => {
+  const MESSAGE = '90000000-0000-0000-0000-000000000001';
+  const DRAFT = { action: 'trim' as const, symbol: 'CCJ', reason: 'It ran hard.' };
+  const SECRET = 'a-signing-secret-long-enough';
+  const stored = (state: string, proposalId: string | null = null) =>
+    ({
+      message_id: MESSAGE,
+      conversation_id: CONVERSATION,
+      user_id: USER,
+      created_at: new Date(),
+      proposal_draft: { ...DRAFT, instrument_id: 'i1' },
+      proposal_draft_state: state,
+      proposal_draft_proposal_id: proposalId,
+      primary_agent_id: 'primary',
+    }) as never;
+
+  async function asked(signingSecret: string | undefined = SECRET) {
+    assistantMessage.mockResolvedValue(reply({ message_id: MESSAGE, proposal_draft: DRAFT }));
+    const d = deps();
+    const { done } = await startQuestion({
+      telegram: d.notifier,
+      ai: d.ai,
+      userId: USER,
+      chatId: String(CHAT),
+      question: 'Raise a proposal to trim CCJ',
+      rateLimits: d.rateLimits,
+      signingSecret,
+    });
+    await done;
+  }
+
+  it('sends it as its own message, keeping the suggested questions on the answer', async () => {
+    await asked();
+
+    const messages = sent.filter((call) => call.method === 'sendMessage');
+    expect(messages).toHaveLength(2);
+    expect(messages[0]!.body.reply_markup).toMatchObject({ keyboard: [[{ text: 'Which holding moved most?' }]] });
+    const text = String(messages[1]!.body.text);
+    expect(text).toContain(MESSAGES.en.assistantProposalHeadline('trim', 'CCJ'));
+    expect(text).toContain('It ran hard.');
+    expect(text.endsWith(MESSAGES.en.assistantNotAdvice)).toBe(true);
+    const keyboard = (messages[1]!.body.reply_markup as { inline_keyboard: { text: string }[][] }).inline_keyboard;
+    const [add, close] = keyboard[0]!;
+    expect(add!.text).toBe(MESSAGES.en.assistantDraft.add);
+    expect(close!.text).toBe(MESSAGES.en.assistantDraft.close);
+  });
+
+  it('sends no buttons it could not sign', async () => {
+    await asked('');
+
+    expect(sent.filter((call) => call.method === 'sendMessage')).toHaveLength(1);
+  });
+
+  it('writes nothing until the tap, then takes the buttons away and says what happened', async () => {
+    await asked();
+    expect(queries.createAssistantProposal).not.toHaveBeenCalled();
+
+    vi.mocked(queries.findAssistantDraft)
+      .mockResolvedValueOnce(stored('open'))
+      .mockResolvedValueOnce(stored('added', 'p-new'));
+    sent = [];
+    await handleTelegramUpdate(
+      deps(),
+      {
+        update_id: 7,
+        callback_query: {
+          id: 'cb',
+          data: encodeAssistantDraftData({ messageId: MESSAGE, action: 'add' }, SECRET),
+          from: { id: CHAT },
+          message: { message_id: 55, chat: { id: CHAT, type: 'private' } },
+        },
+      },
+    );
+
+    expect(queries.createAssistantProposal).toHaveBeenCalledTimes(1);
+    const edit = sent.find((call) => call.method === 'editMessageText')!;
+    expect(String(edit.body.text)).toContain(MESSAGES.en.assistantDraft.added);
+    expect(edit.body.reply_markup).toEqual({ inline_keyboard: [] });
+  });
+
+  it("finds nothing behind a forwarded button: the draft is looked up under the chat's own user", async () => {
+    vi.mocked(queries.findAssistantDraft).mockResolvedValue(null);
+    await handleTelegramUpdate(
+      deps(),
+      {
+        update_id: 8,
+        callback_query: {
+          id: 'cb',
+          data: encodeAssistantDraftData({ messageId: MESSAGE, action: 'add' }, SECRET),
+          from: { id: CHAT },
+          message: { message_id: 55, chat: { id: CHAT, type: 'private' } },
+        },
+      },
+    );
+
+    expect(queries.findAssistantDraft).toHaveBeenCalledWith(USER, MESSAGE);
+    expect(queries.createAssistantProposal).not.toHaveBeenCalled();
+    expect(sent.find((call) => call.method === 'answerCallbackQuery')!.body.text).toBe(MESSAGES.en.buttonInvalid);
+  });
+
+  const tapDraft = (action: 'add' | 'close') =>
+    handleTelegramUpdate(deps(), {
+      update_id: 9,
+      callback_query: {
+        id: 'cb',
+        data: encodeAssistantDraftData({ messageId: MESSAGE, action }, SECRET),
+        from: { id: CHAT },
+        message: { message_id: 55, chat: { id: CHAT, type: 'private' } },
+      },
+    });
+
+  it('a Close says so, writes no proposal, and the not-advice line stays last', async () => {
+    vi.mocked(queries.findAssistantDraft).mockResolvedValue(stored('closed'));
+
+    await tapDraft('close');
+
+    expect(queries.closeAssistantDraft).toHaveBeenCalled();
+    expect(queries.createAssistantProposal).not.toHaveBeenCalled();
+    const text = String(sent.find((call) => call.method === 'editMessageText')!.body.text);
+    expect(text).toContain(MESSAGES.en.assistantDraft.closed);
+    expect(text.endsWith(MESSAGES.en.assistantNotAdvice)).toBe(true);
+  });
+
+  it('a tap past the deadline writes nothing and says it expired', async () => {
+    const old = new Date(Date.now() - (ASSISTANT_DRAFT_VALID_DAYS + 1) * 86_400_000);
+    vi.mocked(queries.findAssistantDraft).mockResolvedValue({ ...(stored('open') as object), created_at: old } as never);
+
+    await tapDraft('add');
+
+    expect(queries.createAssistantProposal).not.toHaveBeenCalled();
+    expect(String(sent.find((call) => call.method === 'editMessageText')!.body.text)).toContain(
+      MESSAGES.en.assistantDraft.expired,
+    );
+  });
+
+  it('a chat whose user has not accepted the legal text is refused before the draft is read', async () => {
+    vi.mocked(queries.findTelegramBindingByChat).mockResolvedValueOnce({
+      user_id: USER,
+      chat_id: String(CHAT),
+      legal_accepted: false,
+    } as never);
+
+    await tapDraft('add');
+
+    expect(queries.findAssistantDraft).not.toHaveBeenCalled();
+    expect(queries.createAssistantProposal).not.toHaveBeenCalled();
   });
 });

@@ -30,6 +30,8 @@ export interface ProposalRow {
   scan_id: string | null;
   /** That scan's tool calls (`SCAN_TOOL_CALLS`), for the "Evidence checked" line; null without a scan. */
   scan_tool_calls: unknown[] | null;
+  /** An `assistant` proposal: whether its conversation still exists (D393); null otherwise. */
+  assistant_conversation_exists: boolean | null;
 }
 
 /**
@@ -98,7 +100,11 @@ const PROPOSAL_COLUMNS = `p.id, p.user_id, p.observation_id, p.kind, p.payload, 
        p.expires_at, p.snoozed_until, p.decided_at, p.decided_via, p.created_at,
        o.severity, o.subject_ref, o.headline, o.explanation, o.localized, o.evidence,
        a.id AS agent_id, a.name AS agent_name, a.is_primary AS agent_is_primary, p.scan_id,
-       ${SCAN_TOOL_CALLS} AS scan_tool_calls`;
+       ${SCAN_TOOL_CALLS} AS scan_tool_calls,
+       CASE WHEN p.kind = 'assistant' THEN EXISTS (
+         SELECT 1 FROM assistant_conversations c
+          WHERE c.user_id = p.user_id AND c.id = (p.payload ->> 'conversationId')::uuid
+       ) END AS assistant_conversation_exists`;
 
 /** The joins `PROPOSAL_COLUMNS` reads from. */
 const PROPOSAL_FROM = `proposals p

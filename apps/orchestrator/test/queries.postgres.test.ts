@@ -2899,6 +2899,140 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe("Ask's drafted proposals (0086, D393)", () => {
+    it('a draft is written by the tap only, once, and a newer word closes it', async () => {
+      const pool = getPool();
+      const symbol = `A${randomUUID().slice(0, 8)}`.toUpperCase();
+      const instrument = (
+        await pool.query<{ id: string }>(
+          `INSERT INTO instruments (symbol, asset_class, name) VALUES ($1, 'equity', 'Asked') RETURNING id`,
+          [symbol],
+        )
+      ).rows[0]!.id;
+      const conversation = (
+        await pool.query<{ id: string }>(
+          `INSERT INTO assistant_conversations (user_id, title) VALUES ($1, 'Draft') RETURNING id`,
+          [USER],
+        )
+      ).rows[0]!.id;
+      const message = (
+        await pool.query<{ id: string }>(
+          `INSERT INTO assistant_messages
+             (conversation_id, user_id, role, content, outcome, proposal_draft, proposal_draft_state)
+           VALUES ($1, $2, 'assistant', 'My view.', 'answer', $3::jsonb, 'open') RETURNING id`,
+          [
+            conversation,
+            USER,
+            JSON.stringify({ action: 'trim', symbol, instrument_id: instrument, reason: 'Why.' }),
+          ],
+        )
+      ).rows[0]!.id;
+      const analyst = (
+        await pool.query<{ id: string }>(
+          `INSERT INTO agents (user_id, slug, name, persona, budget_minor)
+           VALUES ($1, 'ask-analyst', 'Ask analyst', 'p', 100) RETURNING id`,
+          [USER],
+        )
+      ).rows[0]!.id;
+      const proposalsOf = async () =>
+        (await pool.query(`SELECT id FROM proposals WHERE user_id = $1 AND kind = 'assistant'`, [USER])).rows;
+      try {
+        // Another user's id finds nothing, and the draft alone is no proposal.
+        expect(await queries.findAssistantDraft(randomUUID(), message)).toBeNull();
+        const row = await queries.findAssistantDraft(USER, message);
+        expect(row).toMatchObject({ proposal_draft_state: 'open', primary_agent_id: AGENT });
+        expect(await proposalsOf()).toEqual([]);
+
+        const payload = {
+          action: 'trim' as const,
+          symbol,
+          instrumentId: instrument,
+          messageId: message,
+          conversationId: conversation,
+        };
+        const toCreate = {
+          userId: USER,
+          primaryAgentId: AGENT,
+          payload,
+          expiresAt: new Date(Date.now() + 86_400_000),
+          headline: `The assistant suggests: trim ${symbol}`,
+          rationale: 'Why.',
+          localized: {},
+          contradicting: [],
+        };
+        const proposalId = await queries.createAssistantProposal(toCreate);
+        expect(proposalId).not.toBeNull();
+        // One per reply: a second tap writes nothing.
+        expect(await queries.createAssistantProposal(toCreate)).toBeNull();
+        expect(await proposalsOf()).toHaveLength(1);
+        expect(await queries.findAssistantDraft(USER, message)).toMatchObject({
+          proposal_draft_state: 'added',
+          proposal_draft_proposal_id: proposalId,
+        });
+        const open = await queries.listOpenAcknowledgedProposals(USER, AGENT, symbol);
+        expect(open).toEqual([expect.objectContaining({ id: proposalId, action: 'trim' })]);
+
+        // Approving only acknowledges: an intent is recorded and no holding changes (D387).
+        const held = async () =>
+          (await pool.query('SELECT count(*)::int AS n FROM holdings WHERE instrument_id = $1', [instrument])).rows[0].n;
+        const heldBefore = await held();
+        const { applyDecision } = await import('../src/services/proposals.js');
+        expect(await applyDecision({ userId: USER, proposalId: proposalId!, action: 'approve', surface: 'web' })).toMatchObject({
+          outcome: 'applied',
+          state: 'approved',
+        });
+        expect(await held()).toBe(heldBefore);
+        const intents = await pool.query('SELECT kind FROM intents WHERE proposal_id = $1', [proposalId]);
+        expect(intents.rows).toEqual([{ kind: 'assistant' }]);
+        expect(await applyDecision({ userId: USER, proposalId: proposalId!, action: 'undo', surface: 'web' })).toMatchObject({
+          outcome: 'applied',
+        });
+
+        // A newer rating by the user's research agent in the same word leaves it; another closes it.
+        await queries.setResearchAgent(USER, analyst);
+        const run = (
+          await pool.query<{ id: string }>(
+            `INSERT INTO research_runs (user_id, agent_id, trigger, status, finished_at)
+             VALUES ($1, $2, 'manual', 'done', now()) RETURNING id`,
+            [USER, analyst],
+          )
+        ).rows[0]!.id;
+        const rate = (rating: string) =>
+          pool.query(
+            `INSERT INTO research_ratings (run_id, user_id, agent_id, instrument_id, symbol, status, rating, rationale)
+             VALUES ($1, $2, $3, $4, $5, 'rated', $6, 'r')`,
+            [run, USER, analyst, instrument, symbol, rating],
+          );
+        const superseded = async () =>
+          (await queries.listSupersededAssistantProposals()).filter((candidate) => candidate.id === proposalId);
+        await rate('trim');
+        expect(await superseded()).toEqual([]);
+        await rate('hold');
+        expect(await superseded()).toHaveLength(1);
+
+        // The conversation goes, the proposal stays, and its card stops linking back.
+        expect(await queries.deleteAssistantConversation(USER, conversation)).toBe(true);
+        expect(await queries.findProposal(USER, proposalId!)).toMatchObject({
+          kind: 'assistant',
+          assistant_conversation_exists: false,
+        });
+      } finally {
+        await pool.query(
+          `DELETE FROM intents WHERE proposal_id IN (SELECT id FROM proposals WHERE user_id = $1 AND kind = 'assistant')`,
+          [USER],
+        );
+        await pool.query(`DELETE FROM proposals WHERE user_id = $1 AND kind = 'assistant'`, [USER]);
+        await pool.query(`DELETE FROM observations WHERE user_id = $1 AND kind = 'assistant_view'`, [USER]);
+        await pool.query('DELETE FROM assistant_conversations WHERE id = $1', [conversation]);
+        await pool.query('DELETE FROM research_ratings WHERE agent_id = $1', [analyst]);
+        await queries.setResearchAgent(USER, null);
+        await pool.query('DELETE FROM research_runs WHERE agent_id = $1', [analyst]);
+        await pool.query('DELETE FROM agents WHERE id = $1', [analyst]);
+        await pool.query('DELETE FROM instruments WHERE id = $1', [instrument]);
+      }
+    });
+  });
+
   describe('sessions (0071, D261)', async () => {
     const { sessionTokenHash } = await import('../src/http/auth.js');
     const TTL_HOURS = 1;

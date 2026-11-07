@@ -130,6 +130,7 @@ function toWire(row: ProposalRow, now: Date) {
     agentId: row.agent_id,
     agentName: row.agent_name,
     agentIsPrimary: row.agent_is_primary,
+    assistantConversationExists: row.assistant_conversation_exists ?? null,
     scanId: row.scan_id,
     evidenceChecked: row.scan_id ? evidenceCheckedFrom(row.scan_tool_calls ?? []) : null,
   };

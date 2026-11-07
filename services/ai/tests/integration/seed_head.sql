@@ -358,6 +358,16 @@ INSERT INTO observations (id, user_id, agent_id, kind, severity, subject_kind, s
 INSERT INTO proposals (id, user_id, agent_id, observation_id, kind, payload, state, expires_at) VALUES
   ('50000000-0000-0000-0000-000000000031', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', '30000000-0000-0000-0000-000000000031', 'research',
    '{"action": "trim", "symbol": "EQTY"}', 'pending', now() + interval '7 days');
+-- D393 (0086): a draft in each state, and a proposal Ask's draft raised; 0086's downgrade refuses it.
+INSERT INTO assistant_messages (conversation_id, user_id, role, content, outcome, proposal_draft, proposal_draft_state)
+SELECT '80000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', 'assistant', 'A view.', 'answer',
+       '{"action": "trim", "symbol": "EQTY", "instrument_id": "10000000-0000-0000-0000-000000000001", "reason": "Why."}', state
+  FROM unnest(ARRAY['open', 'added', 'closed']) AS state;
+INSERT INTO observations (id, user_id, agent_id, kind, severity, subject_kind, subject_ref, headline, dedupe_key) VALUES
+  ('30000000-0000-0000-0000-000000000032', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'assistant_view', 'notable', 'instrument', 'instrument:EQTY', 'The assistant suggests: trim EQTY', 'assistant:seed');
+INSERT INTO proposals (id, user_id, agent_id, observation_id, kind, payload, state, expires_at) VALUES
+  ('50000000-0000-0000-0000-000000000032', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', '30000000-0000-0000-0000-000000000032', 'assistant',
+   '{"action": "trim", "symbol": "EQTY"}', 'pending', now() + interval '7 days');
 INSERT INTO llm_calls (user_id, agent_id, purpose, provider, model, outcome, latency_ms, prompt) VALUES
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'research',
    'openrouter', 'm', 'ok', 900, 'p');

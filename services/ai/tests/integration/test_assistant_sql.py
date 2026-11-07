@@ -756,6 +756,100 @@ async def test_an_unsourced_figure_is_sent_back_once_and_the_repair_is_shown(
     assert "figures not in the evidence: 83.71" in correction.text
 
 
+def _draft(action: str, symbol: str, reason: str = "It ran hard.") -> dict[str, str]:
+    return {"action": action, "symbol": symbol, "reason": reason}
+
+
+def _unheld(engine: Engine, account: dict[str, Any]) -> str:
+    return next(
+        symbol
+        for symbol in _symbols(engine, 5)
+        if symbol not in (account["held"], account["unpriced"])
+    )
+
+
+async def test_a_drafted_proposal_is_stored_on_its_reply_and_nothing_else_is_written(
+    loaded: Engine, account: dict[str, Any]
+) -> None:
+    """D393: the model's draft is a row of the conversation; the user's tap makes it a proposal."""
+    symbol = account["held"]
+    llm = ScriptedLLM(_reply(outcome="answer", text="My view.", proposal=_draft("trim", symbol)))
+
+    turn = await _ask(loaded, account, llm, f"Raise a proposal to trim {symbol}")
+
+    assert turn.outcome == "answer"
+    assert turn.proposal_draft == {
+        "action": "trim",
+        "symbol": symbol,
+        "instrument_id": _instrument(loaded, symbol),
+        "reason": "It ran hard.",
+    }
+    with loaded.connect() as connection:
+        stored = connection.execute(
+            text(
+                "SELECT proposal_draft, proposal_draft_state FROM assistant_messages "
+                "WHERE id = CAST(:id AS uuid)"
+            ),
+            {"id": turn.message_id},
+        ).one()
+        written = connection.execute(
+            text(
+                "SELECT count(*) FROM proposals WHERE user_id = CAST(:u AS uuid) "
+                "AND kind = 'assistant'"
+            ),
+            {"u": account["user"]},
+        ).scalar_one()
+    assert stored.proposal_draft["symbol"] == symbol and stored.proposal_draft_state == "open"
+    assert written == 0
+
+
+async def test_a_draft_that_does_not_fit_the_holdings_goes_back_once(
+    loaded: Engine, account: dict[str, Any]
+) -> None:
+    held = account["held"]
+    llm = ScriptedLLM(
+        _reply(outcome="answer", text="My view.", proposal=_draft("buy", held)),
+        _reply(outcome="answer", text="My view.", proposal=_draft("buy_more", held)),
+    )
+
+    turn = await _ask(loaded, account, llm, f"Propose buying {held}")
+
+    assert turn.proposal_draft is not None and turn.proposal_draft["action"] == "buy_more"
+    assert llm.verdicts == ["malformed", "accepted"]
+    correction = llm.sent[1][-1]
+    assert isinstance(correction, UserMessage)
+    assert f"{held} is held" in correction.text
+
+
+@pytest.mark.parametrize("action", ["buy_more", "trim", "sell"])
+async def test_a_stock_not_held_can_only_be_bought(
+    loaded: Engine, account: dict[str, Any], action: str
+) -> None:
+    symbol = _unheld(loaded, account)
+    llm = ScriptedLLM(
+        _reply(outcome="answer", text="My view.", proposal=_draft(action, symbol)),
+        _reply(outcome="answer", text="My view.", proposal=_draft("buy", symbol)),
+    )
+
+    turn = await _ask(loaded, account, llm, f"Raise a proposal on {symbol}")
+
+    assert turn.proposal_draft is not None and turn.proposal_draft["action"] == "buy"
+
+
+async def test_a_stock_the_app_does_not_know_fails_and_shows_no_draft(
+    loaded: Engine, account: dict[str, Any]
+) -> None:
+    llm = ScriptedLLM(
+        _reply(outcome="answer", text="My view.", proposal=_draft("buy", "NOSUCH")),
+        _reply(outcome="answer", text="My view.", proposal=_draft("buy", "NOSUCH")),
+    )
+
+    turn = await _ask(loaded, account, llm, "Raise a proposal to buy NOSUCH")
+
+    assert turn.outcome == "failed" and turn.proposal_draft is None
+    assert "the app does not know" in turn.problems[0]
+
+
 async def test_a_reply_that_fails_twice_is_not_shown(
     loaded: Engine, account: dict[str, Any]
 ) -> None:

@@ -65,7 +65,10 @@ SECTIONS = MappingProxyType(
             "page (/proposals/<id>). "
             "Targets (/targets): the share of the portfolio the user means to hold in each "
             "instrument, which the drift rule compares against. "
-            "Ask (/ask): this assistant. "
+            "Ask (/ask): this assistant. Asked explicitly to raise a proposal on a stock, it "
+            "drafts one in the conversation with two buttons, Add to proposals and Close; "
+            "nothing is written until the user taps the first, and approving it only "
+            "acknowledges, like a research view. A draft can be added until it expires. "
             "Settings (/settings): which findings need a decision, which may interrupt, quiet "
             "hours, mute, language, and connecting Telegram."
         ),

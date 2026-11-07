@@ -130,16 +130,19 @@ def add_reply(
     model: str | None,
     cost_micro_usd: int,
     at: datetime,
+    proposal_draft: dict[str, str] | None = None,
 ) -> str:
     message_id = connection.execute(
         text(
             """
             INSERT INTO assistant_messages
                 (conversation_id, user_id, role, content, outcome, reason, sources,
-                 suggestions, tool_calls, model, cost_micro_usd, created_at)
+                 suggestions, tool_calls, model, cost_micro_usd, created_at,
+                 proposal_draft, proposal_draft_state)
             VALUES (CAST(:conversation AS uuid), CAST(:user AS uuid), 'assistant', :content,
                     :outcome, :reason, CAST(:sources AS jsonb), CAST(:suggestions AS jsonb),
-                    CAST(:tool_calls AS jsonb), :model, :cost, :at)
+                    CAST(:tool_calls AS jsonb), :model, :cost, :at,
+                    CAST(:proposal_draft AS jsonb), :proposal_draft_state)
             RETURNING id::text
             """
         ),
@@ -155,6 +158,10 @@ def add_reply(
             "model": model,
             "cost": cost_micro_usd,
             "at": at,
+            "proposal_draft": (
+                json.dumps(proposal_draft, ensure_ascii=False) if proposal_draft else None
+            ),
+            "proposal_draft_state": "open" if proposal_draft else None,
         },
     ).scalar_one()
     connection.execute(

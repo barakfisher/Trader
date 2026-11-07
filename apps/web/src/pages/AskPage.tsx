@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { observer } from 'mobx-react-lite';
-import { Link } from '@tanstack/react-router';
+import { Link, useSearch } from '@tanstack/react-router';
 import { ExternalLink, MessageCircleQuestion, Plus, Trash2 } from 'lucide-react';
 
-import { writtenLanguage, type AssistantReplyView, type AssistantSourceView } from '@traders/shared';
+import {
+  writtenLanguage,
+  type AssistantProposalDraftView,
+  type AssistantReplyView,
+  type AssistantSourceView,
+} from '@traders/shared';
 
 import { AssistantText } from '../components/AssistantText.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
@@ -32,6 +37,13 @@ import { leftToRight } from '../i18n/format.ts';
 export const AskPage = observer(function AskPage() {
   const { ask } = useStore();
   const { t } = useTranslation();
+  // A proposal links back to the conversation that drafted it (D393).
+  const { conversation } = useSearch({ strict: false }) as { conversation?: string };
+  useEffect(() => {
+    if (conversation !== undefined && conversation !== ask.conversationId) void ask.open(conversation);
+    // Once per link: opening another conversation from the list must not bounce back.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversation]);
   const box = useRef<HTMLTextAreaElement>(null);
   const tooLong = ask.draft.length > MAX_QUESTION_LENGTH;
   // D245, D280: a question that nobody may pay for is not sent; the notice says why.
@@ -173,7 +185,7 @@ function Waiting({ since }: { since: number }) {
   return <Spinner label={t('ask.thinking', { seconds: Math.floor((now - since) / 1000) })} />;
 }
 
-function ReplyView({
+const ReplyView = observer(function ReplyView({
   reply,
   repliedAt,
   showSuggestions,
@@ -221,13 +233,86 @@ function ReplyView({
       )}
       <Sources sources={reply.sources} />
       {/* An answer may give a view like an advisor's; the catalogue says it is not advice (D386). */}
-      {reply.outcome === 'answer' && <p className="text-xs text-text-muted">{t('ask.notAdvice')}</p>}
+      {/* A draft ends with its own line, about the real portfolio; two would contradict each other. */}
+      {reply.outcome === 'answer' && !reply.proposalDraft && <p className="text-xs text-text-muted">{t('ask.notAdvice')}</p>}
+      {reply.proposalDraft && reply.messageId && <DraftCard draft={reply.proposalDraft} messageId={reply.messageId} />}
       {showSuggestions && reply.suggestions.length > 0 && (
         <Suggestions suggestions={reply.suggestions} onPick={onPick} />
       )}
     </div>
   );
-}
+});
+
+/**
+ * A proposal the assistant drafted because it was asked to (D393). Nothing is
+ * written until Add to proposals; approving it there only acknowledges (D387), and
+ * the not-advice line is the catalogue's, never the model's (D385).
+ */
+const DraftCard = observer(function DraftCard({
+  draft,
+  messageId,
+}: {
+  draft: AssistantProposalDraftView;
+  messageId: string;
+}) {
+  const { ask } = useStore();
+  const { t } = useTranslation();
+  const tapping = ask.draftTapping?.messageId === messageId ? ask.draftTapping.tap : null;
+  return (
+    <section
+      aria-label={t('ask.draft.title')}
+      className="space-y-2 rounded-lg border border-border-subtle bg-surface-hover/40 p-3"
+    >
+      <h2 className="text-sm font-semibold text-text-primary">
+        {t(`ask.draft.headline.${draft.action}`, { symbol: leftToRight(draft.symbol) })}
+      </h2>
+      <p dir="auto" lang={writtenLanguage(draft.reason)} className="text-sm text-text-muted">
+        {draft.reason}
+      </p>
+      <p className="text-xs text-text-muted">{t('ask.draft.acknowledgeOnly')}</p>
+      <p className="text-xs text-text-muted">{t('ask.draft.notAdvice')}</p>
+      {ask.draftTapFailed === messageId && <ErrorNote message={t('ask.draft.failed')} />}
+      {draft.state === 'open' && (
+        <div className="flex flex-wrap gap-2">
+          <Button disabled={ask.draftTapping !== null} onClick={() => void ask.answerDraft(messageId, 'add')}>
+            {tapping === 'add' ? t('ask.draft.adding') : t('ask.draft.add')}
+          </Button>
+          <Button
+            variant="secondary"
+            disabled={ask.draftTapping !== null}
+            onClick={() => void ask.answerDraft(messageId, 'close')}
+          >
+            {tapping === 'close' ? t('ask.draft.closing') : t('ask.draft.close')}
+          </Button>
+        </div>
+      )}
+      {draft.state === 'added' && (
+        <p role="status" className="text-xs text-text-primary">
+          {draft.alreadyOpen ? t('ask.draft.alreadyOpen') : t('ask.draft.added')}{' '}
+          {draft.proposalId && (
+            <Link
+              to="/proposals/$proposalId"
+              params={{ proposalId: draft.proposalId }}
+              className="text-accent hover:underline"
+            >
+              {t('ask.draft.openProposal')}
+            </Link>
+          )}
+        </p>
+      )}
+      {draft.state === 'closed' && (
+        <p role="status" className="text-xs text-text-muted">
+          {t('ask.draft.closed')}
+        </p>
+      )}
+      {draft.state === 'expired' && (
+        <p role="status" className="text-xs text-text-muted">
+          {t('ask.draft.expired')}
+        </p>
+      )}
+    </section>
+  );
+});
 
 function Suggestions({ suggestions, onPick }: { suggestions: string[]; onPick: (text: string) => void }) {
   const { t } = useTranslation();

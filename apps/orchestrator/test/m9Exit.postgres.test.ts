@@ -89,6 +89,8 @@ const WRITE_BODIES: Record<string, unknown> = {
   'POST /agents/:id/trades/preview': { symbol: OMERS.symbol, side: 'buy', quantity: '1' },
   'POST /assistant/messages': { message: 'What do I hold?', conversationId: OMERS.conversation },
   'DELETE /assistant/conversations/:id': null,
+  'POST /assistant/messages/:id/proposal-draft/add': null,
+  'POST /assistant/messages/:id/proposal-draft/close': null,
   'POST /auth/email': { email: 'someone@example.com', currentPassword: 'not the password' },
   'POST /auth/login': {},
   'POST /auth/logout': null,

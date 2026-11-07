@@ -217,6 +217,13 @@ describe('a proposal opened from the list', () => {
     expect(decodeMenuData(buttonsOf(lastEdit()).at(-1)!.callback_data!)).toEqual({ view: 'pending' });
   });
 
+  it('a proposal drafted in Ask (D393): acknowledged, ending with the not-advice line', async () => {
+    row = proposalRow({ id: OBSERVATION, kind: 'assistant', scan_id: null, scan_tool_calls: null });
+    await tap(encodeMenuData({ view: 'proposal', proposalId: OBSERVATION }));
+    const en = messagesFor('en');
+    expect(String(lastEdit()?.text)).toContain(`${en.assistantAcknowledgeOnly}\n\n${en.assistantNotAdvice}`);
+  });
+
   it('a research view (D392): acknowledged like an observation, ending with what approving does and the not-advice line', async () => {
     row = proposalRow({ id: OBSERVATION, kind: 'research', scan_id: null, scan_tool_calls: null });
     await tap(encodeMenuData({ view: 'proposal', proposalId: OBSERVATION }));

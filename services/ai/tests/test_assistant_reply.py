@@ -7,7 +7,13 @@ from typing import Any
 
 import pytest
 
-from app.assistant.reply import MAX_SUGGESTIONS, check, parse, sources
+from app.assistant.reply import (
+    MAX_PROPOSAL_REASON_CHARS,
+    MAX_SUGGESTIONS,
+    check,
+    parse,
+    sources,
+)
 
 
 def _raw(**fields: Any) -> str:
@@ -321,3 +327,79 @@ def test_a_hebrew_reply_is_checked_for_figures_as_an_english_one_is() -> None:
     assert check(sourced, tool_results=[PORTFOLIO], user_messages=["מה המחיר של NVDA?"]).valid
     checked = check(invented, tool_results=[PORTFOLIO], user_messages=["מה המחיר של NVDA?"])
     assert not checked.valid and "231.10" in " ".join(checked.unsourced)
+
+
+# -- a drafted proposal (D393) -------------------------------------------------
+
+
+def _with_proposal(proposal: Any, outcome: str = "answer") -> str:
+    return json.dumps({"outcome": outcome, "text": "My view.", "proposal": proposal})
+
+
+def test_an_answer_may_carry_a_drafted_proposal() -> None:
+    reply = parse(_with_proposal({"action": "trim", "symbol": " nvda ", "reason": "It ran hard."}))
+
+    assert reply is not None and reply.proposal is not None
+    assert (reply.proposal.action, reply.proposal.symbol) == ("trim", "NVDA")
+    assert reply.proposal.reason == "It ran hard."
+
+
+def test_only_an_answer_carries_one() -> None:
+    raw = json.dumps(
+        {
+            "outcome": "clarify",
+            "text": "Which stock?",
+            "proposal": {"action": "trim", "symbol": "NVDA", "reason": "x"},
+        }
+    )
+    reply = parse(raw)
+
+    assert reply is not None and reply.proposal is None and not reply.proposal_malformed
+
+
+@pytest.mark.parametrize(
+    "proposal",
+    [
+        {"action": "hold", "symbol": "NVDA", "reason": "x"},
+        {"action": "trim", "symbol": "", "reason": "x"},
+        {"action": "trim", "symbol": "NVDA"},
+        {
+            "action": "trim",
+            "symbol": "NVDA",
+            "reason": " ".join(str(i) for i in range(MAX_PROPOSAL_REASON_CHARS)),
+        },
+        {"action": "trim", "symbol": "NVDA", "reason": "Details: https://x.example/login"},
+        {"action": "trim", "symbol": "NVDA", "reason": "Details: HTTP://x.example"},
+        {"action": "trim", "symbol": "NVDA", "reason": "Details: www.x.example"},
+        {"action": "trim", "symbol": "NVDA", "reason": "Details: x.example/login"},
+        {"action": "trim", "symbol": "NVDA", "reason": "See [this](/insights)."},
+        "trim NVDA",
+    ],
+)
+def test_a_malformed_proposal_goes_back_rather_than_being_dropped(proposal: Any) -> None:
+    """Dropped, the answer around it would promise buttons that are not there."""
+    checked = check(_with_proposal(proposal), tool_results=[], user_messages=[])
+
+    assert not checked.valid
+    assert "the proposal is malformed" in checked.problems[0]
+
+
+@pytest.mark.parametrize(
+    "reason",
+    ["Listed as TEVA.TA and BRK.B, and it ran hard.", "It ran hard, so take some off."],
+)
+def test_a_reason_with_no_address_stands(reason: str) -> None:
+    """Only an address goes back: a dotted ticker is not one."""
+    reply = parse(_with_proposal({"action": "trim", "symbol": "NVDA", "reason": reason}))
+
+    assert reply is not None and reply.proposal is not None
+    assert reply.proposal.reason == reason
+
+
+def test_a_proposals_reason_is_checked_for_figures_like_the_answer() -> None:
+    raw = _with_proposal({"action": "trim", "symbol": "NVDA", "reason": "Up 83.71% this week."})
+
+    checked = check(raw, tool_results=[], user_messages=[])
+
+    assert checked.unsourced == ("83.71",)
+    assert check(raw, tool_results=[{"change": "83.71"}], user_messages=[]).valid

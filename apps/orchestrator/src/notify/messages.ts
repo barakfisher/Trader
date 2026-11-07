@@ -395,6 +395,20 @@ export interface Messages {
   researchAcknowledgeOnly: string;
   /** The last line of every research proposal: the catalogue's not-advice line, never the model's (D385). */
   researchNotAdvice: string;
+  /** A proposal the assistant drafted (D393): the catalogue's headline over the model's reason. */
+  assistantProposalHeadline: (action: ActionableRating, symbol: string) => string;
+  assistantAcknowledgeOnly: string;
+  /** The last line of every drafted proposal: the catalogue's, never the model's (D385). */
+  assistantNotAdvice: string;
+  /** The two buttons under a draft, and what the message says once it is answered. */
+  assistantDraft: {
+    add: string;
+    close: string;
+    added: string;
+    alreadyOpen: string;
+    closed: string;
+    expired: string;
+  };
 
   /** Decision 148: a holding's move and drawdown from one scan, said in one message. */
   moveWithDrawdown: (figures: MoveWithDrawdownFigures) => NoticeText;
@@ -801,6 +815,20 @@ const en: Messages = {
     "Approving only records that you saw it: no order is placed and no holding changes. When you trade at your broker, record the trade from the holding's menu.",
   researchNotAdvice:
     "Not financial or investment advice, and no substitute for a professional: a model's view, written by the research agent, for your own judgement.",
+  assistantProposalHeadline: (action, symbol) =>
+    `The assistant suggests: ${{ buy_more: 'buy more', trim: 'trim', sell: 'sell', buy: 'buy' }[action]} ${symbol}`,
+  assistantAcknowledgeOnly:
+    "Approving only records that you saw it: no order is placed and no holding changes. When you trade at your broker, record the trade from the holding's menu.",
+  assistantNotAdvice:
+    "Not financial or investment advice, and no substitute for a professional: a model's view, written by the assistant, for your own judgement.",
+  assistantDraft: {
+    add: 'Add to proposals',
+    close: 'Close',
+    added: 'Added to your proposals. /pending shows them.',
+    alreadyOpen: 'Already in your proposals. /pending shows them.',
+    closed: 'Closed. No proposal was written.',
+    expired: 'This draft has expired. Ask again for a fresh one.',
+  },
 
   moveWithDrawdown: (f) => ({
     headline: `${f.symbol} ${f.direction} ${f.change} to ${f.price}`,
@@ -1354,6 +1382,20 @@ const he: Messages = {
     'האישור רק מתעד שראיתם את ההמלצה: שום פקודה לא נשלחת ושום אחזקה לא משתנה. כשתבצעו עסקה אצל הברוקר, רשמו אותה מתפריט השורה של האחזקה.',
   researchNotAdvice:
     'אין בכך ייעוץ פיננסי או ייעוץ השקעות, וזה אינו תחליף לייעוץ מקצועי: זו עמדה שכתב מודל של סוכן המחקר, לשיקול דעתכם.',
+  assistantProposalHeadline: (action, symbol) =>
+    `הצעת העוזר: ${{ buy_more: 'לקנות עוד', trim: 'לצמצם', sell: 'למכור', buy: 'לקנות' }[action]} ${ltr(symbol)}`,
+  assistantAcknowledgeOnly:
+    'האישור רק מתעד שראיתם את ההצעה: שום פקודה לא נשלחת ושום אחזקה לא משתנה. כשתבצעו עסקה אצל הברוקר, רשמו אותה מתפריט השורה של האחזקה.',
+  assistantNotAdvice:
+    'אין בכך ייעוץ פיננסי או ייעוץ השקעות, וזה אינו תחליף לייעוץ מקצועי: זו עמדה שכתב המודל של העוזר, לשיקול דעתכם.',
+  assistantDraft: {
+    add: 'הוספה להצעות',
+    close: 'סגירה',
+    added: `נוספה להצעות שלכם. ${ltr('/pending')} מציג אותן.`,
+    alreadyOpen: `כבר נמצאת בהצעות שלכם. ${ltr('/pending')} מציג אותן.`,
+    closed: 'נסגרה. לא נכתבה הצעה.',
+    expired: 'תוקף הטיוטה פג. בקשו טיוטה חדשה.',
+  },
 
   moveWithDrawdown: (f) => ({
     headline: `מחיר ${ltr(f.symbol)} ${f.direction === 'fell' ? 'ירד' : 'עלה'} ב־${ltr(f.change)} ל־${ltr(f.price)}`,

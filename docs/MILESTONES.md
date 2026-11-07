@@ -376,7 +376,9 @@ per-user choice, and only a user who has accepted the advisory terms may choose 
 
 **Already wired for it:** the orchestrator reads the mode from one function,
 `services/advisoryMode.ts` `isAdvisory()` (true for everyone until M13), before it raises a research
-view (D392). **Not wired:** research's vocabulary is chosen in the AI service's prompt
+view (D392), and before it shows or writes a proposal Ask drafted (D393). **Not wired:** the
+assistant's prompt does not read the mode, so in Observation it would still draft; the orchestrator
+would hide the draft and refuse the tap, and M13 must also pass the mode to the prompt. research's vocabulary is chosen in the AI service's prompt
 (`app/research/run.py`), which does not read the mode; Observation needs the mode passed to the run
 and a wording guard again (D392 removed D292's; it is in git history).
 

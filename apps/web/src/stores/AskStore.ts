@@ -1,6 +1,6 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 
-import type { AssistantConversationResponse, AssistantReplyView } from '@traders/shared';
+import type { AssistantConversationResponse, AssistantProposalDraftView, AssistantReplyView } from '@traders/shared';
 
 import { api, errorMessage } from '../api/client.ts';
 import { t } from '../i18n/index.ts';
@@ -22,6 +22,8 @@ export interface AskTurn {
   error: string | null;
 }
 
+export type DraftTap = 'add' | 'close';
+
 /**
  * The conversation on screen: its id, its turns oldest first, and the question
  * in the box.
@@ -39,6 +41,10 @@ export class AskStore {
   /** A conversation being read back from the server; null when none is. */
   opening: string | null = null;
   openError: string | null = null;
+  /** The drafted proposal being answered, by its reply's message id (D393). */
+  draftTapping: { messageId: string; tap: DraftTap } | null = null;
+  /** The reply whose draft could not be answered: said on its own card. */
+  draftTapFailed: string | null = null;
   private nextId = 1;
 
   constructor(private readonly root: RootStore) {
@@ -86,6 +92,33 @@ export class AskStore {
       runInAction(() => {
         const current = this.turns.find((candidate) => candidate.id === turn.id);
         if (current) current.error = errorMessage(error, t('errors.askFailed'));
+      });
+    }
+  }
+
+  /**
+   * The user's tap on a drafted proposal (D393): the one thing that writes it. What
+   * the server answers replaces the draft, so a second surface's answer shows too.
+   */
+  async answerDraft(messageId: string, tap: DraftTap): Promise<void> {
+    if (this.draftTapping) return;
+    this.draftTapping = { messageId, tap };
+    this.draftTapFailed = null;
+    try {
+      const draft = await api.post<AssistantProposalDraftView>(`/assistant/messages/${messageId}/proposal-draft/${tap}`, {});
+      runInAction(() => {
+        for (const turn of this.turns) {
+          if (turn.reply?.messageId === messageId) turn.reply.proposalDraft = draft;
+        }
+      });
+      if (tap === 'add') void this.root.queryClient.invalidateQueries({ queryKey: queryKeys.proposals });
+    } catch {
+      runInAction(() => {
+        this.draftTapFailed = messageId;
+      });
+    } finally {
+      runInAction(() => {
+        this.draftTapping = null;
       });
     }
   }
@@ -169,6 +202,7 @@ function pairTurns(body: AssistantConversationResponse, nextId: () => number): A
       suggestions: message.suggestions,
       // A stored answer does not record whether it ran on a fallback; only a fresh reply says (D284).
       fallbackFrom: null,
+      proposalDraft: message.proposalDraft,
     };
   }
   // A question whose reply never arrived is shown as such, not as still waiting.

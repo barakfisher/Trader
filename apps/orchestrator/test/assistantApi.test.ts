@@ -19,7 +19,14 @@ vi.mock('../src/db/pool.js', () => ({
   closePool: vi.fn(),
 }));
 
+vi.mock('../src/services/advisoryMode.js', () => ({ isAdvisory: vi.fn(async () => true) }));
+
 vi.mock('../src/db/queries.js', () => ({
+  findAssistantDraft: vi.fn(async () => null),
+  closeAssistantDraft: vi.fn(async () => undefined),
+  createAssistantProposal: vi.fn(async () => 'p1'),
+  listOpenAcknowledgedProposals: vi.fn(async () => []),
+  markAssistantDraftAdded: vi.fn(async () => undefined),
   getSessionUser: vi.fn(async (userId: string) => (await import('./session.js')).mockedSessionUser(userId)),
   getUser: vi.fn(async () => ({
     ...ACTIVE_SESSION,
@@ -45,6 +52,7 @@ const { loadConfig, resetConfigForTests } = await import('../src/config.js');
 const { createApp } = await import('../src/http/app.js');
 const { AiServiceError } = await import('@traders/shared/ai');
 const queries = await import('../src/db/queries.js');
+const { isAdvisory } = await import('../src/services/advisoryMode.js');
 
 const ENV = {
   APP_ENV: 'test',
@@ -110,6 +118,7 @@ describe('the assistant routes', () => {
       sources: [{ kind: 'page', label: 'Portfolio', link: '/', url: null, published: null }],
       suggestions: ['Which holding moved most?'],
       fallbackFrom: null,
+        proposalDraft: null,
     });
   });
 
@@ -197,6 +206,9 @@ describe('the assistant routes', () => {
         sources: [],
         suggestions: [],
         created_at: new Date('2026-10-12T08:00:00Z'),
+        proposal_draft: null,
+        proposal_draft_state: null,
+        proposal_draft_proposal_id: null,
       },
       {
         id: 'm2',
@@ -207,6 +219,9 @@ describe('the assistant routes', () => {
         sources: [{ kind: 'news', label: 'Reuters: x', url: 'https://r.example/1' }],
         suggestions: ['Why?'],
         created_at: new Date('2026-10-12T08:01:00Z'),
+        proposal_draft: null,
+        proposal_draft_state: null,
+        proposal_draft_proposal_id: null,
       },
     ]);
 
@@ -250,5 +265,59 @@ describe('the assistant routes', () => {
   it('is for a signed-in user only', async () => {
     const response = await app.request('/assistant/conversations', { headers: HEADERS });
     expect(response.status).toBe(401);
+  });
+
+  describe('a drafted proposal (D393)', () => {
+    const MESSAGE = '81000000-0000-0000-0000-000000000009';
+    const stored = (state: string, proposalId: string | null = null) =>
+      ({
+        message_id: MESSAGE,
+        conversation_id: CONVERSATION,
+        user_id: USER_ID,
+        created_at: new Date(),
+        proposal_draft: { action: 'trim', symbol: 'CCJ', instrument_id: 'i1', reason: 'It ran hard.' },
+        proposal_draft_state: state,
+        proposal_draft_proposal_id: proposalId,
+        primary_agent_id: 'primary',
+      }) as never;
+    const post = (path: string) =>
+      app.request(path, { method: 'POST', headers: { ...HEADERS, cookie } });
+
+    beforeEach(() => {
+      vi.mocked(isAdvisory).mockResolvedValue(true);
+      vi.mocked(queries.createAssistantProposal).mockClear();
+      vi.mocked(queries.listOpenAcknowledgedProposals).mockResolvedValue([]);
+    });
+
+    it('add writes the proposal and answers the draft as it now stands', async () => {
+      vi.mocked(queries.findAssistantDraft)
+        .mockResolvedValueOnce(stored('open'))
+        .mockResolvedValueOnce(stored('added', 'p1'));
+
+      const response = await post(`/assistant/messages/${MESSAGE}/proposal-draft/add`);
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ state: 'added', proposalId: 'p1', symbol: 'CCJ' });
+      expect(queries.createAssistantProposal).toHaveBeenCalledTimes(1);
+      expect(queries.findAssistantDraft).toHaveBeenCalledWith(USER_ID, MESSAGE);
+    });
+
+    it("close writes no proposal, and another user's draft is not found", async () => {
+      vi.mocked(queries.findAssistantDraft).mockResolvedValueOnce(stored('closed'));
+      expect((await post(`/assistant/messages/${MESSAGE}/proposal-draft/close`)).status).toBe(200);
+      expect(queries.createAssistantProposal).not.toHaveBeenCalled();
+
+      vi.mocked(queries.findAssistantDraft).mockResolvedValue(null);
+      expect((await post(`/assistant/messages/${MESSAGE}/proposal-draft/add`)).status).toBe(404);
+      expect((await post(`/assistant/messages/not-a-uuid/proposal-draft/add`)).status).toBe(404);
+    });
+
+    it('a user who may not have advice is refused the tap (D388)', async () => {
+      vi.mocked(isAdvisory).mockResolvedValue(false);
+      vi.mocked(queries.findAssistantDraft).mockResolvedValue(stored('open'));
+
+      expect((await post(`/assistant/messages/${MESSAGE}/proposal-draft/add`)).status).toBe(404);
+      expect(queries.createAssistantProposal).not.toHaveBeenCalled();
+    });
   });
 });

@@ -754,6 +754,25 @@ export interface components {
             user_id: string;
         };
         /**
+         * AssistantProposalDraft
+         * @description A proposal the model drafted (D393). Nothing is written until the user taps; it has
+         *     no quantity and no price, because approving it only acknowledges it.
+         */
+        AssistantProposalDraft: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "buy_more" | "trim" | "sell" | "buy";
+            /**
+             * Reason
+             * @description In the user's language; its figures were checked.
+             */
+            reason: string;
+            /** Symbol */
+            symbol: string;
+        };
+        /**
          * AssistantReply
          * @description The assistant's reply. A decline, a clarify and every failure are 200s with an
          *     `outcome`, like `/ask`'s refusal: each is an outcome the screen shows, not a fault.
@@ -780,6 +799,8 @@ export interface components {
              * @enum {string}
              */
             outcome: "answer" | "decline" | "clarify" | "failed" | "budget_reached" | "cap_reached" | "no_model" | "own_key_failed" | "own_key_required";
+            /** @description Only when the user explicitly asked for a proposal (D393). */
+            proposal_draft?: components["schemas"]["AssistantProposalDraft"] | null;
             /**
              * Reason
              * @description Why it declined; null unless outcome is 'decline'.

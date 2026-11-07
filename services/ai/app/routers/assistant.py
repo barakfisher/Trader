@@ -41,7 +41,12 @@ from app.deps import (
 )
 from app.llm.factory import configured_model
 from app.llm.user_models import fallback_from
-from app.models import AssistantMessageRequest, AssistantReply, AssistantSource
+from app.models import (
+    AssistantMessageRequest,
+    AssistantProposalDraft,
+    AssistantReply,
+    AssistantSource,
+)
 from app.news.on_demand import news_on_demand
 from app.providers.price_provenance import excluded_price_sources
 from app.providers.registry import MarketDataService
@@ -118,6 +123,15 @@ async def assistant_message(
         text=turn.text,
         sources=[AssistantSource(**source) for source in turn.sources],
         suggestions=turn.suggestions,
+        proposal_draft=(
+            AssistantProposalDraft(
+                action=turn.proposal_draft["action"],  # type: ignore[arg-type]
+                symbol=turn.proposal_draft["symbol"],
+                reason=turn.proposal_draft["reason"],
+            )
+            if turn.proposal_draft is not None
+            else None
+        ),
         model=turn.model,
         fallback_from=(
             await fallback_from(

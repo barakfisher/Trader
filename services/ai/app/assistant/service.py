@@ -13,13 +13,14 @@
    checked answer could be given, and the transcript is kept for review.
 
 Nothing here writes anything but the conversation's own rows and the
-recorder's `llm_calls`.
+recorder's `llm_calls`. A drafted proposal (D393) is such a row: it is stored on
+the reply and becomes a proposal only when the user taps, in the orchestrator.
 """
 
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any, Literal
 
@@ -30,6 +31,7 @@ from app.agents.tools import run_tool as run_any_tool
 from app.assistant import conversations
 from app.assistant.budget import assistant_budget
 from app.assistant.instructions import instructions
+from app.assistant.proposal_draft import check_draft
 from app.assistant.reply import Checked, check, sources
 from app.assistant.tools import TOOLS, TOOLS_BY_NAME
 from app.core.logging import get_logger
@@ -119,6 +121,8 @@ class Turn:
     reason: str | None = None
     sources: list[dict[str, Any]] = field(default_factory=list)
     suggestions: list[str] = field(default_factory=list)
+    #: A drafted proposal the checks passed: {action, symbol, instrument_id, reason}.
+    proposal_draft: dict[str, str] | None = None
     model: str | None = None
     cost_micro_usd: int = 0
     steps: int = 0
@@ -251,6 +255,7 @@ def _store(
     turn.model, turn.cost_micro_usd, turn.steps = state.model, state.cost_micro_usd, state.steps
     if turn.outcome in NO_REPLY_TEXT:
         turn.text, turn.reason, turn.suggestions = NO_REPLY_TEXT[turn.outcome], None, []
+        turn.proposal_draft = None
     turn.sources = sources([e for e in state.transcript if e.get("role") == "tool"])
     with engine.begin() as connection:
         turn.message_id = conversations.add_reply(
@@ -262,6 +267,7 @@ def _store(
             reason=turn.reason,
             sources=turn.sources,
             suggestions=turn.suggestions,
+            proposal_draft=turn.proposal_draft,
             tool_calls=state.transcript,
             model=turn.model,
             cost_micro_usd=turn.cost_micro_usd,
@@ -360,17 +366,47 @@ async def _converse(
             tool_results=[*earlier_results, *state.tool_results],
             user_messages=user_words,
         )
+        checked, instrument_id = _with_draft_checked(checked, engine=engine, context=context)
         await llm.record_verdict(stop.reply.call_id, _verdict(checked))
         if checked.valid and checked.reply is not None:
             turn.outcome = checked.reply.outcome
             turn.text = checked.reply.text
             turn.reason = checked.reply.reason
             turn.suggestions = list(checked.reply.suggestions)
+            draft = checked.reply.proposal
+            turn.proposal_draft = (
+                {
+                    "action": draft.action,
+                    "symbol": draft.symbol,
+                    "instrument_id": instrument_id,
+                    "reason": draft.reason,
+                }
+                if draft is not None and instrument_id is not None
+                else None
+            )
             turn.problems = []
             return
         turn.outcome, turn.problems = "failed", list(checked.problems)
         if attempt < REPAIRS:
             state.messages.append(UserMessage(_repair_request(checked)))
+
+
+def _with_draft_checked(
+    checked: Checked, *, engine: Engine, context: ToolContext
+) -> tuple[Checked, str | None]:
+    """The check's result with a drafted proposal's own check added, and its instrument."""
+    if not checked.valid or checked.reply is None or checked.reply.proposal is None:
+        return checked, None
+    with engine.connect() as connection:
+        found = check_draft(
+            connection,
+            user_id=context.user_id,
+            primary_agent_id=context.agent_id,
+            draft=checked.reply.proposal,
+        )
+    if found.problem is not None:
+        return replace(checked, problems=(found.problem,)), None
+    return checked, found.instrument_id
 
 
 def _repair_request(checked: Checked) -> str:
@@ -383,7 +419,8 @@ def _repair_request(checked: Checked) -> str:
         + (
             ""
             if checked.reply is not None
-            else ' The JSON is {"outcome", "reason" (declines only), "text", "suggestions"}.'
+            else ' The JSON is {"outcome", "reason" (declines only), "text", "suggestions", '
+            '"proposal" (only when I asked for one)}.'
         )
     )
 

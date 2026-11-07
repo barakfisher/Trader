@@ -912,6 +912,15 @@ class AssistantSource(BaseModel):
     published: str | None = Field(default=None, description="A news article's publication time.")
 
 
+class AssistantProposalDraft(BaseModel):
+    """A proposal the model drafted (D393). Nothing is written until the user taps; it has
+    no quantity and no price, because approving it only acknowledges it."""
+
+    action: Literal["buy_more", "trim", "sell", "buy"]
+    symbol: str
+    reason: str = Field(description="In the user's language; its figures were checked.")
+
+
 class AssistantReply(BaseModel):
     """The assistant's reply. A decline, a clarify and every failure are 200s with an
     `outcome`, like `/ask`'s refusal: each is an outcome the screen shows, not a fault."""
@@ -937,6 +946,9 @@ class AssistantReply(BaseModel):
     text: str = Field(description="Markdown. Every figure in it was checked against tool results.")
     sources: list[AssistantSource]
     suggestions: list[str] = Field(description="Questions to ask next.")
+    proposal_draft: AssistantProposalDraft | None = Field(
+        default=None, description="Only when the user explicitly asked for a proposal (D393)."
+    )
     model: str | None
     fallback_from: str | None = Field(
         default=None,

@@ -51,6 +51,8 @@ import { applyDecision, factsOf } from '../services/proposals.js';
 import { MESSAGES, messagesFor, type Messages } from '../notify/messages.js';
 import type { EmailSender } from '../email/sender.js';
 import type { RateLimits } from '../http/rateLimits.js';
+import { decodeAssistantDraftData } from './assistantDraftToken.js';
+import { handleDraftTap } from './assistantDrafts.js';
 import { startQuestion } from './assistantQuestion.js';
 import { decodeBindToken } from './bindToken.js';
 import { BUSY_CALLBACK_DATA, decodeCallbackData } from './callbackToken.js';
@@ -370,6 +372,7 @@ async function handleMessage(
       chatId,
       question: text,
       rateLimits: deps.rateLimits,
+      signingSecret: deps.config.TELEGRAM_SIGNING_SECRET,
     });
     return;
   }
@@ -522,11 +525,27 @@ async function handleCallback(
     await handleAgentCallback(deps, callback, chatId, agentAction);
     return;
   }
+  const draftTap = decodeAssistantDraftData(callback.data, config.TELEGRAM_SIGNING_SECRET);
   const signup = decodeSignupData(callback.data, config.TELEGRAM_SIGNING_SECRET);
-  const payload = signup === null ? decodeCallbackData(callback.data, config.TELEGRAM_SIGNING_SECRET) : null;
+  const payload = signup === null && draftTap === null ? decodeCallbackData(callback.data, config.TELEGRAM_SIGNING_SECRET) : null;
   const binding = await findTelegramBindingByChat(chatId, LEGAL_VERSION);
   if (binding !== null && binding.legal_accepted !== true) {
     await telegram?.answerCallback(callback.id, await legalRefusal(binding.user_id));
+    return;
+  }
+
+  // A draft Ask wrote (D393): the binding names the user, and the message is looked
+  // up under them, so a forwarded button finds nothing.
+  if (draftTap !== null && binding !== null && callback.message !== undefined && telegram !== null) {
+    await handleDraftTap({
+      telegram,
+      callbackId: callback.id,
+      chatId,
+      telegramMessageId: callback.message.message_id,
+      userId: binding.user_id,
+      language: (await getOrCreateUserSettings(binding.user_id)).language,
+      payload: draftTap,
+    });
     return;
   }
 

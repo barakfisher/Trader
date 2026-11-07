@@ -15,7 +15,7 @@
  * of what the user assented to, not an order anybody could submit.
  */
 
-import { RESEARCH_PROPOSAL_KIND, isTradeProposalKind } from '@traders/shared';
+import { ACKNOWLEDGED_PROPOSAL_KINDS, isTradeProposalKind } from '@traders/shared';
 
 import {
   applyProposalTransition,
@@ -73,9 +73,10 @@ export function isProposableKind(kind: string): boolean {
  * the database's own trigger (migration 0038) has to. An allowlist, matching
  * the trigger: a new kind is refused on the real portfolio until someone argues
  * here, and in a migration, that it belongs there. `research` is a research
- * view to acknowledge (0085, D392; `researchProposals.ts` raises it).
+ * view to acknowledge (0085, D392; `researchProposals.ts` raises it), and
+ * `assistant` is a draft from Ask the user added (0086, D393; `assistantProposals.ts`).
  */
-export const PRIMARY_PROPOSAL_KINDS: ReadonlySet<string> = new Set(['rebalance', RESEARCH_PROPOSAL_KIND]);
+export const PRIMARY_PROPOSAL_KINDS: ReadonlySet<string> = new Set(['rebalance', ...ACKNOWLEDGED_PROPOSAL_KINDS]);
 
 /** Raised instead of writing a proposal the primary agent may never receive. */
 export class PrimaryAgentIsPassiveError extends Error {

@@ -49,6 +49,7 @@ function reply(overrides: Partial<AssistantReplyView> = {}): AssistantReplyView 
     ],
     suggestions: ['Which holding moved most?'],
     fallbackFrom: null,
+    proposalDraft: null,
     ...overrides,
   };
 }
@@ -59,14 +60,18 @@ const CONVERSATIONS = {
   ],
 };
 
-function renderAsk() {
-  const router = createAppRouter(createMemoryHistory({ initialEntries: ['/ask'] }));
+function renderWithRoute(path: string) {
+  const router = createAppRouter(createMemoryHistory({ initialEntries: [path] }));
   const result = renderWithServerState(<App router={router} />);
   act(() => {
     result.root.auth.user = { id: 'u', baseCurrency: 'USD', timezone: 'Asia/Jerusalem' } as never;
     result.root.auth.initialised = true;
   });
   return { ...result, router };
+}
+
+function renderAsk() {
+  return renderWithRoute('/ask');
 }
 
 async function ask(text: string) {
@@ -244,8 +249,8 @@ describe('the conversation', () => {
     const stored: AssistantConversationResponse = {
       conversation: CONVERSATIONS.conversations[0]!,
       messages: [
-        { id: 'u1', role: 'user', text: 'How am I doing?', outcome: null, reason: null, sources: [], suggestions: [], createdAt: '2026-10-12T08:00:00Z' },
-        { id: 'a1', role: 'assistant', text: 'Up **5.00%**.', outcome: 'answer', reason: null, sources: [], suggestions: [], createdAt: '2026-10-12T08:01:00Z' },
+        { id: 'u1', role: 'user', text: 'How am I doing?', outcome: null, reason: null, sources: [], suggestions: [], createdAt: '2026-10-12T08:00:00Z', proposalDraft: null },
+        { id: 'a1', role: 'assistant', text: 'Up **5.00%**.', outcome: 'answer', reason: null, sources: [], suggestions: [], createdAt: '2026-10-12T08:01:00Z', proposalDraft: null },
       ],
     };
     get.mockImplementation((path: string) =>
@@ -267,8 +272,8 @@ describe('the conversation', () => {
     const stored: AssistantConversationResponse = {
       conversation: CONVERSATIONS.conversations[0]!,
       messages: [
-        { id: 'u1', role: 'user', text: 'How am I doing?', outcome: null, reason: null, sources: [], suggestions: [], createdAt: '2026-10-12T08:00:00Z' },
-        { id: 'a1', role: 'assistant', text: 'server words', outcome: 'cap_reached', reason: null, sources: [], suggestions: [], createdAt: '2026-10-12T08:01:00Z' },
+        { id: 'u1', role: 'user', text: 'How am I doing?', outcome: null, reason: null, sources: [], suggestions: [], createdAt: '2026-10-12T08:00:00Z', proposalDraft: null },
+        { id: 'a1', role: 'assistant', text: 'server words', outcome: 'cap_reached', reason: null, sources: [], suggestions: [], createdAt: '2026-10-12T08:01:00Z', proposalDraft: null },
       ],
     };
     get.mockImplementation((path: string) =>
@@ -374,5 +379,137 @@ describe('a user with no working key of their own (D245, D280)', () => {
     expect(await screen.findByLabelText('Your question')).toBeTruthy();
     await waitFor(() => expect(get).toHaveBeenCalledWith('/settings/llm-spend'));
     expect(screen.queryByRole('link', { name: 'Open Settings' })).toBeNull();
+  });
+});
+
+describe('a proposal the assistant drafted (D393)', () => {
+  const DRAFT = {
+    action: 'trim',
+    symbol: 'CCJ',
+    reason: 'It ran hard.',
+    state: 'open',
+    expiresAt: '2026-11-13T08:00:00Z',
+    proposalId: null,
+    alreadyOpen: false,
+  } as const;
+  const headline = en.ask.draft.headline.trim.replace('{{symbol}}', '\u2066CCJ\u2069');
+
+  it('shows the frame from the catalogue over the reason, and writes nothing until the tap', async () => {
+    post.mockResolvedValueOnce(reply({ proposalDraft: DRAFT }));
+    renderAsk();
+    await ask('Raise a proposal to trim CCJ');
+
+    const card = await screen.findByRole('region', { name: en.ask.draft.title });
+    expect(within(card).getByRole('heading').textContent).toBe(headline);
+    expect(within(card).getByText('It ran hard.')).toBeTruthy();
+    expect(within(card).getByText(en.ask.draft.acknowledgeOnly)).toBeTruthy();
+    expect(within(card).getByText(en.ask.draft.notAdvice)).toBeTruthy();
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post.mock.calls[0]![0]).toBe('/assistant/messages');
+  });
+
+  it('adds on the first button, then links the proposal and offers nothing more', async () => {
+    post.mockResolvedValueOnce(reply({ proposalDraft: DRAFT }));
+    post.mockResolvedValueOnce({ ...DRAFT, state: 'added', proposalId: 'p1' });
+    renderAsk();
+    await ask('Raise a proposal to trim CCJ');
+
+    fireEvent.click(await screen.findByRole('button', { name: en.ask.draft.add }));
+
+    expect(await screen.findByText(new RegExp(en.ask.draft.added))).toBeTruthy();
+    expect(post).toHaveBeenLastCalledWith('/assistant/messages/m1/proposal-draft/add', {});
+    expect(screen.getByRole('link', { name: en.ask.draft.openProposal }).getAttribute('href')).toBe('/proposals/p1');
+    expect(screen.queryByRole('button', { name: en.ask.draft.add })).toBeNull();
+    expect(screen.queryByRole('button', { name: en.ask.draft.close })).toBeNull();
+  });
+
+  it('says so when the same word was already open', async () => {
+    post.mockResolvedValueOnce(reply({ proposalDraft: DRAFT }));
+    post.mockResolvedValueOnce({ ...DRAFT, state: 'added', proposalId: 'p0', alreadyOpen: true });
+    renderAsk();
+    await ask('Raise a proposal to trim CCJ');
+
+    fireEvent.click(await screen.findByRole('button', { name: en.ask.draft.add }));
+
+    expect(await screen.findByText(new RegExp(en.ask.draft.alreadyOpen))).toBeTruthy();
+  });
+
+  it('closes on the second button', async () => {
+    post.mockResolvedValueOnce(reply({ proposalDraft: DRAFT }));
+    post.mockResolvedValueOnce({ ...DRAFT, state: 'closed' });
+    renderAsk();
+    await ask('Raise a proposal to trim CCJ');
+
+    fireEvent.click(await screen.findByRole('button', { name: en.ask.draft.close }));
+
+    expect(await screen.findByText(en.ask.draft.closed)).toBeTruthy();
+    expect(post).toHaveBeenLastCalledWith('/assistant/messages/m1/proposal-draft/close', {});
+  });
+
+  it('keeps the buttons and says so when the tap failed', async () => {
+    post.mockResolvedValueOnce(reply({ proposalDraft: DRAFT }));
+    post.mockRejectedValueOnce(new Error('down'));
+    renderAsk();
+    await ask('Raise a proposal to trim CCJ');
+
+    fireEvent.click(await screen.findByRole('button', { name: en.ask.draft.add }));
+
+    expect(await screen.findByText(en.ask.draft.failed)).toBeTruthy();
+    await waitFor(() =>
+      expect((screen.getByRole('button', { name: en.ask.draft.add }) as HTMLButtonElement).disabled).toBe(false),
+    );
+  });
+
+  it('shows what became of each draft read back, with no buttons, and one not-advice line', async () => {
+    const message = (id: string, state: 'added' | 'closed' | 'expired') => ({
+      id,
+      role: 'assistant' as const,
+      text: 'My view.',
+      outcome: 'answer' as const,
+      reason: null,
+      sources: [],
+      suggestions: [],
+      createdAt: '2026-10-12T08:01:00Z',
+      proposalDraft: { ...DRAFT, state, proposalId: state === 'added' ? 'p1' : null },
+    });
+    const question = (id: string) => ({ id, role: 'user' as const, text: 'Propose', outcome: null, reason: null, sources: [], suggestions: [], createdAt: '2026-10-12T08:00:00Z', proposalDraft: null });
+    get.mockImplementation((path: string) =>
+      path === `/assistant/conversations/${CONVERSATION}`
+        ? Promise.resolve({
+            conversation: CONVERSATIONS.conversations[0],
+            messages: [question('u1'), message('a1', 'added'), question('u2'), message('a2', 'closed'), question('u3'), message('a3', 'expired')],
+          })
+        : path === '/assistant/conversations'
+          ? Promise.resolve(CONVERSATIONS)
+          : new Promise(() => {}),
+    );
+    renderWithRoute(`/ask?conversation=${CONVERSATION}`);
+
+    expect(await screen.findByText(new RegExp(en.ask.draft.added))).toBeTruthy();
+    expect(screen.getByText(en.ask.draft.closed)).toBeTruthy();
+    expect(screen.getByText(en.ask.draft.expired)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: en.ask.draft.add })).toBeNull();
+    // The answer's own line says "simulation"; a draft's is about the real portfolio.
+    expect(screen.queryByText(en.ask.notAdvice)).toBeNull();
+    expect(screen.getAllByText(en.ask.draft.notAdvice)).toHaveLength(3);
+  });
+
+  it('opens the conversation a proposal links back to', async () => {
+    get.mockImplementation((path: string) =>
+      path === `/assistant/conversations/${CONVERSATION}`
+        ? Promise.resolve({
+            conversation: CONVERSATIONS.conversations[0],
+            messages: [
+              { id: 'u1', role: 'user', text: 'Raise a proposal', outcome: null, reason: null, sources: [], suggestions: [], createdAt: '2026-10-12T08:00:00Z', proposalDraft: null },
+              { id: 'm1', role: 'assistant', text: 'My view.', outcome: 'answer', reason: null, sources: [], suggestions: [], createdAt: '2026-10-12T08:01:00Z', proposalDraft: DRAFT },
+            ],
+          })
+        : path === '/assistant/conversations'
+          ? Promise.resolve(CONVERSATIONS)
+          : new Promise(() => {}),
+    );
+    renderWithRoute(`/ask?conversation=${CONVERSATION}`);
+
+    expect(await screen.findByRole('button', { name: en.ask.draft.add })).toBeTruthy();
   });
 });

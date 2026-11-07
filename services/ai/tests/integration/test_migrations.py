@@ -113,6 +113,11 @@ KNOWN_REFUSALS: dict[str, tuple[str, str]] = {
         "agent_scans holds re-checks",
         "DELETE FROM agent_scans WHERE trigger = 'refresh'",
     ),
+    # D393's proposals from Ask: 0085's trigger refuses them.
+    "0086_assistant_proposal": (
+        "assistant proposals exist",
+        "DELETE FROM proposals WHERE kind = 'assistant'",
+    ),
     # D392's rating words and research proposals: 0084's CHECK and trigger refuse them.
     "0085_research_advice": (
         "research ratings use D392",
