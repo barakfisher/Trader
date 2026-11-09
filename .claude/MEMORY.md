@@ -6820,7 +6820,7 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
       daily closes are stored, the user approves the fill, and a model would recall a pattern with no
       source; the user deferred trends).
     - **Not checked:** no real model has run them, and Ask's separate prompt was not read.
-395. **The Warren template says what the agent cannot know, and its examples carry no figures** (the user,
+395. **The Warren template says what the agent cannot know, and its examples carry no figures** (#387, the user,
     2026-11-09). `agents.templates.warren.persona`, English and Hebrew; the text is appendix B of
     `docs/PROPOSAL-AGENT-PERFORMANCE.md`. It tells the agent it has no statements, to call its view of a bargain a
     judgment, and that not being cheap is no reason to sell.
