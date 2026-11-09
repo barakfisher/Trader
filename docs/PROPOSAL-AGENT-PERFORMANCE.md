@@ -30,6 +30,7 @@ shared prompt.
 | Optional `analysis` field, `hold` and `watch` verdicts | Recommended, not agreed | The user |
 | Watchlist and scans triggered by it | Recommended after the DCF, not agreed | The user |
 | Base-agent fixes, section 7 | Recommended, not agreed | The user |
+| Baseline (phase 0) | **Measured 2026-11-09**, section 8; too small to judge results | Next step: the user |
 | Trends | **Deferred by the user**: "we will check later what to do and how" | Revisit in phase 7 |
 
 ## 3. What the review found
@@ -162,7 +163,7 @@ below assume 5 turns a scan and about 4 characters a token; neither was measured
 
 **Earlier readings worth re-measuring:** 56 of 75 scans on compose passed after a pass (before D354);
 2.3 of 12 tool calls a scan over 16 model scans, with `search_universe` never called (D228, whose
-re-measurement is due at about 50 model scans).
+re-measurement is due at about 50 model scans). Both are re-measured under phase 0 in section 8.
 
 ## 5. Built: four shared rules
 
@@ -287,6 +288,112 @@ Measure before changing anything, per agent:
 - **Cost:** per scan and per proposal, by model.
 
 *Done when:* a table is in this document, with sample sizes, and a statement of what the data is too small to show.
+
+#### Baseline, measured 2026-11-09
+
+**Source.** Compose, all of it, on a throwaway copy of its stopped database (no network, read-only transactions,
+removed afterwards); compose itself stayed stopped. Compose is at migration `0084`. Its 81 scans run from 2026-10-12 to
+2026-10-30, every agent is paused, and all of them used `google/gemini-3.5-flash-lite`. "Model scans" below are the 79
+with a cost: of the other two, one failed on a connection error and one is a hand-made test trade (AAPL, Test agent),
+so that trade counts in no model figure.
+
+**What this baseline is not.** The last scan predates D353-D355 (deployed 2026-10-31) and D394, so **no scan here saw
+scan memory or the new rules**, and the D354 re-measurement cannot be done on compose. Production has run scans since
+then: 14 from 2026-11-02 to 2026-11-06, 10 of them from an agent set to `anthropic/claude-opus-5.5`, and no proposal.
+Only those counts were read from production.
+
+**Reliability and usefulness**
+
+| Agent (name as stored) | Model scans | Pass | Trade | `invalid_answer` | `rule_rejected` | Pass after a pass | Proposals per scan | Approved / rejected / expired | Tool calls per scan (scans with none) |
+|---|---|---|---|---|---|---|---|---|---|
+| `agressive` | 50 | 43 (86%) | 6 | 1 (2%) | 0 | 39 of 49 | 0.12 | 3 / 1 / 2 | 0.82 (30) |
+| Test agent | 14 | 11 (79%) | 1 | 2 (14%) | 0 | 8 of 13 | 0.07 | 1 / 0 / 0 | 1.36 (5) |
+| Warren | 12 | 11 (92%) | 0 | 1 (8%) | 0 | 9 of 11 | 0 | 0 / 0 / 0 | 0.83 (5) |
+| George | 3 | 1 | 2 | 0 | 0 | 0 of 2 | 0.67 | 0 / 0 / 2 | 2.67 (0) |
+| **All** | **79** | **66 (84%)** | **9** | **4 (5%)** | **0** | **56 of 75** | **0.11** | **4 / 1 / 4** | **0.99 (40)** |
+
+- **The earlier 56 of 75 reproduces exactly**, so this is the same data read the same way, not a new reading after D354.
+- **Refusals that ended a scan (4):** unsourced figures 3, malformed answer 1, mandate 0. Test agent's two are the threshold
+  case D227 has since fixed.
+- **Sent back to the model (5):** figures 3, idle cash 1, mandate 1. No scan hit `step_limit`.
+- **`cash_unjustified`: 0 of 58** passes with idle cash. This shows only that the figure was quoted, not that the reason is
+  good: D354 recorded eight near-identical "cash 141.28, 14.5%" passes from one agent in one day, and the flag passes them all.
+- **Passes get little research:** 38 of 66 passes called no tool. The week of 2026-10-26 was 48 passes of 50 scans, mostly the
+  hourly `agressive`.
+
+**D228's re-measurement (79 scans, due at about 50).** 0.99 tool calls a scan against 2.3 at the last reading, at most 5 of the
+12 allowed, no `step_limit`, and `search_universe` still never called (`get_quote` 35, `get_news` 29, `get_price_history` 11,
+`get_position` 3). A keyword search of the 74 stored theses found none saying it lacked information. Nothing here argues for a
+research sub-agent or a tool picker, on this model and these prompts.
+
+**Results: agent against the shadow SPY**, computed by the real `agentPerformance` (D115) to the close of 2026-11-06. Compose's
+stored prices stop on 2026-11-02, so closes came from yfinance; they agree with the stored last price within 0.5% on all 130
+overlapping symbol-days.
+
+| Agent | Sessions | Fills | Agent | Shadow SPY | Difference (points) | Note |
+|---|---|---|---|---|---|---|
+| `agressive` | 15 | 3 | -9.77% | -4.07% | -5.70 | Fees of $22.50 on a $1,000 budget are 2.25 points of it; the benchmark pays none (recorded debt) |
+| Test agent | 18 | 2 | +2.39% | -4.46% | +6.85 | $10,000 budget; one of the two fills is the hand-made AAPL test |
+| Warren | 15 | 0 | 0.00% | -4.07% | +4.07 | Never bought: this is cash in a falling market, not skill |
+| George | 14 | 0 | 0.00% | -4.39% | +4.39 | Its two proposals expired: the same |
+
+**Results: every model-written proposal against SPY.** The start is the first session close at or after the proposal, the same
+rule as D115, for the symbol and for SPY.
+
+| Proposal date | Agent | Symbol | State | 5 trading days | SPY | To 2026-11-06 (sessions) | SPY |
+|---|---|---|---|---|---|---|---|
+| 10-19 | `agressive` | IRON | expired | -1.6% | -0.1% | 0.0% (14) | -4.1% |
+| 10-19 | `agressive` | IRON | approved | -1.6% | -0.1% | 0.0% (14) | -4.1% |
+| 10-20 | George | GM | expired | +4.5% | +0.1% | +11.8% (13) | -4.4% |
+| 10-20 | `agressive` | IRON | approved | +0.5% | +0.1% | -0.7% (13) | -4.4% |
+| 10-21 | Test agent | GM | approved | +8.4% | -0.1% | +13.2% (12) | -4.9% |
+| 10-21 | `agressive` | SMCI | approved | +0.7% | -0.1% | -19.1% (12) | -4.9% |
+| 10-21 | George | RCUS | expired | -3.9% | +0.7% | -5.6% (11) | -3.8% |
+| 10-27 | `agressive` | SOFI | rejected | +2.3% | -2.0% | -1.2% (8) | -4.5% |
+| 10-29 | `agressive` | IOVA | expired | -5.2% | -2.7% | -5.2% (5) | -2.7% |
+
+| Set, at 5 trading days | n | Mean above SPY (points) | Median | Beat SPY |
+|---|---|---|---|---|
+| All | 9 | +0.9 | +0.4 | 5 |
+| Approved | 4 | +2.1 | +0.6 | 3 |
+| Not approved | 5 | 0.0 | -1.5 | 2 |
+| Distinct agent and symbol (IRON counted once) | 7 | +1.3 | +0.8 | 4 |
+
+**20 and 60 trading days: n = 0.** The first 20-day reading is due about 2026-11-16 and the first 60-day about 2027-01-14.
+
+**Cost, by model**
+
+| Model | Agent | Scans | Total | Per scan | Per proposal |
+|---|---|---|---|---|---|
+| `google/gemini-3.5-flash-lite` | `agressive` | 50 | $0.1001 | $0.0020 | $0.0167 |
+| | Test agent | 14 | $0.0256 | $0.0018 | $0.0256 |
+| | Warren | 12 | $0.0196 | $0.0016 | none made |
+| | George | 3 | $0.0101 | $0.0034 | $0.0051 |
+| | **All** | **79** | **$0.1554** | **$0.0020** | **$0.0173** |
+| `anthropic/claude-sonnet-5.5` | Test agent | no scan rows | $0.1341 | unknown | unknown |
+| `anthropic/claude-opus-5.5` | production agent | 10 | not read | not read | no proposal |
+
+The Sonnet line is 15 calls on 2026-10-07 and 08, in `llm_calls` with no matching row in `agent_scans`, so it is left out of the totals.
+
+**What the data is too small to show**
+
+- **Whether any agent is good.** 9 proposals over 5 trading days, three of them the same IRON idea, in a market where SPY fell about
+  4%. One GM trade moves the approved mean by more than the whole gap between approved and not approved.
+- **Whether the user's approvals add anything:** 4 against 5.
+- **Any 20-day or 60-day return, or any realised result:** no agent has ever sold, so the Performance tab's score has nothing to score.
+- **Warren, George, or a long-horizon agent in general:** 12 scans and 3 scans. Warren's 0 proposals fit "no statements data" and also fit
+  12 quiet days; these numbers cannot tell them apart.
+- **Any model other than Flash Lite**, including what production's Opus agent costs or does.
+- **The effect of D354, D394 or D395:** no scan here ran them.
+
+**What it does show.** Reliability is not the problem: 5% invalid and no final mandate refusal. The weakness is usefulness: 84% passes,
+half the scans with no tool call, and a cash check that a repeated sentence satisfies. **A scan on this model costs about $0.002**,
+so measuring is cheap and need not wait.
+
+**Recommendation.** Next is phase 1's evaluation (section 7.4), on the budget the user approves, before D394 reaches production: fixed
+briefings, before and after, on Flash Lite first, reading passes without tools and repeated reasons. Then deploy compose first, then
+production, and read production's scans in full once it has about 50 (that read needs the user's word). Do not tune to the results above.
+D228 stays deferred. The statements work does not depend on this and can run in parallel, but its worth for Warren has not been shown here.
 
 ### Phase 1: prompt and settings, no new data
 
