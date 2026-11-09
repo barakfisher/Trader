@@ -8,14 +8,23 @@ Updated: 2026-11-09 - **Handoff by count: five merges since #381** (#382-#386). 
 from here; the next work is phase 0 of `docs/PROPOSAL-AGENT-PERFORMANCE.md`.**
 - **Merges since #381:** #382 (D390-D391), #383 (D392), #384 (handoff), #385 (D393), #386 (D394: four
   reasoning rules, the plan). This PR changes the Warren template (D395).
-- **Deployed: none of this, as far as this session knows.** The last deploy recorded here is `7726ada`
-  (#380) at `0084`; #383 and #385 carry `0085` and `0086`. This session did not read production. Deploying
-  is the user's step, compose first. Every agent's prompt changes with D394.
+- **Deployed: production read 2026-11-09, at `34919e4` (#382) on migration `0084`.** So #382 is live, and
+  #383-#387 are not; #383 and #385 carry `0085` and `0086`. Compose's database is also at `0084`, and compose has
+  been stopped since 2026-11-08. Deploying is the user's step, compose first. Every agent's prompt changes with D394.
 - **The plan is a proposal:** each phase needs the user's word. The user chose **SEC EDGAR beside yfinance,
   on a mapping of our own**, not `edgartools` (measured: section 4.2). Those two choices become a decision
   with the PR that builds them, whose scope is not agreed yet. Trends are deferred by the user.
-- **Next, on the user's word:** phase 0, which needs read access to a live database. The plan recommends it
-  before the statements work, so that there is a baseline.
+- **Phase 0 is measured** (the plan's section 8), on compose: 79 model scans, all before D354, all paused since
+  2026-10-30. 84% passes, 5% invalid, 9 proposals, 0.99 tool calls a scan, $0.002 a scan on Flash Lite. Results are too
+  small to judge: n = 9 at 5 trading days, none at 20 or 60. D228 stays deferred on these numbers.
+- **Next, on the user's word:** the plan recommends phase 1's evaluation before D394 reaches production, then the
+  deploy, then a full read of production's scans at about 50 (14 by 2026-11-06, no proposal).
+- **Lesson - a stopped database can be measured without starting it.** Compose's `up` would start the scheduler and paid
+  scans, so copy its volume read-only into a throwaway container with `--network none`.
+- **Debt - a proposal that was not approved may have no prices.** SOFI and IOVA were proposed and have no stored quotes, and
+  RCUS's stop on 2026-10-21, so phase 0 fetched closes from yfinance. The app cannot judge a rejected idea from its own data today.
+- **`VERSION` starts here at `0.0.1`** (the user's rule: every PR bumps it from `origin/main`, patch unless told otherwise). It is
+  separate from the header's commit time (D352).
 - **Owed:** no real model has run D394 or the new template, and a paid run needs the user's budget first. The
   template has not been seen in the running form, in either language; the user should read the Hebrew.
 - **Lesson - a figure check that reads numbers cannot see a claim.** A prompt that names a threshold makes it a
