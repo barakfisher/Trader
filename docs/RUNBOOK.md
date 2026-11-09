@@ -354,9 +354,11 @@ In this order; each step is idempotent or refuses to repeat.
 
 ### What production deliberately does without (D350)
 
-- **Yahoo's company descriptions** are not loaded: the agents' theme search
-  (`search_universe`) finds nothing. Loading them is a copy of `descriptions.local.jsonl` to
-  `~/traders/data/universe/` and a mount - decided together with the legal text.
+- **Yahoo's company descriptions were not loaded until 2026-11-09 (D396).** They are what gives
+  an instrument its profile, so without them **no agent can propose a trade**, not only theme search.
+  On a new host, copy `descriptions.local.jsonl` from the Mac to `~/traders/data/universe/`, mode
+  644 (the container's user cannot read 600); the `universe` container loads it on the next deploy,
+  about three minutes and two cents. Decide this again before sign-up opens to strangers.
 - **Prices come from `yfinance`** and headlines from GDELT and Yahoo, with no fixture fallback:
   an unavailable price is unpriced. Acceptable for the private phase only; decided again before
   sign-up opens to strangers.
