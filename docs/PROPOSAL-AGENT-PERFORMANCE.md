@@ -23,8 +23,8 @@ shared prompt.
 | Topic | State | Who decides next |
 |---|---|---|
 | Four shared rules | **Added on the user's word** (D394), not deployed | Merge and deploy: the user |
-| Add a statements source (not replace yfinance) | Recommended: SEC EDGAR beside yfinance | **The user: open question** |
-| `edgartools` or a hand-written mapping | Not measured yet | The user, after a measurement (CLAUDE.md convention 5) |
+| Add a statements source (not replace yfinance) | **Chosen by the user, 2026-11-09: SEC EDGAR beside yfinance** | Done; recorded as a decision with the PR that builds it |
+| `edgartools` or a hand-written mapping | **Chosen by the user, 2026-11-09: our own bounded mapping**, because `edgartools` covered less (section 4.2) | Done; recorded as a decision with the PR that builds it |
 | Instructions limit, 4,000 to 8,000 characters | Recommended, not agreed | The user |
 | Optional `analysis` field, `hold` and `watch` verdicts | Recommended, not agreed | The user |
 | Watchlist and scans triggered by it | Recommended after the DCF, not agreed | The user |
@@ -86,6 +86,68 @@ Symbols: KO, AAPL, JPM, BRK-B, DUK, TSM.
 EDGAR counts are by filing year, so they are approximate. Gaps are by exact tag: a company may report
 the same concept under another tag, which is what a mapping has to solve. Paid providers were not
 checked or priced.
+
+### 4.1 A direct mapping on the universe (2026-11-09)
+
+`companyfacts` against a short list of tags per concept: operating cash flow, capex, EBIT, debt, equity and
+shares. A company counts when every field has at least 5 years of annual filings, one of them recent.
+
+| Measured | Result |
+|---|---|
+| Universe stocks with a SEC company number | 2,528 of 2,592 |
+| 120 random stocks, 10-K only | 105 with `us-gaap`; **27 of those have all six fields** (21 at 10 years) |
+| 100 largest stocks, 10-K, 20-F and 40-F, wider shares tag | 89 with `us-gaap`, 11 without |
+| Of those 89, non-financial | **46 of 75 have all six** (41 at 10 years) |
+| Of those 89, financial | **0 of 14** |
+| A company's `companyfacts` file | median 3.1 MB |
+
+**What this shows:** a short tag list is not enough, even for the largest companies. The field missing most often is
+EBIT: JNJ, CVX, MRK, GE and LLY have no match under the listed tags, so it would have to be derived, for example from
+pre-tax income plus interest. The random sample also holds young companies, for which missing years are correct.
+
+**What it does not show:** the coverage a longer list or derived fields would reach. It is a sample with one list of tags.
+
+### 4.2 `edgartools` against a direct mapping (2026-11-09)
+
+Version 5.62.1 in a scratch environment outside the project, through `Company.get_facts()` and its annual statements. Both
+sides used the same concepts and forms. The direct side also filtered flows to periods of about a year and took the latest
+filing for each year. Shares here include the weighted average, so these counts differ slightly from section 4.1.
+
+| Companies with all six fields | Direct, 5 years | `edgartools`, 5 years | Direct, 10 years | `edgartools`, 10 years |
+|---|---|---|---|---|
+| 100 largest, non-financial (75) | **47** | 30 | **40** | 14 |
+| 100 largest, financial (14) | 1 | 1 | 1 | 1 |
+| 120 random, `us-gaap` (105) | **44** | 34 | **34** | 15 |
+
+| Latest values against yfinance, largest non-financial | Direct | `edgartools` |
+|---|---|---|
+| Within 2% | 278 | 266 |
+| Differ by more | 48 | 34 |
+| Absent | 45 | 71 |
+
+**What this shows:** on this route `edgartools` does not close the gaps. It covers less, and the worst loss is at 10 years,
+which is what the prompt asks for. It costs 42 installed packages and 256 MB in a clean environment.
+
+**What it does not show:**
+
+- **Which values are right.** yfinance is a comparison, not the truth. Some differences are definitions, such as JNJ's capex
+  (4.83B against 5.22B) and debt. Others may be errors on either side, such as AMD's operating cash flow on the direct side
+  (6.49B against 7.71B). None was checked against a filing, so about one comparison in seven is unexplained.
+- **The library's other route.** Its standardized statements per filing were not measured, and its concepts were matched by
+  name, which could undercount.
+- **A figure to check.** JNJ's FY 2025 R&D came back as 109M from `edgartools`, which looks wrong, and its first probe had no
+  FY 2022 column. Neither was checked against a filing.
+
+**XOM, diagnosed:** SEC's ticker map now points XOM to a new registrant, "ExxonMobil Holdings Corp" (CIK 2115436), with no annual
+history on the direct side. History presumably sits under the predecessor, which was not checked. A mapping needs a way to
+follow a successor, or it reports such a company as having no data.
+
+**Recommendation:** our own bounded module over `companyfacts`, using `httpx` (already a dependency): a concept map with fallbacks,
+annual-period filtering, derived EBIT and `null` for what is missing. Financial companies stay out of ROIC, EBIT and the DCF. The
+first PR should re-run this measurement with derived EBIT, and check a sample of differences against filings.
+
+**Before production:** SEC asks for a declared `User-Agent` with a contact, so that needs a setting. The measurement used a
+placeholder one. Fetch only the symbols agents ask about and store the result, given the file size.
 
 **Cost figures.** Prices come from `app/llm/pricing.py`: Gemini 3.7 Flash $0.75/$3.75 and Claude Sonnet
 5.5 $2/$10 per million input/output tokens. A scan was measured at $0.036 on 2026-10-07. The estimates
@@ -243,8 +305,7 @@ Measure before changing anything, per agent:
 
 ### Phase 3: financial statements
 
-- **Measure first:** `edgartools` against a hand-written mapping, on the tradable universe rather than six symbols:
-  share of companies with each field and 5 or 10 years. The user decides.
+- **Decided:** our own bounded mapping over `companyfacts` (section 4.2). The first PR's scope is agreed with the user before it starts.
 - **PR:** `FundamentalsProvider`, shared stored statements, `get_fundamentals`; ROIC, FCF and debt to EBIT computed in code,
   in research evidence too.
 
