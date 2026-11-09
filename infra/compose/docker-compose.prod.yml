@@ -16,8 +16,9 @@
 #     refused. Never the Vite dev server.
 #   - No Mailpit and no fixture providers: mail goes to the real provider, and
 #     an unavailable price stays unpriced rather than becoming a fixture's.
-#   - No Yahoo descriptions are mounted (D350): `universe` loads membership and
-#     holdings only, and the agents' universe search answers `unavailable`.
+#   - Yahoo's descriptions are never in an image: `universe` reads them from the
+#     checkout's gitignored `data/universe/descriptions.local.jsonl` (D396). Without
+#     that file on a new host no instrument gets a profile, so no agent can trade.
 #   - Every container's log is capped, so logs cannot fill the disk.
 #
 # Secrets: `.env` and `.env.owner` in the checkout's root, written once by
@@ -114,7 +115,7 @@ services:
         condition: service_completed_successfully
     restart: 'no'
 
-  # Membership and holdings from the image; no descriptions (D350).
+  # Membership and holdings from the checkout; descriptions from its gitignored file (D396).
   universe:
     build:
       context: ../..
@@ -125,6 +126,7 @@ services:
       CORPUS_DIR: /app/data/corpus
       UNIVERSE_SNAPSHOT_DIR: /var/lib/traders/universe
     volumes:
+      - ../../data/universe:/app/data/universe:ro
       - universe-snapshots:/var/lib/traders/universe
     command: ['python', 'scripts/ingest_universe.py']
     depends_on:

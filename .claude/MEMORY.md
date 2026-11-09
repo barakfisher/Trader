@@ -4,7 +4,18 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-09 - **Handoff by count: five merges since #381** (#382-#386). **Start a new session
+Updated: 2026-11-09, later - **Production's agents could not trade until today (D396).** Measurements now read the
+user's own account on production, SELECT only, without asking each time (the user's word). **Start a new session from here.**
+- **Production's data changed without a deploy:** 5,223 profiles loaded at 13:11 UTC. **Scans before that say nothing
+  about agent behaviour**, so production's baseline starts there. Read the first scans after it, on `34919e4`.
+- **Debt - Opus answers are thrown away.** All 3 of George's `invalid_answer` scans are prose before the JSON, and
+  `parse_answer` accepts only bare or fenced JSON: 3 of 10 scans, at about $0.09 each.
+- **Debt - research is often malformed, cause unknown.** On production 57 of 166 research calls were `malformed`, on Flash Lite.
+- **Lesson - a decision's written consequence can be smaller than its real one.** D350 said theme search would find
+  nothing. No deploy check failed, and every agent passed for days, at a real cost, saying why in each thesis.
+- **Decisions reach 396** (next: **397**).
+
+Earlier: 2026-11-09 - **Handoff by count: five merges since #381** (#382-#386). **Start a new session
 from here; the next work is phase 0 of `docs/PROPOSAL-AGENT-PERFORMANCE.md`.**
 - **Merges since #381:** #382 (D390-D391), #383 (D392), #384 (handoff), #385 (D393), #386 (D394: four
   reasoning rules, the plan). This PR changes the Warren template (D395).
@@ -6839,6 +6850,17 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
       source, so the prompt itself would have let a thesis quote them.
     - **Consequence:** a template fills new agents only, so an existing Warren keeps its stored text. The text
       describes today's tools, so the statements PR has to change it.
+396. **Production loads Yahoo's descriptions while it is self-use only** (#389, the user, 2026-11-09). Replaces D350's
+    "not Yahoo's descriptions"; its prices and headlines stand. Measured first: `instrument_profiles` was empty, because the
+    loader profiles only a member with a description and `tradable` needs a profile. So every quote said not tradable, and
+    14 scans ($0.95) made no proposal. Loaded by one `docker compose run` of `universe` at `34919e4`, after a backup: 5,223
+    profiles, all embedded, about $0.016. The compose file now mounts the checkout's `data/universe`.
+    - *Rejected:* a universe without descriptions, by code: no question about Yahoo's text, but theme search stays empty or
+      reads only names and sectors, so an agent could not find ideas and measurements could not be compared with compose.
+    - *Rejected:* waiting for the legal text: the agents the user is measuring could do nothing until then.
+    - **Consequence:** agents can now propose, and Telegram announces it. Not legal advice: the user decided this for
+      self-use, and it is decided again before sign-up opens to strangers. A new host needs the file copied by hand, or
+      the same silence returns: the loader exits 0 either way.
 
 ## Bugs that cost real time, and the lesson from each
 

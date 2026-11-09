@@ -30,7 +30,7 @@ shared prompt.
 | Optional `analysis` field, `hold` and `watch` verdicts | Recommended, not agreed | The user |
 | Watchlist and scans triggered by it | Recommended after the DCF, not agreed | The user |
 | Base-agent fixes, section 7 | Recommended, not agreed | The user |
-| Baseline (phase 0) | **Measured 2026-11-09**, section 8; too small to judge results | Next step: the user |
+| Baseline (phase 0) | **Measured 2026-11-09**, section 8; too small to judge results. Production's starts after D396 | Next step: the user |
 | Trends | **Deferred by the user**: "we will check later what to do and how" | Revisit in phase 7 |
 
 ## 3. What the review found
@@ -269,7 +269,8 @@ for.
 
 One branch off `main` at a time, no stacked PRs. Each PR updates the handoff and records its decisions. Each
 phase needs the user's word: nothing below is a grant. Paid model runs, deployment and reading a live database
-are asked for separately (standing rules), and every deploy goes to compose before production.
+are asked for separately (standing rules), and every deploy goes to compose before production. **Since 2026-11-09,
+measurements read the user's own account on production, SELECT only, without asking each time (the user's word).**
 
 **"Performance" here means three things, in this order:** decisions that are honest about their evidence;
 scans that finish and are usable; and results against the shadow SPY the Performance tab already computes
@@ -390,10 +391,27 @@ The Sonnet line is 15 calls on 2026-10-07 and 08, in `llm_calls` with no matchin
 half the scans with no tool call, and a cash check that a repeated sentence satisfies. **A scan on this model costs about $0.002**,
 so measuring is cheap and need not wait.
 
-**Recommendation.** Next is phase 1's evaluation (section 7.4), on the budget the user approves, before D394 reaches production: fixed
+**Superseded in part by the production reading below.** Next is phase 1's evaluation (section 7.4), on the budget the user approves, before D394 reaches production: fixed
 briefings, before and after, on Flash Lite first, reading passes without tools and repeated reasons. Then deploy compose first, then
-production, and read production's scans in full once it has about 50 (that read needs the user's word). Do not tune to the results above.
+production, and read production's scans in full once it has about 50. Do not tune to the results above.
 D228 stays deferred. The statements work does not depend on this and can run in parallel, but its worth for Warren has not been shown here.
+
+#### Production, read 2026-11-09 at `34919e4` on `0084`
+
+The user's own account, SELECT only. **No agent could propose a trade before 2026-11-09 13:11 UTC**, because production had no instrument
+profiles (D396). So these 14 scans, from 2026-11-02 to 2026-11-06, are not a baseline of agent behaviour: they show the cost and the tools only.
+
+| Agent | Model | Scans | Pass | `invalid_answer` | Proposals | Tool calls per scan | Total | Per scan | Agent against shadow SPY |
+|---|---|---|---|---|---|---|---|---|---|
+| George | `anthropic/claude-opus-5.5` | 10 | 7 | 3 | 0 | 4.6 | $0.94 | $0.094 | 0% against -2.24% |
+| Warren | `google/gemini-3.5-flash-lite` | 4 | 4 | 0 | 0 | 0 | $0.004 | $0.001 | 0% against -2.53% |
+
+- **All 37 `search_universe` calls came back empty**, and `get_quote` said not tradable. Both agents hold only cash, so the SPY column is the market's fall.
+- **`search_universe` was never called on compose and was called in every George scan here.** That may be the model or the agent: one agent on each
+  cannot tell them apart. So D228's reading above holds for Flash Lite only.
+- **All 3 invalid answers are Opus writing prose before the JSON**, which `parse_answer` refuses.
+- **Scan memory reached all 14 scans.** The pass-after-pass rate (8 of 12) means nothing while passing was the only answer.
+- **Too small or not read:** everything about decisions. Read the scans after the load, which still run the prompts before D394.
 
 ### Phase 1: prompt and settings, no new data
 

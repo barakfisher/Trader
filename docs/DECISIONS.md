@@ -406,3 +406,4 @@ while this file is out of date.
 | 393 | D387 case 4 as built: Ask drafts an acknowledge-only proposal when explicitly asked, and only the user's tap writes it |
 | 394 | Four reasoning rules go in the scan and research prompts, and nothing about investing does |
 | 395 | The Warren template says what the agent cannot know, and its examples carry no figures |
+| 396 | Production loads Yahoo's descriptions while it is self-use only |
