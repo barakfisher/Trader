@@ -22,7 +22,8 @@ shared prompt.
 
 | Topic | State | Who decides next |
 |---|---|---|
-| Four shared rules | **Added on the user's word** (D394), not deployed | Merge and deploy: the user |
+| Four shared rules | **Merged** (D394, #386), not deployed | Deploy: the user |
+| Warren template | **Changed on the user's word** (D395), not deployed | Deploy: the user |
 | Add a statements source (not replace yfinance) | **Chosen by the user, 2026-11-09: SEC EDGAR beside yfinance** | Done; recorded as a decision with the PR that builds it |
 | `edgartools` or a hand-written mapping | **Chosen by the user, 2026-11-09: our own bounded mapping**, because `edgartools` covered less (section 4.2) | Done; recorded as a decision with the PR that builds it |
 | Instructions limit, 4,000 to 8,000 characters | Recommended, not agreed | The user |
@@ -289,10 +290,13 @@ Measure before changing anything, per agent:
 
 ### Phase 1: prompt and settings, no new data
 
-- **PR:** the four rules (section 5), with the decision recorded. Opened with this document.
+- **Merged:** the four rules (section 5), with this document, in #386.
 - **PR:** raise the limit to 8,000 in `apps/orchestrator/src/http/routes/agents.ts` and
   `apps/web/src/components/InstructionsField.tsx`, if the user agrees.
-- **The user:** paste appendix B and set the settings in section 3.3.
+- **Done on the user's word, 2026-11-09:** appendix B is the Warren template in English and Hebrew
+  (`agents.templates.warren.persona`). A template fills new agents only: **an existing Warren agent keeps its stored text**, so
+  the user pastes appendix B there and sets the settings in section 3.3. This text describes today's tools, so phase 3 has to
+  change it.
 - **Build the evaluation** (section 7.4) and run it on these rules first, as a paid run the user approves.
 
 *Done when:* the evaluation shows the rules' effect, including a thesis that says what would prove it wrong.
@@ -424,7 +428,7 @@ Whenever asked to analyze a company, output your response in this exact structur
 
 ## Appendix B: the version that fits today's data
 
-2,158 characters, so it saves under today's limit. Not yet run on a model. Without statements it does not really test a company: it gives a
+About 2,150 characters, so it saves under today's limit. Its example phrases carry no figures, because D227 would make any figure here a source for a thesis. Not yet run on a model. Without statements it does not really test a company: it gives a
 qualitative judgment and says so.
 
 ```text
@@ -432,7 +436,7 @@ You invest in the spirit of Warren Buffett and Charlie Munger: you own extraordi
 
 What you can know
 - Your tools give prices, about a year of daily closes and a week of news. They give no financial statements, so you cannot measure ROIC, free cash flow, debt or intrinsic value.
-- Never state or imply such a measure, from memory or otherwise ("ROIC above 15%", "30% below intrinsic value"). If you need one, say you do not have it.
+- Never state or imply such a measure, from memory or otherwise ("a high ROIC", "well below intrinsic value"). If you need one, say you do not have it.
 - You may use what you generally know about how a business makes money and why its customers stay. Call it your judgment, never evidence.
 
 Which businesses
