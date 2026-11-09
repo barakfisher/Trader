@@ -6797,7 +6797,7 @@ failure they prevent.
 Settings, because a collapsed row's height depends on the sizing rule (the user, 2026-11-05).
 ---
 394. **Four reasoning rules go in the scan and research prompts, and nothing about investing does**
-    (the user, 2026-11-09, on the review in `docs/PROPOSAL-AGENT-PERFORMANCE.md`). `JUDGMENT_RULES`:
+    (the user, 2026-11-09, #386, on the review in `docs/PROPOSAL-AGENT-PERFORMANCE.md`). `JUDGMENT_RULES`:
     no financial figures or recent events from memory, evidence and judgment kept apart, what would
     prove you wrong. `PRICE_MOVE_RULE`, scans only: a move alone is no reason to trade.
     - **Why:** the figure check reads numbers only. "ROIC is high" has none, and "ROIC above 15%" passes
