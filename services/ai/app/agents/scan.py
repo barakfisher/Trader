@@ -99,6 +99,19 @@ RETRY_PREFIX = "The server refused these trades: they break your mandate."
 FIGURES_RETRY_PREFIX = (
     "The server refused these trades: their theses have figures it cannot source."
 )
+#: How a recommendation reasons, for a scan and a research view alike. The figure check
+#: reads numbers only, so "ROIC is high" or a remembered event passes it: this is what
+#: asks the model not to write them. The server cannot check these rules.
+JUDGMENT_RULES = """- Do not state a company's financial figures or recent events from memory.
+  If what you need is not in your evidence, say you do not have it and do not rest a
+  decision on it.
+- Keep evidence and judgment apart: say which is which.
+- In each recommendation, say what would prove you wrong."""
+#: A scan opens on the day's movers; a research view is about a stock already chosen.
+PRICE_MOVE_RULE = (
+    "- A price move alone is not a reason to trade: say what it means for the business"
+    " or your position."
+)
 #: D234: the user's own words, shown when the briefing has cash above the buffer.
 IDLE_CASH_RULE = (
     "Uninvested cash above your set buffer carries an opportunity cost. Holding idle"
@@ -167,6 +180,10 @@ How to work:
    calls; most scans need far fewer.
 3. Decide: {_decide_line(agent.max_decisions)} Doing nothing is right when nothing
    fits your mandate; with cash above your buffer, say why in your thesis.{idle_block}
+
+How to reason:
+{JUDGMENT_RULES}
+{PRICE_MOVE_RULE}
 
 What a trade costs (the broker's published rate, charged by the ledger):
 - Every buy and every sell pays a fee of {money(FEE_PER_SHARE_MINOR, "USD")} USD a share, at

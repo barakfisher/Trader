@@ -4,7 +4,18 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-05, late - **Handoff at the user's word after D387 case 1** (#382-#383 since
+Updated: 2026-11-09 - **Agent performance review.** A Buffett prompt reviewed against the code;
+`docs/PROPOSAL-AGENT-PERFORMANCE.md` holds the findings and a phased work plan (proposed: only D394 is
+accepted, and each phase needs the user's word).
+- **Lesson - a figure check that reads numbers cannot see a claim.** A prompt that names a threshold makes
+  that threshold a source (D227), so a claim nobody measured passes. Agents have no statements data: no
+  ROIC, FCF, EBIT or insider figures in any tool.
+- **Open with the user:** the statements source (recommended: SEC EDGAR beside yfinance, not replacing
+  it). **Next:** phase 0, read-only, asking for live-database access first. **Decisions reach 394**
+  (next: **395**). **Local:** the worktree's venv lacks `langfuse`, so `tests/test_llm_tracing.py` does
+  not load until it is synced. #385 (D393) is still undeployed as far as this session knows.
+
+Earlier: 2026-11-05, late - **Handoff at the user's word after D387 case 1** (#382-#383 since
 handoff #381; not yet the count of five).
 - **Merges since #381:**
   - #382: a phone card's menu and arrow take its corners; the app installs from a manifest (D390,
@@ -20,7 +31,7 @@ handoff #381; not yet the count of five).
   (a held/unheld vocabulary mix-up or a Hebrew figure the validator misreads are the likely causes),
   and whether a Trim/Sell/Buy more reached the inbox and Telegram within one proposal sweep (15 min).
   No real model has run the new prompt.
-- **Decisions reach 393** (next: **394**). **Migrations:** `0086` head; next free `0087`.
+- **Decisions reached 393 here.** **Migrations:** `0086` head; next free `0087`.
 - **D387 case 4 is built as D393** (kind `assistant`, migration `0086`). The next deploy carries
   `0085` and `0086`. Read the first proposal request's Langfuse trace: no real model has run rule 11.
 - **Next, on the user's word:** case 5 (alert narration's view). M13's gap from D392: research's
@@ -6785,6 +6796,17 @@ failure they prevent.
 **Three PRs for the polish:** bugs first, then tap targets and text, then collapsing Research and
 Settings, because a collapsed row's height depends on the sizing rule (the user, 2026-11-05).
 ---
+394. **Four reasoning rules go in the scan and research prompts, and nothing about investing does**
+    (the user, 2026-11-09, #386, on the review in `docs/PROPOSAL-AGENT-PERFORMANCE.md`). `JUDGMENT_RULES`:
+    no financial figures or recent events from memory, evidence and judgment kept apart, what would
+    prove you wrong. `PRICE_MOVE_RULE`, scans only: a move alone is no reason to trade.
+    - **Why:** the figure check reads numbers only. "ROIC is high" has none, and "ROIC above 15%" passes
+      because D227 counts the instructions as a source. These rules ask for what the server cannot check.
+    - *Rejected:* a philosophy or thresholds in the shared prompt (Warren's and Cathie's contradict, and a
+      contradiction resolves against the agent's own instructions); an hour or weekday "trend" in it (only
+      daily closes are stored, the user approves the fill, and a model would recall a pattern with no
+      source; the user deferred trends).
+    - **Not checked:** no real model has run them, and Ask's separate prompt was not read.
 
 ## Bugs that cost real time, and the lesson from each
 

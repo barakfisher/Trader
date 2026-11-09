@@ -404,3 +404,4 @@ while this file is out of date.
 | 391 | The app installs from a manifest alone, with no service worker |
 | 392 | D387 case 1 as built: research gives a view, and a view that asks for action is an acknowledge-only proposal on the real portfolio |
 | 393 | D387 case 4 as built: Ask drafts an acknowledge-only proposal when explicitly asked, and only the user's tap writes it |
+| 394 | Four reasoning rules go in the scan and research prompts, and nothing about investing does |
