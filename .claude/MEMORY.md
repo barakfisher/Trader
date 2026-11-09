@@ -4,16 +4,29 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-09 - **Agent performance review.** A Buffett prompt reviewed against the code;
-`docs/PROPOSAL-AGENT-PERFORMANCE.md` holds the findings and a phased work plan (proposed: only D394 is
-accepted, and each phase needs the user's word).
-- **Lesson - a figure check that reads numbers cannot see a claim.** A prompt that names a threshold makes
-  that threshold a source (D227), so a claim nobody measured passes. Agents have no statements data: no
-  ROIC, FCF, EBIT or insider figures in any tool.
-- **Open with the user:** the statements source (recommended: SEC EDGAR beside yfinance, not replacing
-  it). **Next:** phase 0, read-only, asking for live-database access first. **Decisions reach 394**
-  (next: **395**). **Local:** the worktree's venv lacks `langfuse`, so `tests/test_llm_tracing.py` does
-  not load until it is synced. #385 (D393) is still undeployed as far as this session knows.
+Updated: 2026-11-09 - **Handoff by count: five merges since #381** (#382-#386). **Start a new session
+from here; the next work is phase 0 of `docs/PROPOSAL-AGENT-PERFORMANCE.md`.**
+- **Merges since #381:** #382 (D390-D391), #383 (D392), #384 (handoff), #385 (D393), #386 (D394: four
+  reasoning rules, the plan). This PR changes the Warren template (D395).
+- **Deployed: none of this, as far as this session knows.** The last deploy recorded here is `7726ada`
+  (#380) at `0084`; #383 and #385 carry `0085` and `0086`. This session did not read production. Deploying
+  is the user's step, compose first. Every agent's prompt changes with D394.
+- **The plan is a proposal:** each phase needs the user's word. The user chose **SEC EDGAR beside yfinance,
+  on a mapping of our own**, not `edgartools` (measured: section 4.2). Those two choices become a decision
+  with the PR that builds them, whose scope is not agreed yet. Trends are deferred by the user.
+- **Next, on the user's word:** phase 0, which needs read access to a live database. The plan recommends it
+  before the statements work, so that there is a baseline.
+- **Owed:** no real model has run D394 or the new template, and a paid run needs the user's budget first. The
+  template has not been seen in the running form, in either language; the user should read the Hebrew.
+- **Lesson - a figure check that reads numbers cannot see a claim.** A prompt that names a threshold makes it a
+  source (D227), so a claim nobody measured passes, and that includes an example of what not to write. Agents
+  have no statements data: no ROIC, FCF, EBIT or insider figures in any tool.
+- **Lesson - measure a package's accuracy as well as its coverage, and against the same criterion.** Its
+  metadata looked fine; run on the same 220 stocks, `edgartools` covered fewer companies than a direct mapping.
+- **Lesson - a ticker can move to a new registrant.** SEC's map now sends XOM to a new holding company with no
+  annual history, so a mapping needs to follow a successor or it reports no data.
+- **Decisions reach 395** (next: **396**). **Local:** the worktree's venv lacks `langfuse`, so
+  `tests/test_llm_tracing.py` does not load until it is synced.
 
 Earlier: 2026-11-05, late - **Handoff at the user's word after D387 case 1** (#382-#383 since
 handoff #381; not yet the count of five).
@@ -6807,6 +6820,16 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
       daily closes are stored, the user approves the fill, and a model would recall a pattern with no
       source; the user deferred trends).
     - **Not checked:** no real model has run them, and Ask's separate prompt was not read.
+395. **The Warren template says what the agent cannot know, and its examples carry no figures** (#387, the user,
+    2026-11-09). `agents.templates.warren.persona`, English and Hebrew; the text is appendix B of
+    `docs/PROPOSAL-AGENT-PERFORMANCE.md`. It tells the agent it has no statements, to call its view of a bargain a
+    judgment, and that not being cheap is no reason to sell.
+    - *Rejected:* the user's full Buffett prompt as the template: it needs data no tool gives, and its hurdles
+      would reject everything or invite remembered figures. It returns in phase 7, after the statements and the DCF.
+    - *Rejected:* figures in the examples of what not to write ("ROIC above 15%"): D227 counts instructions as a
+      source, so the prompt itself would have let a thesis quote them.
+    - **Consequence:** a template fills new agents only, so an existing Warren keeps its stored text. The text
+      describes today's tools, so the statements PR has to change it.
 
 ## Bugs that cost real time, and the lesson from each
 
