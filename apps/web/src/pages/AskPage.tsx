@@ -76,7 +76,9 @@ export const AskPage = observer(function AskPage() {
 
       <OwnKeyNotice access={access} />
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_16rem]">
+      {/* minmax(0, ...) on every track: a grid track is otherwise at least as wide as
+          its content, so one long conversation title widened the whole page on a phone. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
         <Card>
           <div className="space-y-4">
             {ask.opening && <Spinner label={t('ask.opening')} />}
