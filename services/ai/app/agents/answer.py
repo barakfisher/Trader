@@ -61,6 +61,11 @@ MAX_THESIS_CHARS = 1500
 UNSOURCED_PREFIX = "figures not in the evidence"
 
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")
+_DECODER = json.JSONDecoder()
+
+#: Why an answer is refused before its contents are read.
+NOT_AN_OBJECT = "the answer is not a JSON object"
+SEVERAL_OBJECTS = "the answer holds more than one JSON object"
 
 
 @dataclass(frozen=True)
@@ -122,15 +127,52 @@ class ParsedAnswer:
     thesis: str | None
 
 
-def parse_answer(raw: str) -> tuple[ParsedAnswer | None, list[str]]:
-    """The answer the model wrote, or why it is not one at all."""
+def _objects(body: str) -> list[dict[str, Any]]:
+    """The top-level JSON objects in `body`, in order, skipping any text around them."""
+    found: list[dict[str, Any]] = []
+    position = body.find("{")
+    while position != -1:
+        try:
+            value, end = _DECODER.raw_decode(body, position)
+        except json.JSONDecodeError:
+            position = body.find("{", position + 1)
+            continue
+        if isinstance(value, dict):
+            found.append(value)
+        position = body.find("{", end)
+    return found
+
+
+def _answer_object(raw: str) -> tuple[dict[str, Any] | None, str | None]:
+    """The one object the model answered with, or why there is none (D397).
+
+    Text before or after it is dropped: models write a paragraph first, or a
+    stray brace after, and that cost whole scans whose answer was complete. The
+    dropped text is never shown or stored as the answer, so nothing it says
+    escapes the figure check, which reads the thesis inside the object. Two
+    objects are refused rather than one of them chosen.
+    """
     body = _FENCE.sub("", raw.strip())
     try:
-        data = json.loads(body)
+        whole = json.loads(body)
     except json.JSONDecodeError:
-        return None, ["the answer is not a JSON object"]
-    if not isinstance(data, dict):
-        return None, ["the answer is not a JSON object"]
+        pass
+    else:
+        # A bare value that is not an object is no answer, even if one sits inside it.
+        return (whole, None) if isinstance(whole, dict) else (None, NOT_AN_OBJECT)
+    objects = _objects(body)
+    if not objects:
+        return None, NOT_AN_OBJECT
+    if len(objects) > 1:
+        return None, SEVERAL_OBJECTS
+    return objects[0], None
+
+
+def parse_answer(raw: str) -> tuple[ParsedAnswer | None, list[str]]:
+    """The answer the model wrote, or why it is not one at all."""
+    data, problem = _answer_object(raw)
+    if data is None:
+        return None, [problem or NOT_AN_OBJECT]
 
     thesis = data.get("thesis")
     thesis = thesis.strip() if isinstance(thesis, str) and thesis.strip() else None

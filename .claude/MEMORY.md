@@ -4,16 +4,21 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-09, later - **Production's agents could not trade until today (D396).** Measurements now read the
-user's own account on production, SELECT only, without asking each time (the user's word). **Start a new session from here.**
-- **Production's data changed without a deploy:** 5,223 profiles loaded at 13:11 UTC. **Scans before that say nothing
-  about agent behaviour**, so production's baseline starts there. Read the first scans after it, on `34919e4`.
-- **Debt - Opus answers are thrown away.** All 3 of George's `invalid_answer` scans are prose before the JSON, and
-  `parse_answer` accepts only bare or fenced JSON: 3 of 10 scans, at about $0.09 each.
-- **Debt - research is often malformed, cause unknown.** On production 57 of 166 research calls were `malformed`, on Flash Lite.
+Updated: 2026-11-09, evening - **A scan's answer is read out of the text around it (D397).** **Start a new session from here.**
+- **Deployed: `dac765f` (#389) to compose, then production, at `0086`, 2026-11-09 13:44 UTC**, on the user's word. That
+  deploy carried #383-#389, so D392-D396 are live, D394's rules included. `0085`-`0086` ran first on a restored copy of
+  production's backup, up, down and up. This PR (D397) is not deployed.
+- **First scans after it (14:14 UTC):** George (Opus) proposed AXON, and the user approved it; Warren's pass was refused
+  for one extra closing brace, which D397 fixes.
+- **Production's baseline starts at 13:11 UTC** (5,223 profiles loaded, D396). Scans before it say nothing about agent
+  behaviour. Measurements read the user's own account on production, SELECT only, without asking each time.
+- **Debt - research answers are cut off.** On production 57 of 166 research calls were `malformed`: 38 hold no complete
+  JSON object (likely the output limit; not confirmed), 19 parse but were refused for content. D397 does not touch it.
+- **Debt - the same strict parse remains in `mandate_check.py`** (one of its answers had text after the fence) and in
+  `research/rating.py`. Neither was changed here.
 - **Lesson - a decision's written consequence can be smaller than its real one.** D350 said theme search would find
   nothing. No deploy check failed, and every agent passed for days, at a real cost, saying why in each thesis.
-- **Decisions reach 396** (next: **397**).
+- **Decisions reach 397** (next: **398**).
 
 Earlier: 2026-11-09 - **Handoff by count: five merges since #381** (#382-#386). **Start a new session
 from here; the next work is phase 0 of `docs/PROPOSAL-AGENT-PERFORMANCE.md`.**
@@ -6861,6 +6866,15 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
     - **Consequence:** agents can now propose, and Telegram announces it. Not legal advice: the user decided this for
       self-use, and it is decided again before sign-up opens to strangers. A new host needs the file copied by hand, or
       the same silence returns: the loader exits 0 either way.
+397. **A scan's answer is the one JSON object in what the model wrote, whatever text surrounds it** (#390, the user,
+    2026-11-09). Measured first: production's four refused scans all held a complete answer. Three from Opus had a
+    paragraph before it, and one from Flash Lite had one closing brace too many. `parse_answer` reads the whole text
+    when it parses, and otherwise the top-level objects in it: one is the answer, none or two are refused.
+    - *Rejected:* sending the answer back for "JSON only", as figures are: another paid call (about $0.09 on Opus)
+      for a format the server can read.
+    - *Rejected:* taking the first of two objects: they may disagree, and the server would be choosing the decision.
+    - **Consequence:** the dropped text is not stored or shown, so nothing in it reaches the user unchecked; the
+      figure check still reads the thesis inside the object. A bare array is still refused, even with an object inside it.
 
 ## Bugs that cost real time, and the lesson from each
 
