@@ -83,6 +83,12 @@ export interface NotifiableFinding {
   /** A trade proposal's "Evidence checked" line: what the agent's scan looked at. */
   evidenceChecked?: EvidenceChecked;
   /**
+   * A trade proposal raised while its market is closed: when it next opens
+   * (ISO 8601 UTC, from the exchange calendar). The message then begins by
+   * saying so, since Approve is refused until then.
+   */
+  marketOpensAt?: string;
+  /**
    * The observation's rule, subject and evidence. Present for scan findings, so
    * a move and a drawdown on one holding can be sent as one message (decision
    * 148); a finding without them is always sent on its own.
@@ -144,7 +150,34 @@ function appendLine(text: string | null, line: string): string {
   return text ? `${text}\n\n${line}` : line;
 }
 
-function toOutbound(finding: NotifiableFinding, userId: string, language: string): OutboundNotification {
+/** The local calendar day of `at` in `timeZone`, as YYYY-MM-DD. */
+function localDay(at: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(at);
+}
+
+/** "The market is still closed; it opens at 16:30", in the user's zone and language. */
+export function marketClosedLine(opensAt: string, now: Date, timeZone: string, messages: Messages): string {
+  const opens = new Date(opensAt);
+  const time = new Intl.DateTimeFormat(messages.locale, {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(opens);
+  const day =
+    localDay(opens, timeZone) === localDay(now, timeZone)
+      ? null
+      : new Intl.DateTimeFormat(messages.locale, { timeZone, weekday: 'long' }).format(opens);
+  return messages.tradeMarketClosed({ day, time });
+}
+
+function toOutbound(
+  finding: NotifiableFinding,
+  userId: string,
+  settings: Pick<NotificationSettings, 'language' | 'timezone'>,
+  now: Date,
+): OutboundNotification {
+  const language = settings.language;
   // The explanation is already evidence-validated prose from the scan, in
   // every language it was stored in; a channel never composes its own, because
   // a figure that did not come through the validator is a figure nobody checked.
@@ -160,9 +193,15 @@ function toOutbound(finding: NotifiableFinding, userId: string, language: string
     messages,
   );
   // A research view ends with what approving does and the not-advice line (D392).
+  // A trade raised while its market is closed starts with when it opens: Approve
+  // is refused until then, and the message is the one place the user decides.
+  const explanation =
+    finding.trade === true && finding.marketOpensAt !== undefined
+      ? appendLine(marketClosedLine(finding.marketOpensAt, now, settings.timezone, messages), text.explanation ?? '')
+      : text.explanation;
   const body =
     finding.trade === true
-      ? appendLine(text.explanation, messages.tradeNotAdvice)
+      ? appendLine(explanation, messages.tradeNotAdvice)
       : finding.research === true
         ? appendLine(appendLine(text.explanation, messages.researchAcknowledgeOnly), messages.researchNotAdvice)
         : (text.explanation ?? '');
@@ -254,7 +293,7 @@ export async function fanOut(
     const outbound: { message: OutboundNotification; rows: string[] }[] =
       group.render !== undefined && claimed.length === group.members.length
         ? [{ message: mergedOutbound(group, lead, userId, settings.language), rows: claimed.map((c) => c.id) }]
-        : claimed.map((c) => ({ message: toOutbound(c.finding, userId, settings.language), rows: [c.id] }));
+        : claimed.map((c) => ({ message: toOutbound(c.finding, userId, settings, now), rows: [c.id] }));
 
     for (const { message, rows } of outbound) {
       try {
