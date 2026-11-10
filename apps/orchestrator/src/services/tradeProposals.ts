@@ -153,6 +153,7 @@ async function proposeTrade(
     scanId,
     // D70: a sell that can be approved right now does not wait for the morning.
     urgent: kind === 'sell' && calendar.is_open,
+    marketOpensAt: calendar.is_open ? undefined : calendar.next_open,
     headline: headlineIn('en'),
     thesis,
     localized,
@@ -181,6 +182,7 @@ async function announce(
     proposalId: string;
     scanId: string;
     urgent: boolean;
+    marketOpensAt: string | undefined;
     headline: string;
     thesis: string;
     localized: LocalizedTexts;
@@ -206,6 +208,7 @@ async function announce(
           proposalId: proposal.proposalId,
           trade: true,
           urgent: proposal.urgent,
+          ...(proposal.marketOpensAt !== undefined ? { marketOpensAt: proposal.marketOpensAt } : {}),
           evidenceChecked: evidenceCheckedFrom(toolCalls),
         },
       ],

@@ -384,6 +384,12 @@ export interface Messages {
    */
   tradeNotAdvice: string;
   /**
+   * The first line of a trade proposal raised while its market is closed: it
+   * cannot be approved until the open, so the message says when that is, in
+   * the user's zone. `day` is set only when the open is on a later local day.
+   */
+  tradeMarketClosed: (opens: { day: string | null; time: string }) => string;
+  /**
    * A research view's headline on the real portfolio (D392): the agent and its
    * word, from the catalogue; the rationale under it is the model's.
    */
@@ -809,6 +815,10 @@ const en: Messages = {
   tradeFundedBy: (symbols) => ` - paid for by selling ${symbols.join(', ')}: approve that first`,
   tradeNotAdvice:
     'Not financial or investment advice, and no substitute for a professional: this proposal is for simulation inside the app only.',
+  tradeMarketClosed: ({ day, time }) =>
+    day === null
+      ? `The market is still closed; it opens at ${time}.`
+      : `The market is still closed; it opens on ${day} at ${time}.`,
   researchProposalHeadline: (agent, action, symbol) =>
     `${agent} recommends: ${{ buy_more: 'buy more', trim: 'trim', sell: 'sell', buy: 'buy' }[action]} ${symbol}`,
   researchAcknowledgeOnly:
@@ -1376,6 +1386,10 @@ const he: Messages = {
     `${isolated(agent)} מציע ${side === 'buy' ? 'לקנות' : 'למכור'} ${ltr(quantity)} ${ltr(symbol)} ב־${ltr(price)}`,
   tradeFundedBy: (symbols) => ` - במימון מכירת ${symbols.map(ltr).join(', ')}: אשרו אותה קודם`,
   tradeNotAdvice: 'אין בהצעה זו ייעוץ פיננסי או ייעוץ השקעות, והיא אינה תחליף לייעוץ מקצועי: היא נועדה לסימולציה בתוך האפליקציה בלבד.',
+  tradeMarketClosed: ({ day, time }) =>
+    day === null
+      ? `השוק עדיין סגור, ייפתח בשעה ${ltr(time)}.`
+      : `השוק עדיין סגור, ייפתח ב${day} בשעה ${ltr(time)}.`,
   researchProposalHeadline: (agent, action, symbol) =>
     `המלצת ${isolated(agent)}: ${{ buy_more: 'לקנות עוד', trim: 'לצמצם', sell: 'למכור', buy: 'לקנות' }[action]} ${ltr(symbol)}`,
   researchAcknowledgeOnly:

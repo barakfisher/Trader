@@ -4,7 +4,20 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-10 - **An eight-role review of the app is in `docs/reviews/` (VERSION 0.0.4).** Not deployed.
+Updated: 2026-11-10, later - **A trade proposed while the market is closed says when it opens (VERSION 0.0.5).** Not deployed.
+- **Why:** on 2026-11-09 George's AXON buy was proposed at 16:14 Jerusalem; the user tapped Approve at 16:19 and 16:24 and
+  was refused `market_closed`, then filled at 16:45. Read from production's logs (`proposal.approval_refused`) and
+  re-computed against production's calendar: the refusals were right. The user suspected Israel's switch to winter time.
+- **Lesson - the calendar is not the suspect, the habit is.** The open is computed in `America/New_York` from the
+  XNYS file, so it is DST-correct. But Israel changes clock a week before New York, so the open in Jerusalem is 16:30,
+  then 15:30 for one week (2026-10-25 to 11-01), then 16:30 again. A user who learnt "15:30" that week taps early.
+- **What changed:** the Telegram message of a trade proposal raised while its market is closed now begins with the
+  catalogue's `tradeMarketClosed` line ("השוק עדיין סגור, ייפתח בשעה 16:30", the weekday added when the open is on a
+  later local day), from the same `next_open` that refuses the approval, so the two cannot disagree.
+- **Not done:** `/pending` and the web proposal page do not show the line before a tap; they show the time only in the
+  refusal. Not yet seen in a real Telegram chat.
+
+Earlier: 2026-11-10 - **An eight-role review of the app is in `docs/reviews/` (VERSION 0.0.4).** Not deployed.
 - **What it is:** analyst, product, security, engineer, DB, backend, frontend and devops reviews, each from source by an
   independent reviewer, plus a look at the running UI (phone width, Hebrew, compose). `docs/reviews/README.md` ranks the
   findings several roles reached and says which were re-checked against the code. They are proposals: none is a

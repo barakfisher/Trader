@@ -177,11 +177,17 @@ const proposals = await import('../src/services/proposals.js');
 type AiClient = import('@traders/shared/ai').AiClient;
 type Notifier = import('../src/notify/notifier.js').Notifier;
 
+/** The body of the first message a stub notifier was asked to send. */
+function sentBody(notifier: ReturnType<typeof stubNotifier>): string {
+  const calls = notifier.send.mock.calls as unknown as [{ body: string }][];
+  return calls[0]![0].body;
+}
+
 function stubNotifier() {
   return { channel: 'telegram', send: vi.fn(async () => ({ delivered: true })) } satisfies Notifier;
 }
 
-function stubAi(options: { open?: boolean; priceMinor?: number } = {}) {
+function stubAi(options: { open?: boolean; priceMinor?: number; nextOpen?: string } = {}) {
   return {
     marketCalendar: vi.fn(async (exchange: string) => ({
       exchange,
@@ -190,7 +196,7 @@ function stubAi(options: { open?: boolean; priceMinor?: number } = {}) {
       is_open: options.open ?? true,
       session_closes_at: null,
       early_close: false,
-      next_open: '2026-10-08T13:30:00Z',
+      next_open: options.nextOpen ?? '2026-10-08T13:30:00Z',
       covered_until: '2030-12-31',
     })),
     quotes: vi.fn(async (symbols: string[]) => ({
@@ -326,6 +332,51 @@ describe('a scan becomes a proposal', () => {
       }),
     );
     expect(queries.listScanToolCalls).toHaveBeenCalledWith(USER.id, agentRow().id, SCAN);
+  });
+
+  it('says the market is still closed, and when it opens in the user\'s zone, before the thesis', async () => {
+    // 2026-11-09: proposed at 16:14 in Jerusalem, New York opened at 16:30 (after both clocks changed).
+    const notifier = stubNotifier();
+    const proposedAt = new Date('2026-11-09T14:14:30Z');
+    await tradeProposals.proposeFromScan(USER.id, agentRow() as never, scan(), {
+      ai: stubAi({ open: false, nextOpen: '2026-11-09T14:30:00Z' }),
+      notifier,
+      now: () => proposedAt,
+    });
+    const body = sentBody(notifier);
+    expect(body.startsWith(`${messagesFor('en').tradeMarketClosed({ day: null, time: '16:30' })}\n\nAAPL fell`)).toBe(true);
+    expect(messagesFor('en').tradeMarketClosed({ day: null, time: '16:30' })).toBe(
+      'The market is still closed; it opens at 16:30.',
+    );
+  });
+
+  it('names the day when the market opens on a later day than the proposal', async () => {
+    const notifier = stubNotifier();
+    // 18:00 on Wednesday in Jerusalem; the open is Thursday 16:30 there.
+    await tradeProposals.proposeFromScan(USER.id, agentRow() as never, scan(), {
+      ai: stubAi({ open: false, nextOpen: '2026-10-08T13:30:00Z' }),
+      notifier,
+      now: () => NOW,
+    });
+    const body = sentBody(notifier);
+    expect(body.split('\n\n')[0]).toBe('The market is still closed; it opens on Thursday at 16:30.');
+  });
+
+  it('says it in Hebrew for a Hebrew user', async () => {
+    settingsRow = { ...settingsRow, language: 'he' };
+    const notifier = stubNotifier();
+    try {
+      await tradeProposals.proposeFromScan(USER.id, agentRow() as never, scan(), {
+        ai: stubAi({ open: false, nextOpen: '2026-11-09T14:30:00Z' }),
+        notifier,
+        now: () => new Date('2026-11-09T14:14:30Z'),
+      });
+    } finally {
+      settingsRow = { ...settingsRow, language: 'en' };
+    }
+    const body = sentBody(notifier);
+    expect(body.split('\n\n')[0]).toBe(messagesFor('he').tradeMarketClosed({ day: null, time: '16:30' }));
+    expect(messagesFor('he').tradeMarketClosed({ day: null, time: '16:30' })).toBe('השוק עדיין סגור, ייפתח בשעה \u206616:30\u2069.');
   });
 
   it('holds the announcement for the digest during quiet hours, and still writes the proposal', async () => {
