@@ -4,7 +4,21 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-09, evening - **A scan's answer is read out of the text around it (D397).** **Start a new session from here.**
+Updated: 2026-11-10 - **An eight-role review of the app is in `docs/reviews/` (VERSION 0.0.4).** Not deployed.
+- **What it is:** analyst, product, security, engineer, DB, backend, frontend and devops reviews, each from source by an
+  independent reviewer, plus a look at the running UI (phone width, Hebrew, compose). `docs/reviews/README.md` ranks the
+  findings several roles reached and says which were re-checked against the code. They are proposals: none is a
+  decision, and each needs the user's word before work starts.
+- **Fixed here: Ask overflowed sideways on a phone** (596 px of document at 375). Lesson: a grid track is never
+  narrower than its content, so `truncate` deep inside does nothing until the track is `minmax(0, ...)`. A one-column
+  grid with no `grid-cols-*` has the same trap. No regression test: jsdom has no layout, and there is no browser test.
+- **Seen on the dashboard, not fixed:** "Account" includes the agents' uninvested paper cash under a "holdings only"
+  caption (the gap to "Total value" is exactly that cash). The digest banner opens a tab that does not list its findings.
+- **Local environment:** compose's `web` container is built from the image with no source mount, so an edit reaches it
+  only by `dev-docker.sh` (rebuild) or `docker cp`. Compose's containers vanished early on 2026-11-10 with the volumes
+  intact; nothing in this session stopped them, and the cause was not found.
+
+Earlier: 2026-11-09, evening - **A scan's answer is read out of the text around it (D397).** **Start a new session from here.**
 - **Deployed: `dac765f` (#389) to compose, then production, at `0086`, 2026-11-09 13:44 UTC**, on the user's word. That
   deploy carried #383-#389, so D392-D396 are live, D394's rules included. `0085`-`0086` ran first on a restored copy of
   production's backup, up, down and up. This PR (D397) is not deployed.
