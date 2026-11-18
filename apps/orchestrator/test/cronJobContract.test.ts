@@ -39,7 +39,10 @@ function parseCronJobs(text: string): CronJob[] {
       const runFor = /name: RUN_FOR\n\s+value: (\S+)/.exec(doc)?.[1] ?? null;
       const schedule = /^ {2}schedule: '([^']+)'$/m.exec(doc)?.[1] ?? '';
       const [minuteField = '', hourField = ''] = schedule.split(' ');
-      return { name, kind, runFor, minutes: minuteField.split(',').map(Number), hourField };
+      // `*` is every minute (`open_approvals`, D401).
+      const minutes =
+        minuteField === '*' ? Array.from({ length: 60 }, (_, minute) => minute) : minuteField.split(',').map(Number);
+      return { name, kind, runFor, minutes, hourField };
     });
 }
 
@@ -71,7 +74,10 @@ describe('CronJobs match the local scheduler', () => {
 
   it('keeps the start order: backfill first, the digest last', () => {
     const firstMinute = (kind: string) => cronJobs.find((job) => job.kind === kind)!.minutes[0]!;
-    const others = cronJobs.filter((job) => !['backfill', 'daily_digest'].includes(job.kind));
+    // A job asked every minute has no place in the order: it runs beside all of them.
+    const others = cronJobs.filter(
+      (job) => !['backfill', 'daily_digest'].includes(job.kind) && job.minutes.length < 60,
+    );
     for (const job of others) {
       expect(firstMinute('backfill'), job.name).toBeLessThan(job.minutes[0]!);
       expect(firstMinute('daily_digest'), job.name).toBeGreaterThan(job.minutes[0]!);

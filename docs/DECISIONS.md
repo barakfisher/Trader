@@ -408,3 +408,7 @@ while this file is out of date.
 | 395 | The Warren template says what the agent cannot know, and its examples carry no figures |
 | 396 | Production loads Yahoo's descriptions while it is self-use only |
 | 397 | A scan's answer is the one JSON object in what the model wrote, whatever text surrounds it |
+| 398 | A trade raised while its market is closed is approved for the open, not approved |
+| 399 | A transient refusal at the open retries every minute until the proposal expires |
+| 400 | A newer proposal for the same agent and symbol replaces a waiting approval |
+| 401 | The open's fills run on a one-minute tick, `open_approvals`, which writes a run row only when something is due |

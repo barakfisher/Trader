@@ -452,3 +452,40 @@ spec:
               resources:
                 requests: { cpu: 10m, memory: 16Mi }
                 limits: { memory: 64Mi }
+---
+# Approvals for the open (D398, D401): every minute, so a trade approved for the
+# open fills within a minute of it. Nothing due answers without a run row.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: run-open-approvals
+spec:
+  schedule: '* * * * *'
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 50
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 55
+      template:
+        metadata:
+          labels:
+            app: run-trigger
+            run-kind: open-approvals
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: trigger
+              image: curlimages/curl:8.22.0
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 50 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"${RUN_FOR:+,\"for\":\"$RUN_FOR\"}}"']
+              env:
+                - name: RUN_KIND
+                  value: open_approvals
+                - name: INTERNAL_API_KEY
+                  valueFrom:
+                    secretKeyRef: { name: traders-secrets, key: INTERNAL_API_KEY }
+              resources:
+                requests: { cpu: 10m, memory: 16Mi }
+                limits: { memory: 64Mi }

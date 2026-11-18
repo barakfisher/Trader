@@ -12,6 +12,7 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type {
+  OpenApprovalResult,
   Proposal,
   ProposalDetailResponse,
   ProposalsResponse,
@@ -196,6 +197,37 @@ export function useConfirmTradeApproval(proposalId: string) {
         client.invalidateQueries({ queryKey: queryKeys.proposals }),
         client.invalidateQueries({ queryKey: queryKeys.agents }),
         client.invalidateQueries({ queryKey: queryKeys.consolidated }),
+      ]),
+  });
+}
+
+/**
+ * *Approve at the open* (D398): a trade raised while its market is closed is
+ * filled when it opens, with Approve's checks. The proposal stays pending until
+ * then, so only its own page and the inbox are re-read.
+ */
+export function useApproveForOpen(proposalId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<OpenApprovalResult>(`/proposals/${encodeURIComponent(proposalId)}/open-approval`, {}),
+    onSettled: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: queryKeys.proposal(proposalId) }),
+        client.invalidateQueries({ queryKey: queryKeys.proposals }),
+      ]),
+  });
+}
+
+/** *Cancel approval*: take back an approval for the open still waiting. */
+export function useCancelOpenApproval(proposalId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.delete<{ outcome: 'cancelled' | 'unchanged' }>(`/proposals/${encodeURIComponent(proposalId)}/open-approval`),
+    onSettled: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: queryKeys.proposal(proposalId) }),
+        client.invalidateQueries({ queryKey: queryKeys.proposals }),
       ]),
   });
 }

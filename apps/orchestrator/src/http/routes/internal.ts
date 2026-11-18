@@ -24,6 +24,7 @@ import {
   findInstrumentsBySymbols,
   finishRun,
   getUser,
+  hasDueOpenApprovals,
   listActiveUserIds,
   listActiveUsersAnalysedInstruments,
   listActiveUsersTradedInstruments,
@@ -42,6 +43,7 @@ import { EVERY_ACTIVE_USER, INSTALLATION_KINDS } from '../../runKinds.js';
 import { MARKET_BENCHMARK_SYMBOLS } from '../../services/marketBenchmarks.js';
 import { BENCHMARK_SYMBOL } from '../../services/performance.js';
 import { sweepExpiredProposals } from '../../services/proposals.js';
+import { fillDueOpenApprovals } from '../../services/openApproval.js';
 import { sweepSupersededAssistantProposals } from '../../services/assistantProposals.js';
 import { sweepResearchProposals } from '../../services/researchProposals.js';
 import { planScheduledScans } from '../../services/scheduledScans.js';
@@ -96,6 +98,9 @@ const RUN_BUCKET_MINUTES: Record<string, number> = {
   // The ask for agents' scheduled scans (D69): every quarter hour is enough to
   // start a slot within minutes of its time, and a slot's window is hours long.
   agent_scans: 15,
+  // Approvals for the open (D401): a minute, so a trade approved for 16:30
+  // fills within a minute of it, and a passing refusal is retried the next.
+  open_approvals: 1,
 };
 
 /**
@@ -141,6 +146,7 @@ const runSchema = z.object({
     'instrument_metadata',
     'universe_rescreen',
     'agent_scans',
+    'open_approvals',
   ]),
   userId: z.string().uuid().optional(),
   for: z.literal(EVERY_ACTIVE_USER).optional(),
@@ -238,6 +244,15 @@ async function runForInstallation(context: Context, request: RunRequest): Promis
         ai: context.get('ai'),
         queue: context.get('scanQueue')!,
         now: new Date(),
+        requestId: context.get('requestId'),
+      });
+      return done(runId, 'ok', result);
+    }
+
+    if (kind === 'open_approvals') {
+      const result = await fillDueOpenApprovals({
+        ai: context.get('ai'),
+        notifier: context.get('notifier'),
         requestId: context.get('requestId'),
       });
       return done(runId, 'ok', result);
@@ -397,6 +412,12 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
           status: 'skipped',
           reason: 'scheduled scans are off on this installation (ENABLE_SCHEDULED_SCANS)',
         });
+      }
+      if (request.kind === 'open_approvals' && !(await hasDueOpenApprovals(new Date()))) {
+        // D401: asked every minute, due a few times a week. Answered without a
+        // run row - 1,440 "skipped" rows a day would say nothing; the waiting
+        // approval is its own record, and its expiry is announced.
+        return context.json({ kind: request.kind, status: 'skipped', reason: 'no approval for the open is due' });
       }
       return context.json(await runForInstallation(context, request));
     }

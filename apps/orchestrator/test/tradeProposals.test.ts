@@ -115,6 +115,7 @@ vi.mock('../src/db/queries.js', () => ({
   transaction: vi.fn(async (fn: (client: unknown) => Promise<unknown>) => fn({})),
   getAgent: vi.fn(async () => agentRow()),
   findProposal: vi.fn(async () => proposal),
+  supersedeOpenApprovals: vi.fn(async () => []),
   findTradableInstrument: vi.fn(async (symbol: string) => {
     const known = symbol.trim().toUpperCase();
     return known === 'AAPL' || known === 'MSFT'
@@ -347,6 +348,49 @@ describe('a scan becomes a proposal', () => {
     expect(body.startsWith(`${messagesFor('en').tradeMarketClosed({ day: null, time: '16:30' })}\n\nAAPL fell`)).toBe(true);
     expect(messagesFor('en').tradeMarketClosed({ day: null, time: '16:30' })).toBe(
       'The market is still closed; it opens at 16:30.',
+    );
+  });
+
+  it('keeps the open it waits for, and offers Approve at the open (D398)', async () => {
+    const notifier = stubNotifier();
+    await tradeProposals.proposeFromScan(USER.id, agentRow() as never, scan(), {
+      ai: stubAi({ open: false, nextOpen: '2026-11-09T14:30:00Z' }),
+      notifier,
+      now: () => new Date('2026-11-09T14:14:30Z'),
+    });
+    expect(queries.createTradeProposal).toHaveBeenLastCalledWith(
+      expect.objectContaining({ opensAt: new Date('2026-11-09T14:30:00Z') }),
+    );
+    const calls = notifier.send.mock.calls as unknown as [{ atOpen?: boolean }][];
+    expect(calls[0]![0].atOpen).toBe(true);
+  });
+
+  it('keeps no open when the market is open, and offers Approve', async () => {
+    const notifier = stubNotifier();
+    await tradeProposals.proposeFromScan(USER.id, agentRow() as never, scan(), { ai: stubAi(), notifier, now: () => NOW });
+    expect(queries.createTradeProposal).toHaveBeenLastCalledWith(expect.objectContaining({ opensAt: null }));
+    const calls = notifier.send.mock.calls as unknown as [{ atOpen?: boolean }][];
+    expect(calls[0]![0].atOpen).toBeUndefined();
+  });
+
+  it('says which approval for the open it replaced (D400)', async () => {
+    vi.mocked(queries.supersedeOpenApprovals).mockResolvedValueOnce([{ id: 'older', state: 'pending', kind: 'buy' }]);
+    vi.mocked(queries.findProposal).mockResolvedValueOnce({
+      id: 'older',
+      kind: 'buy',
+      state: 'pending',
+      payload: { symbol: 'AAPL', quantity: '2' },
+      evidence: {},
+    } as never);
+    const notifier = stubNotifier();
+    await tradeProposals.proposeFromScan(USER.id, agentRow() as never, scan(), {
+      ai: stubAi({ open: false, nextOpen: '2026-11-09T14:30:00Z' }),
+      notifier,
+      now: () => new Date('2026-11-09T14:14:30Z'),
+    });
+    expect(queries.supersedeOpenApprovals).toHaveBeenCalledWith(USER.id, expect.any(String), 'AAPL', PROPOSAL);
+    expect(sentBody(notifier)).toContain(
+      messagesFor('en').openApproval.replaces({ side: 'buy', quantity: '2', symbol: 'AAPL' }),
     );
   });
 

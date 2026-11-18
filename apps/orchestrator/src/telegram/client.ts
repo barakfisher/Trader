@@ -53,8 +53,19 @@ const ACTIONS = ['approve', 'reject', 'snooze'] as const;
  * A trade proposal has its own two (D48): `trade` is Approve and Reject, and
  * `{ confirmAt }` is Confirm at the price its preview showed, and Reject.
  * `recheck` is the one button an expired trade proposal may carry (D217).
+ * A trade raised while its market is closed has two more (D398): `tradeAtOpen`
+ * is Approve at the open and Reject, and `openQueued`, once approved for the
+ * open, is Cancel approval and Reject.
  */
-export type Keyboard = 'decide' | 'trade' | 'undo' | 'recheck' | 'none' | { confirmAt: bigint };
+export type Keyboard =
+  | 'decide'
+  | 'trade'
+  | 'tradeAtOpen'
+  | 'openQueued'
+  | 'undo'
+  | 'recheck'
+  | 'none'
+  | { confirmAt: bigint };
 
 /** Whether a Confirm button can carry this price (`MAX_CALLBACK_PRICE_MINOR`). */
 export function confirmable(priceMinor: bigint): boolean {
@@ -172,7 +183,7 @@ export class TelegramNotifier implements Notifier {
         : {
             reply_markup: this.keyboardFor(
               notification.proposalId,
-              notification.trade === true ? 'trade' : 'decide',
+              notification.trade !== true ? 'decide' : notification.atOpen === true ? 'tradeAtOpen' : 'trade',
               notification.language,
             ),
           }),
@@ -228,6 +239,20 @@ export class TelegramNotifier implements Notifier {
         return {
           inline_keyboard: [
             [button('approve', messages.buttons.approve), button('reject', messages.buttons.reject)],
+            ...link,
+          ],
+        };
+      case 'tradeAtOpen':
+        return {
+          inline_keyboard: [
+            [button('queue', messages.openApproval.approveButton), button('reject', messages.buttons.reject)],
+            ...link,
+          ],
+        };
+      case 'openQueued':
+        return {
+          inline_keyboard: [
+            [button('unqueue', messages.openApproval.cancelButton), button('reject', messages.buttons.reject)],
             ...link,
           ],
         };

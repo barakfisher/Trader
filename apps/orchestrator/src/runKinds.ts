@@ -29,6 +29,8 @@ export const INSTALLATION_KINDS: ReadonlySet<string> = new Set([
   // Erases accounts past their deletion date, and old rejected requests in automatic signup (D264).
   'account_erase',
   'agent_scans',
+  // Fills every account's approvals for the open once their market opens (D398, D401).
+  'open_approvals',
   RESCREEN_KIND,
 ]);
 

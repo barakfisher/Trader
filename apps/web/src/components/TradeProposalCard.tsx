@@ -6,11 +6,17 @@ import type { Proposal, TradeApprovalPreview, TradeProposalPayload } from '@trad
 
 import { useTranslation } from '../i18n/index.ts';
 import { formatMoney, formatNumber, formatPercent } from '../i18n/format.ts';
-import { approvalErrorMessage } from '../lib/agentPresentation.ts';
+import { approvalErrorMessage, openRefusalReason } from '../lib/agentPresentation.ts';
 import { isUrgent, timeLeft } from '../lib/proposalCountdown.ts';
 import { observationText } from '../lib/observationText.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
-import { useConfirmTradeApproval, usePreviewTradeApproval } from '../queries/proposals.ts';
+import {
+  useApproveForOpen,
+  useCancelOpenApproval,
+  useConfirmTradeApproval,
+  usePreviewTradeApproval,
+} from '../queries/proposals.ts';
+import { ApiRequestError } from '../api/client.ts';
 import { useStore } from '../stores/context.tsx';
 import { EvidenceCheckedLine } from './EvidenceChecked.tsx';
 import { MandateBreachWarning } from './MandateBreachWarning.tsx';
@@ -30,6 +36,11 @@ import { Button, Card, ErrorNote } from './ui.tsx';
  * enough cash - is said against this card, and the proposal stays open to try
  * again or reject (D49). No snooze and no undo (D48). A buy past one of the
  * agent's own limits is warned about above Confirm, never refused (D299).
+ *
+ * A trade raised while its market is closed is approved **for the open** instead
+ * (D398): the server fills it when the market opens, with the same checks, and
+ * the user is told what happened. Until then the card says it is waiting and
+ * offers Cancel; a refusal at the open is said here, and Approve is back.
  */
 export const TradeProposalCard = observer(function TradeProposalCard({
   proposal,
@@ -44,9 +55,16 @@ export const TradeProposalCard = observer(function TradeProposalCard({
   const payload = proposal.payload as TradeProposalPayload;
   const preview = usePreviewTradeApproval(proposal.id);
   const confirm = useConfirmTradeApproval(proposal.id);
+  const forOpen = useApproveForOpen(proposal.id);
+  const cancelForOpen = useCancelOpenApproval(proposal.id);
   const [shown, setShown] = useState<TradeApprovalPreview | null>(null);
   const rejecting = proposals.decidingAction(proposal.id) === 'reject';
-  const busy = preview.isPending || confirm.isPending || rejecting;
+  const busy = preview.isPending || confirm.isPending || forOpen.isPending || cancelForOpen.isPending || rejecting;
+  const queued = proposal.openApproval?.state === 'queued';
+  // D398: before its market opens, a trade is approved for the open, not now.
+  const beforeOpen =
+    proposal.state === 'pending' && proposal.opensAt !== null && Date.parse(proposal.opensAt) > Date.now();
+  const refusedAtOpen = proposal.openApproval?.state === 'refused' ? proposal.openApproval.reason : undefined;
   const remaining = timeLeft(proposal.expiresAt);
   const refusal = proposals.refusal?.proposalId === proposal.id ? proposals.refusal.message : null;
 
@@ -144,6 +162,31 @@ export const TradeProposalCard = observer(function TradeProposalCard({
           />
         )}
 
+        {queued && proposal.opensAt !== null && (
+          <p role="status" className="rounded-lg bg-accent/10 px-3 py-2 text-xs text-text-primary">
+            {t('proposal.trade.openApproval.queued', { time: formatExactTime(proposal.opensAt) })}
+          </p>
+        )}
+        {!queued && beforeOpen && proposal.opensAt !== null && (
+          <p className="text-xs text-text-muted">
+            {t('proposal.trade.openApproval.closedNote', { time: formatExactTime(proposal.opensAt) })}
+          </p>
+        )}
+        {refusedAtOpen !== undefined && (
+          <ErrorNote
+            message={t('proposal.trade.openApproval.refused', { reason: openRefusalReason(refusedAtOpen) })}
+          />
+        )}
+        {forOpen.error && (
+          <ErrorNote
+            message={
+              forOpen.error instanceof ApiRequestError && forOpen.error.code === 'market_open'
+                ? t('proposal.trade.openApproval.marketOpen')
+                : approvalErrorMessage(forOpen.error, t('proposal.trade.openApproval.failed'), payload.currency)
+            }
+          />
+        )}
+        {cancelForOpen.error && <ErrorNote message={t('proposal.trade.openApproval.cancelFailed')} />}
         {preview.error && (
           <ErrorNote message={approvalErrorMessage(preview.error, t('proposal.trade.previewFailed'), payload.currency)} />
         )}
@@ -164,7 +207,23 @@ export const TradeProposalCard = observer(function TradeProposalCard({
 
         {confirm.data === undefined && (
           <div className="flex flex-wrap gap-2">
-            {shown === null ? (
+            {queued ? (
+              <Button variant="secondary" disabled={busy} onClick={() => cancelForOpen.mutate()}>
+                {cancelForOpen.isPending
+                  ? t('proposal.trade.openApproval.cancelInFlight')
+                  : t('proposal.trade.openApproval.cancel')}
+              </Button>
+            ) : beforeOpen && shown === null ? (
+              <Button
+                disabled={busy}
+                onClick={() => {
+                  cancelForOpen.reset();
+                  forOpen.mutate();
+                }}
+              >
+                {forOpen.isPending ? t('proposal.trade.openApproval.inFlight') : t('proposal.trade.openApproval.approve')}
+              </Button>
+            ) : shown === null ? (
               <Button disabled={busy} onClick={approve}>
                 {preview.isPending ? t('proposal.trade.inFlight.preview') : t('proposal.approve')}
               </Button>
@@ -191,3 +250,4 @@ export const TradeProposalCard = observer(function TradeProposalCard({
     </Card>
   );
 });
+

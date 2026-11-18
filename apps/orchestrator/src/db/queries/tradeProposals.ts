@@ -11,6 +11,8 @@ export interface TradeProposalToCreate {
   kind: TradeProposalKind;
   payload: TradeProposalPayload;
   expiresAt: Date;
+  /** The exchange's next open when the market is closed (0087, D398); null when it is open. */
+  opensAt: Date | null;
   headline: string;
   /** The thesis, in the user's language (D51). */
   thesis: string;
@@ -63,8 +65,8 @@ export async function createTradeProposalIn(
     ],
   );
   const inserted = await client.query<{ id: string; observation_id: string }>(
-    `INSERT INTO proposals (user_id, agent_id, observation_id, kind, payload, expires_at, scan_id)
-     SELECT $1, $2, o.id, $3, $4::jsonb, $5, $6
+    `INSERT INTO proposals (user_id, agent_id, observation_id, kind, payload, expires_at, scan_id, opens_at)
+     SELECT $1, $2, o.id, $3, $4::jsonb, $5, $6, $8
        FROM observations o
       WHERE o.agent_id = $2 AND o.dedupe_key = $7
      ON CONFLICT DO NOTHING
@@ -77,6 +79,7 @@ export async function createTradeProposalIn(
       proposal.expiresAt,
       proposal.scanId,
       dedupeKey,
+      proposal.opensAt,
     ],
   );
   const row =

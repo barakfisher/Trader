@@ -31,7 +31,7 @@ import { SEVERITY_RANK } from './notificationPolicy.js';
 
 /** What grouping needs to know about a finding, beyond what delivers it. */
 export interface GroupableFinding {
-  refKind: 'observation' | 'proposal' | 'narration' | 'model_fallback' | 'run';
+  refKind: 'observation' | 'proposal' | 'narration' | 'model_fallback' | 'run' | 'open_approval';
   severity: string;
   kind?: string;
   subjectRef?: string | null;

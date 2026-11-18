@@ -187,6 +187,14 @@ export interface MarketLineFigures {
   change: string;
 }
 
+/** A trade approved for the open, as its outcome message names it (D398). */
+export interface OpenApprovalFigures {
+  agent: string;
+  side: 'buy' | 'sell';
+  quantity: string;
+  symbol: string;
+}
+
 export type RecordedNarrationState = Exclude<NarrationState, 'unknown'>;
 
 export interface NoticeText {
@@ -456,6 +464,30 @@ export interface Messages {
   };
 
   /**
+   * Approving a trade for the open (D398-D401): its buttons, what a tap adds
+   * under the proposal, and the message the open sends with what it did. Every
+   * figure arrives formatted in this language's locale.
+   */
+  openApproval: {
+    approveButton: string;
+    cancelButton: string;
+    queuedToast: string;
+    /** Under the proposal once approved for the open; `opens` is the time it fills. */
+    queued: (opens: string, at: string) => string;
+    cancelledToast: string;
+    cancelled: (at: string) => string;
+    /** A cancel that found nothing waiting: already filled, cancelled or settled. */
+    notWaitingToast: string;
+    filled: (figures: OpenApprovalFigures & { price: string; fee: string; cash: string }) => NoticeText;
+    /** `reason` is a sentence from `trade.reasons` or the far-from-agent line; `until` the expiry. */
+    refused: (figures: OpenApprovalFigures & { reason: string; until: string }) => NoticeText;
+    expired: (figures: OpenApprovalFigures) => NoticeText;
+    /** D400: on a newer proposal, the waiting approval it cancelled. */
+    replaces: (figures: Omit<OpenApprovalFigures, 'agent'>) => string;
+    digestLine: (count: number) => string;
+  };
+
+  /**
    * Re-checking an expired trade proposal (D212-D217): the button, the toast,
    * and the line its outcome adds under the message. The agent's own reason
    * arrives written in this language (D51); everything around it is here.
@@ -545,6 +577,7 @@ export interface Messages {
       narrationChanged: boolean,
       modelFallbacks: number,
       scansGaveUp: number,
+      openApprovals: number,
     ) => string;
     reasons: Record<DigestReason, string>;
     reasonLine: (count: number, reason: string) => string;
@@ -594,6 +627,8 @@ const en: Messages = {
     undo: '⏳ Undoing…',
     confirm: '⏳ Filling…',
     recheck: '⏳ Re-checking…',
+    queue: '⏳ Approving for the open…',
+    unqueue: '⏳ Cancelling…',
   },
   openInApp: 'Open in app',
 
@@ -954,6 +989,34 @@ const en: Messages = {
     notAdvice: 'Not financial or investment advice, and no substitute for a professional: answers are for the simulation inside the app only.',
     newConversation: 'New conversation. Your next question starts it.',
   },
+  openApproval: {
+    approveButton: 'Approve at the open',
+    cancelButton: 'Cancel approval',
+    queuedToast: 'Approved for the open ✓',
+    queued: (opens, at) =>
+      `🕒 Approved for the open (${at}): it fills at ${opens} if the price is within 3% of the agent's and the cash is there. You will get a message either way. Virtual ledger only - no order is placed.`,
+    cancelledToast: 'Approval for the open cancelled.',
+    cancelled: (at) => `↩ Approval for the open cancelled (${at}). The proposal is still open.`,
+    notWaitingToast: 'No approval is waiting for the open.',
+    filled: (f) => ({
+      headline: `✅ ${f.agent}: ${f.side === 'buy' ? 'bought' : 'sold'} ${f.quantity} ${f.symbol} at the open, at ${f.price}`,
+      explanation: `Fee ${f.fee}; cash ${f.cash}. As you approved it for the open. Virtual ledger - no order was placed.`,
+    }),
+    refused: (f) => ({
+      headline: `⚠️ ${f.agent}: the ${f.side === 'buy' ? 'buy' : 'sale'} of ${f.quantity} ${f.symbol} you approved for the open was not made`,
+      explanation: `${f.reason} The proposal is open until ${f.until}: approve or reject it.`,
+    }),
+    expired: (f) => ({
+      headline: `⌛ ${f.agent}: the ${f.side === 'buy' ? 'buy' : 'sale'} of ${f.quantity} ${f.symbol} you approved for the open was not made`,
+      explanation: 'The proposal expired before it could be filled.',
+    }),
+    replaces: (f) =>
+      `This replaces the ${f.side === 'buy' ? 'buy' : 'sale'} of ${f.quantity} ${f.symbol} you approved for the open; that approval is cancelled.`,
+    digestLine: (count) =>
+      count === 1
+        ? 'A trade you approved for the open has an outcome: see the app.'
+        : `${count} trades you approved for the open have outcomes: see the app.`,
+  },
   recheck: {
     button: '🔄 Re-check',
     startedToast: "Re-checking at today's price - the answer follows here.",
@@ -1093,9 +1156,10 @@ const en: Messages = {
   },
 
   digest: {
-    title: (findings, narrationChanged, modelFallbacks, scansGaveUp) => {
+    title: (findings, narrationChanged, modelFallbacks, scansGaveUp, openApprovals) => {
       const parts: string[] = [];
       if (findings > 0) parts.push(`${findings} finding${findings === 1 ? '' : 's'}`);
+      if (openApprovals > 0) parts.push(openApprovals === 1 ? 'a trade at the open' : `${openApprovals} trades at the open`);
       if (narrationChanged) parts.push('explanations changed');
       if (modelFallbacks > 0) parts.push('a model fell back');
       if (scansGaveUp > 0) parts.push(scansGaveUp === 1 ? 'a scan did not run' : `${scansGaveUp} scans did not run`);
@@ -1165,6 +1229,8 @@ const he: Messages = {
     undo: '⏳ מבטל…',
     confirm: '⏳ מבצע…',
     recheck: '⏳ בודק שוב…',
+    queue: '⏳ מאשר לפתיחה…',
+    unqueue: '⏳ מבטל…',
   },
   openInApp: 'פתיחה באפליקציה',
 
@@ -1523,6 +1589,34 @@ const he: Messages = {
     notAdvice: 'אין בתשובה זו ייעוץ פיננסי או ייעוץ השקעות, והיא אינה תחליף לייעוץ מקצועי: התשובות נועדו לסימולציה בתוך האפליקציה בלבד.',
     newConversation: 'שיחה חדשה. השאלה הבאה שלכם תפתח אותה.',
   },
+  openApproval: {
+    approveButton: 'אישור לפתיחה',
+    cancelButton: 'ביטול האישור לפתיחה',
+    queuedToast: 'אושר לפתיחה ✓',
+    queued: (opens, at) =>
+      `🕒 אושר לפתיחה (${ltr(at)}): העסקה תבוצע ב־${ltr(opens)} אם המחיר במרחק של עד ${ltr('3%')} ממחיר הסוכן ויש מספיק מזומן. תקבלו הודעה בכל מקרה. יומן וירטואלי בלבד - שום פקודה לא נשלחת.`,
+    cancelledToast: 'האישור לפתיחה בוטל.',
+    cancelled: (at) => `↩ האישור לפתיחה בוטל (${ltr(at)}). ההצעה עדיין פתוחה.`,
+    notWaitingToast: 'אין אישור לפתיחה שממתין.',
+    filled: (f) => ({
+      headline: `✅ ${isolated(f.agent)}: ${f.side === 'buy' ? 'נקנו' : 'נמכרו'} ${ltr(f.quantity)} ${ltr(f.symbol)} בפתיחה, ב־${ltr(f.price)}`,
+      explanation: `עמלה ${ltr(f.fee)}; מזומן ${ltr(f.cash)}. כפי שאישרתם לפתיחה. יומן וירטואלי - שום פקודה לא בוצעה.`,
+    }),
+    refused: (f) => ({
+      headline: `⚠️ ${isolated(f.agent)}: ה${f.side === 'buy' ? 'קנייה' : 'מכירה'} של ${ltr(f.quantity)} ${ltr(f.symbol)} שאישרתם לפתיחה לא בוצעה`,
+      explanation: `${f.reason} ההצעה פתוחה עד ${ltr(f.until)}: אשרו או דחו אותה.`,
+    }),
+    expired: (f) => ({
+      headline: `⌛ ${isolated(f.agent)}: ה${f.side === 'buy' ? 'קנייה' : 'מכירה'} של ${ltr(f.quantity)} ${ltr(f.symbol)} שאישרתם לפתיחה לא בוצעה`,
+      explanation: 'תוקף ההצעה פג לפני שהעסקה בוצעה.',
+    }),
+    replaces: (f) =>
+      `ההצעה הזו מחליפה את ה${f.side === 'buy' ? 'קנייה' : 'מכירה'} של ${ltr(f.quantity)} ${ltr(f.symbol)} שאישרתם לפתיחה; האישור ההוא בוטל.`,
+    digestLine: (count) =>
+      count === 1
+        ? 'יש תוצאה לעסקה שאישרתם לפתיחה: ראו באפליקציה.'
+        : `יש תוצאות ל־${ltr(count)} עסקאות שאישרתם לפתיחה: ראו באפליקציה.`,
+  },
   recheck: {
     button: '🔄 בדיקה חוזרת',
     startedToast: 'בודק שוב במחיר של היום - התשובה תגיע כאן.',
@@ -1664,9 +1758,10 @@ const he: Messages = {
   },
 
   digest: {
-    title: (findings, narrationChanged, modelFallbacks, scansGaveUp) => {
+    title: (findings, narrationChanged, modelFallbacks, scansGaveUp, openApprovals) => {
       const parts: string[] = [];
       if (findings > 0) parts.push(hebrewCount(findings, 'ממצא אחד', 'ממצאים'));
+      if (openApprovals > 0) parts.push(openApprovals === 1 ? 'עסקה בפתיחה' : `${ltr(openApprovals)} עסקאות בפתיחה`);
       if (narrationChanged) parts.push('ההסברים השתנו');
       if (modelFallbacks > 0) parts.push('מודל הוחלף בחלופי');
       if (scansGaveUp > 0) parts.push(scansGaveUp === 1 ? 'סריקה לא רצה' : `${ltr(scansGaveUp)} סריקות לא רצו`);

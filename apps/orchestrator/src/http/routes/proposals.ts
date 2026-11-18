@@ -18,6 +18,8 @@ import {
   isTradeProposalKind,
   type ProposalAttempt,
   type RecheckResult,
+  type OpenApprovalResult,
+  type OpenApprovalState,
   type TradeApprovalPreview,
   type TradeApprovalResult,
 } from '@traders/shared';
@@ -35,6 +37,7 @@ import { evidenceCheckedFrom } from '../../services/evidenceChecked.js';
 import { applyDecision, factsOf } from '../../services/proposals.js';
 import { recheckOf, recheckProposal } from '../../services/proposalRecheck.js';
 import { confirmTradeApproval, previewTradeApproval } from '../../services/tradeApproval.js';
+import { approveForOpen, cancelForOpen } from '../../services/openApproval.js';
 import type { TradeContext } from '../../services/fills.js';
 import {
   effectiveState,
@@ -133,6 +136,16 @@ function toWire(row: ProposalRow, now: Date) {
     assistantConversationExists: row.assistant_conversation_exists ?? null,
     scanId: row.scan_id,
     evidenceChecked: row.scan_id ? evidenceCheckedFrom(row.scan_tool_calls ?? []) : null,
+    opensAt: row.opens_at?.toISOString() ?? null,
+    openApproval:
+      !row.open_approval || !row.open_approval_surface || !row.open_approval_at
+        ? null
+        : {
+            state: row.open_approval as OpenApprovalState,
+            surface: row.open_approval_surface,
+            at: row.open_approval_at.toISOString(),
+            reason: row.open_approval_reason,
+          },
   };
 }
 
@@ -213,6 +226,22 @@ export function registerProposalsRoutes(app: Hono<AppEnv>): void {
       notifier: context.get('notifier'),
       requestId: context.get('requestId'),
     });
+    return context.json(body);
+  });
+
+  /**
+   * *Approve at the open* (D398): a trade raised while its market is closed is
+   * filled when it opens, with Approve's checks. A second click answers
+   * `unchanged`; once the market is open the answer is `market_open`.
+   */
+  app.post('/proposals/:id/open-approval', async (context) => {
+    const body: OpenApprovalResult = await approveForOpen(currentUserId(context), context.req.param('id'), 'web');
+    return context.json(body);
+  });
+
+  /** *Cancel approval*: take back an approval for the open still waiting. */
+  app.delete('/proposals/:id/open-approval', async (context) => {
+    const body = await cancelForOpen(currentUserId(context), context.req.param('id'), 'web');
     return context.json(body);
   });
 

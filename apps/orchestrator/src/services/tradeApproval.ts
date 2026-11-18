@@ -48,6 +48,7 @@ import {
   getAgentCash,
   getAgentHoldingQuantity,
   getUniverseProfile,
+  markOpenApprovalFilledIn,
   recordProposalAttempt,
   type AgentRow,
   type ProposalRow,
@@ -141,7 +142,8 @@ async function recordingRefusals<T>(
     if (
       error instanceof ApiProblem &&
       (error.status === 409 || error.status === 422) &&
-      error.code !== 'already_decided'
+      error.code !== 'already_decided' &&
+      error.code !== 'open_approval_gone'
     ) {
       const details = error.details as { quoteAsOf?: unknown } | undefined;
       await recordProposalAttempt({
@@ -269,6 +271,12 @@ export async function confirmTradeApproval(
   shownPriceMinor: bigint,
   surface: ApprovalSurface,
   context: TradeContext,
+  /**
+   * The open's fill of an approval for the open (D398): the approval is marked
+   * filled in the fill's transaction, and a cancel that landed first rolls the
+   * fill back.
+   */
+  { forOpenApproval = false }: { forOpenApproval?: boolean } = {},
 ): Promise<TradeApprovalResult> {
   const trade = await loadTrade(userId, proposalId);
   if (trade.row.state === 'approved') {
@@ -296,6 +304,9 @@ export async function confirmTradeApproval(
       });
       // Another surface decided it between the read and this write: roll the fill back.
       if (!transition.applied) throw conflict('already_decided', 'this proposal has already been decided');
+      if (forOpenApproval && !(await markOpenApprovalFilledIn(client, userId, trade.row.id))) {
+        throw conflict('open_approval_gone', 'the approval for the open was cancelled before it filled');
+      }
     }),
   );
   logger().info(

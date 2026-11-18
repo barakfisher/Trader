@@ -4,7 +4,19 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-10, later - **A trade proposed while the market is closed says when it opens (VERSION 0.0.5).** Not deployed.
+Updated: 2026-11-18 - **Approve at the open (D398-D401, VERSION 0.0.6).** Not deployed.
+- **What changed:** a trade raised while its market is closed carries *Approve at the open* instead of Approve, in
+  Telegram, `/pending` and the web page. A tap queues it (migration `0087`, `proposals.open_approval`); a one-minute tick
+  (`open_approvals`) fills it at the open through Approve's own checks, retries transient refusals, and announces a
+  fill, a substantive refusal, an expiry, or a newer proposal that replaced it.
+- **Lesson - a cancel and a fill race for one row.** Every write to `open_approval` moves from `queued` and names it in
+  its WHERE, and the fill marks `filled` inside the fill's transaction, rolling back when it finds nothing queued
+  (`open_approval_gone`). A postgres test races the two; with the guard removed it fails (checked by hand).
+- **Not verified:** a real Telegram chat and a real open; the money path ran only against a throwaway Postgres.
+  After deploy, approve one proposal for the open and read `open_approvals` runs and the message at 16:30 Jerusalem.
+- **Decisions reach 401** (next: **402**). Their `#PR` is filled in when the PR is opened.
+
+Earlier: 2026-11-10, later - **A trade proposed while the market is closed says when it opens (VERSION 0.0.5).** Not deployed.
 - **Why:** on 2026-11-09 George's AXON buy was proposed at 16:14 Jerusalem; the user tapped Approve at 16:19 and 16:24 and
   was refused `market_closed`, then filled at 16:45. Read from production's logs (`proposal.approval_refused`) and
   re-computed against production's calendar: the refusals were right. The user suspected Israel's switch to winter time.
@@ -6902,6 +6914,42 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
     - *Rejected:* taking the first of two objects: they may disagree, and the server would be choosing the decision.
     - **Consequence:** the dropped text is not stored or shown, so nothing in it reaches the user unchecked; the
       figure check still reads the thesis inside the object. A bare array is still refused, even with an object inside it.
+398. **A trade raised while its market is closed is approved for the open, not approved** (#PR, the user, 2026-11-18).
+    Measured first on production: all 8 trade proposals were raised while the market was closed, and 17 of 22 approval
+    refusals were `market_closed`. Such a trade carries *Approve at the open* and Reject, in Telegram, on `/pending` and
+    on the web page; a tap queues it (`proposals.open_approval = 'queued'`, migration 0087) and offers *Cancel approval*.
+    At the open the fill runs Approve's own checks (`confirmTradeApproval`): within 3% of the agent's price, cash and
+    holdings; a mandate breach warns and is listed in the fill's message, as on Approve. The proposal stays `pending`
+    until the fill approves it, in the fill's transaction, which also marks the approval `filled`.
+    - *Rejected:* a looser check at the open (fill at any price): the agent's thesis was written at its price, and a gap
+      at the open is exactly when the thesis may no longer hold.
+    - *Rejected:* a limit order: there is no broker (guideline 2), and the ledger has no resting orders to model one.
+    - **Consequence:** a substantive refusal (`price_far_from_agent`, `insufficient_cash`, ...) is announced with its
+      reason and leaves the proposal pending, so the user can still Approve by hand before it expires. While the market
+      is open the button is Approve; a late tap on *Approve at the open* is answered as Approve.
+399. **A transient refusal at the open retries every minute until the proposal expires** (#PR, the user, 2026-11-18).
+    Transient: `market_closed`, `quote_too_old`, `quote_unavailable`, `price_moved`, any 5xx and any error that is not an
+    `ApiProblem`. The approval stays queued and nothing is said; an approval still waiting at expiry is announced.
+    - *Rejected:* one attempt at the open: the first minute's quote is the most likely to be missing or stale, and the
+      user would learn of a fill that never happened only from silence.
+    - **Consequence:** a quote that never arrives costs one preview a minute per waiting approval until expiry; there
+      are at most a handful, and the tick writes nothing while it waits (D401).
+400. **A newer proposal for the same agent and symbol replaces a waiting approval** (#PR, the user, 2026-11-18). The
+    older proposal is rejected by `system` (`actorUserId` null), its approval marked `superseded`, and the newer
+    message says what it replaced.
+    - *Rejected:* filling both: the agent changed its mind, and two fills would double the position.
+    - *Rejected:* keeping the older and dropping the newer: the newer was written against later evidence.
+    - **Consequence:** the user's tap is undone by the agent; the message saying so is the only notice, so it is urgent.
+401. **The open's fills run on a one-minute tick, `open_approvals`, which writes a run row only when something is due**
+    (#PR, the user, 2026-11-18). Measured first: `runs` held 6,713 rows (5.2 MB) and is never pruned; a row a minute
+    would add 525,600 a year. The route asks `hasDueOpenApprovals` (a partial index on `opens_at`) and answers skipped
+    with no row; when one is due it claims a run as every installation kind does.
+    - *Rejected:* a run row every minute: noise in the table every audit reads, for nothing done.
+    - *Rejected:* timing the fill to the calendar's open: a retry (D399) needs a later tick anyway, and a missed one
+      would leave the approval waiting until expiry.
+    - **Consequence:** compose's scheduler and the `run-open-approvals` CronJob both tick every minute;
+      `cronJobContract.test.ts` exempts every-minute jobs from the start-order check. Scans are not told about
+      waiting approvals.
 
 ## Bugs that cost real time, and the lesson from each
 

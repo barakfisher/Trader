@@ -41,6 +41,8 @@ function proposalRow(overrides: Record<string, unknown> = {}) {
     agent_is_primary: false,
     scan_id: 's-1',
     scan_tool_calls: [],
+    opens_at: null,
+    open_approval: null,
     ...overrides,
   };
 }
