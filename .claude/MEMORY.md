@@ -14,7 +14,7 @@ Updated: 2026-11-18 - **Approve at the open (D398-D401, VERSION 0.0.6).** Not de
   (`open_approval_gone`). A postgres test races the two; with the guard removed it fails (checked by hand).
 - **Not verified:** a real Telegram chat and a real open; the money path ran only against a throwaway Postgres.
   After deploy, approve one proposal for the open and read `open_approvals` runs and the message at 16:30 Jerusalem.
-- **Decisions reach 401** (next: **402**). Their `#PR` is filled in when the PR is opened.
+- **Decisions reach 401** (next: **402**). This PR is #393.
 
 Earlier: 2026-11-10, later - **A trade proposed while the market is closed says when it opens (VERSION 0.0.5).** Not deployed.
 - **Why:** on 2026-11-09 George's AXON buy was proposed at 16:14 Jerusalem; the user tapped Approve at 16:19 and 16:24 and
@@ -6914,7 +6914,7 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
     - *Rejected:* taking the first of two objects: they may disagree, and the server would be choosing the decision.
     - **Consequence:** the dropped text is not stored or shown, so nothing in it reaches the user unchecked; the
       figure check still reads the thesis inside the object. A bare array is still refused, even with an object inside it.
-398. **A trade raised while its market is closed is approved for the open, not approved** (#PR, the user, 2026-11-18).
+398. **A trade raised while its market is closed is approved for the open, not approved** (#393, the user, 2026-11-18).
     Measured first on production: all 8 trade proposals were raised while the market was closed, and 17 of 22 approval
     refusals were `market_closed`. Such a trade carries *Approve at the open* and Reject, in Telegram, on `/pending` and
     on the web page; a tap queues it (`proposals.open_approval = 'queued'`, migration 0087) and offers *Cancel approval*.
@@ -6927,21 +6927,21 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
     - **Consequence:** a substantive refusal (`price_far_from_agent`, `insufficient_cash`, ...) is announced with its
       reason and leaves the proposal pending, so the user can still Approve by hand before it expires. While the market
       is open the button is Approve; a late tap on *Approve at the open* is answered as Approve.
-399. **A transient refusal at the open retries every minute until the proposal expires** (#PR, the user, 2026-11-18).
+399. **A transient refusal at the open retries every minute until the proposal expires** (#393, the user, 2026-11-18).
     Transient: `market_closed`, `quote_too_old`, `quote_unavailable`, `price_moved`, any 5xx and any error that is not an
     `ApiProblem`. The approval stays queued and nothing is said; an approval still waiting at expiry is announced.
     - *Rejected:* one attempt at the open: the first minute's quote is the most likely to be missing or stale, and the
       user would learn of a fill that never happened only from silence.
     - **Consequence:** a quote that never arrives costs one preview a minute per waiting approval until expiry; there
       are at most a handful, and the tick writes nothing while it waits (D401).
-400. **A newer proposal for the same agent and symbol replaces a waiting approval** (#PR, the user, 2026-11-18). The
+400. **A newer proposal for the same agent and symbol replaces a waiting approval** (#393, the user, 2026-11-18). The
     older proposal is rejected by `system` (`actorUserId` null), its approval marked `superseded`, and the newer
     message says what it replaced.
     - *Rejected:* filling both: the agent changed its mind, and two fills would double the position.
     - *Rejected:* keeping the older and dropping the newer: the newer was written against later evidence.
     - **Consequence:** the user's tap is undone by the agent; the message saying so is the only notice, so it is urgent.
 401. **The open's fills run on a one-minute tick, `open_approvals`, which writes a run row only when something is due**
-    (#PR, the user, 2026-11-18). Measured first: `runs` held 6,713 rows (5.2 MB) and is never pruned; a row a minute
+    (#393, the user, 2026-11-18). Measured first: `runs` held 6,713 rows (5.2 MB) and is never pruned; a row a minute
     would add 525,600 a year. The route asks `hasDueOpenApprovals` (a partial index on `opens_at`) and answers skipped
     with no row; when one is due it claims a run as every installation kind does.
     - *Rejected:* a run row every minute: noise in the table every audit reads, for nothing done.
