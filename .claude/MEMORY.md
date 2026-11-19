@@ -31,7 +31,7 @@ Updated: 2026-11-19, later - **Upcoming IPOs from SEC EDGAR (D404-D408, VERSION 
   stats, then `SELECT stage, count(*) FROM upcoming_listings WHERE excluded IS NULL GROUP BY 1`.
 - **Debt - an outage longer than the 30-day lookback loses the filings made in it**; an excluded registrant is never
   looked at again unless its row is deleted (RUNBOOK).
-- **Decisions reach 408** (next: **409**). This PR is #PRNUM.
+- **Decisions reach 408** (next: **409**). This PR is #395.
 
 Earlier: 2026-11-19 - **The daily new-listings screen (D402-D403, VERSION 0.0.7).** Merged (#394), not deployed.
 - **Why:** Anthropic listed (ANT, Nasdaq) on 2026-11-19 and was in no table: the universe is a quarterly snapshot
@@ -7036,7 +7036,7 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
       industry the snapshot lacks is not offered in a mandate's picker until then.
 
 404. **Upcoming IPOs are found by EDGAR's full-text search and confirmed by each company's submissions, behind a
-    `FilingsProvider`** (#PRNUM, 2026-11-19, PR 2 of the new-listings plan). Measured that day, read-only:
+    `FilingsProvider`** (#395, 2026-11-19, PR 2 of the new-listings plan). Measured that day, read-only:
     `efts.sec.gov/LATEST/search-index` by form and date (no query text; `forms=S-1` matches S-1/A) and
     `data.sec.gov/submissions` both answered a generic User-Agent; a month held 202 S-1/F-1/DRS filings from 154
     registrants and 198 8-A12B/424B4/RW. A daily run, `upcoming_ipos` (migration 0089), searches the last 30 days
@@ -7057,7 +7057,7 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
       ends an inclusive search window over SEC's Eastern-time dates, and UTC is never behind New York.
     - **Consequence:** an outage longer than 30 days loses filings made in it. If SEC starts refusing the default
       User-Agent the run fails with a 403 that names the setting.
-405. **Dates and stages only: confidential, filed, amended, registered, priced, withdrawn, listed** (#PRNUM,
+405. **Dates and stages only: confidential, filed, amended, registered, priced, withdrawn, listed** (#395,
     2026-11-19). The plan's list plus `priced` (the 424B4 final prospectus, the day before trading), which costs
     nothing: the run reads that form's date like the others. No price range, share count or proceeds, and no model.
     **A stage never goes backwards:** it is the furthest reached since the last withdrawal, and `withdrawn` only
@@ -7068,13 +7068,13 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
     - *Rejected:* `EFFECT` as a stage: it falls between registered and priced, and adds nothing an agent would act on.
     - **Consequence:** a `confidential` stage is rare as a current stage: SEC releases a DRS only shortly before the
       public S-1 (Anthropic's DRS of 06-01 appeared with its S-1 on 10-26), so it is mostly a date in the history.
-406. **`upcoming_listings` has no `user_id`** (#PRNUM, 2026-11-19). The rows are public filings about the market, the
+406. **`upcoming_listings` has no `user_id`** (#395, 2026-11-19). The rows are public filings about the market, the
     installation's like `instruments` and `articles`; no account owns or changes them, and guideline 5 is for
     user-owned tables.
     - *Rejected:* a `user_id` filled with the admin's id: a market fact would look owned, and erasing that account
       (D264) would delete the installation's data.
 407. **A registrant is excluded at first sight, and for good, when it is a blank check, a fund or a public company**
-    (#PRNUM, 2026-11-19). `blank_check`: SIC 6770 or "Acquisition Corp" in the name (17 of 154 that month). `fund`:
+    (#395, 2026-11-19). `blank_check`: SIC 6770 or "Acquisition Corp" in the name (17 of 154 that month). `fund`:
     SIC 6221 or "ETF"/"Fund" in the name (7). `reporting_company`: a 10-K/10-Q/20-F/40-F before the earliest filing of
     it the searches found, or more history than one page (69). Left: 61, about 15 a week, many of them small
     self-underwritten companies that will never trade on an exchange; 9 reached registered or priced, all real IPOs
@@ -7088,7 +7088,7 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
     - *Rejected:* tracking only exchange registrations (8-A12B): Anthropic's came 22 days after its public S-1.
     - **Consequence:** an excluded registrant is never re-fetched, so a misjudged one stays out; delete its row to
       have the next run look again.
-408. **A tracked company is `listed` when its ticker is a member admitted after its latest filing** (#PRNUM,
+408. **A tracked company is `listed` when its ticker is a member admitted after its latest filing** (#395,
     2026-11-19): `listed` by the daily screen (D402), or `screened` by a snapshot sized on or after `stage_on`. The
     read model leaves such a ticker out at once, before the run marks it. A withdrawn company is never marked.
     - *Rejected:* "sized after its first filing": found by the integration test - a snapshot of 09-24 sits between
