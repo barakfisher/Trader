@@ -31,9 +31,12 @@ from typing import Protocol, runtime_checkable
 class FilingsProviderError(RuntimeError):
     """The provider could not answer: the request failed, or the answer was unreadable."""
 
-    def __init__(self, provider: str, message: str) -> None:
+    def __init__(self, provider: str, message: str, *, refused: bool = False) -> None:
         super().__init__(f"{provider}: {message}")
         self.provider = provider
+        #: The source refused this client (HTTP 403), not one request: retrying
+        #: other requests the same way will not help.
+        self.refused = refused
 
 
 @dataclass(frozen=True, slots=True)

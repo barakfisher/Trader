@@ -274,7 +274,7 @@ function UniverseCard() {
           )}
           {data.database.upcomingIpos > 0 && (
             <p className="text-text-muted">
-              {t('admin.upcomingIpos', { value: count.format(data.database.upcomingIpos) })}
+              {t('admin.upcomingIpos', { count: data.database.upcomingIpos })}
             </p>
           )}
           {data.database.onDemand > 0 && (

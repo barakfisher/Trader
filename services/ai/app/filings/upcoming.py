@@ -143,20 +143,38 @@ class Progress:
 
 
 def progress(filings: Sequence[Filing], *, seen_on: date) -> Progress:
-    """The stage a company is at: that of its latest stage filing.
+    """The stage a company is at: the furthest it has reached since its last withdrawal.
 
-    First dates for the steps that happen once, the latest for amendments and
-    withdrawals, which repeat. A company whose history does not show the filing
-    the search found yet is `filed` on the hit's date until it does.
+    A stage never goes backwards (D405): an S-1/A filed after the 8-A12B is a
+    last revision of a registered company, and a DRS/A SEC releases after the
+    public S-1 is history. A withdrawal is the stage only while it is the
+    latest filing; a registration after it starts over. The stage's date is
+    that of its latest filing. First dates for the steps that happen once, the
+    latest for amendments and withdrawals, which repeat. A company whose
+    history does not show the filing the search found yet is `filed` on the
+    hit's date until it does.
     """
     staged = tuple(f for f in filings if f.form in STAGE_OF_FORM)
+
+    def rank(f: Filing) -> int:
+        return FILING_STAGES.index(STAGE_OF_FORM[f.form])
 
     def dates(stage: str) -> list[date]:
         return [f.filed_on for f in staged if STAGE_OF_FORM[f.form] == stage]
 
-    if staged:
-        latest = max(staged, key=lambda f: (f.filed_on, FILING_STAGES.index(STAGE_OF_FORM[f.form])))
-        stage, stage_on = STAGE_OF_FORM[latest.form], latest.filed_on
+    withdrawals = [f.filed_on for f in staged if STAGE_OF_FORM[f.form] == "withdrawn"]
+    last_withdrawal = max(withdrawals, default=None)
+    since = [
+        f
+        for f in staged
+        if STAGE_OF_FORM[f.form] != "withdrawn"
+        and (last_withdrawal is None or f.filed_on > last_withdrawal)
+    ]
+    if since:
+        furthest = max(since, key=lambda f: (rank(f), f.filed_on))
+        stage, stage_on = STAGE_OF_FORM[furthest.form], furthest.filed_on
+    elif last_withdrawal is not None:
+        stage, stage_on = "withdrawn", last_withdrawal
     else:
         stage, stage_on = "filed", seen_on
     return Progress(
@@ -205,6 +223,8 @@ async def track_upcoming_listings(
     with engine.connect() as connection:
         known = _known(connection, {hit.cik for hit in (*discovered, *events)})
         stored = _stored_accessions(connection, [cik for cik, k in known.items() if k.tracked])
+        tickerless = _awaiting_ticker(connection, since=start)
+        known.update(_known(connection, {cik for cik, _ in tickerless}))
 
     latest_hit: dict[str, date] = {}
     first_hit: dict[str, date] = {}
@@ -215,11 +235,21 @@ async def track_upcoming_listings(
             continue  # an 8-A12B, 424B4 or RW of a registrant nobody tracks
         if entry is not None and not entry.tracked:
             continue  # excluded for good, or listed already
-        if entry is not None and hit.accession in stored:
+        if entry is not None and (hit.accession in stored or hit.form not in STAGE_OF_FORM):
+            # Stored already, or a form the search matched that is never stored
+            # (S-1MEF, RW WD): fetching for it would repeat every run.
             continue
         unstored.add(hit.cik)
         latest_hit[hit.cik] = max(latest_hit.get(hit.cik, hit.filed_on), hit.filed_on)
         first_hit[hit.cik] = min(first_hit.get(hit.cik, hit.filed_on), hit.filed_on)
+
+    # A registered or priced company SEC has given no ticker yet is asked again
+    # each run inside the lookback: after its 424B4 it files nothing the
+    # searches see, and without a ticker it could never be marked listed.
+    for cik, since in tickerless:
+        if cik not in unstored:
+            unstored.add(cik)
+            latest_hit[cik] = first_hit[cik] = since
 
     # Tracked companies first, then new registrants, newest first.
     order = sorted(unstored, key=lambda cik: (cik not in known, -latest_hit[cik].toordinal(), cik))
@@ -232,6 +262,8 @@ async def track_upcoming_listings(
         try:
             company = await provider.company(cik)
         except FilingsProviderError as error:
+            if error.refused:
+                raise  # SEC refuses this client: every history would fail the same way
             log.warning("filings.upcoming.company_failed", cik=cik, error=str(error))
             report.failed.append(cik)
             continue
@@ -285,6 +317,20 @@ def _known(connection: Connection, ciks: set[str]) -> dict[str, _Known]:
     return {row.cik: _Known(row.excluded, row.stage) for row in rows}
 
 
+def _awaiting_ticker(connection: Connection, *, since: date) -> list[tuple[str, date]]:
+    rows = connection.execute(
+        text(
+            """
+            SELECT cik, stage_on FROM upcoming_listings
+             WHERE excluded IS NULL AND ticker IS NULL
+               AND stage IN ('registered', 'priced') AND stage_on >= :since
+            """
+        ),
+        {"since": since},
+    )
+    return [(row.cik, row.stage_on) for row in rows]
+
+
 def _stored_accessions(connection: Connection, ciks: list[str]) -> set[str]:
     if not ciks:
         return set()
@@ -315,7 +361,8 @@ def _write_tracked(connection: Connection, company: CompanyFilings, state: Progr
         "cik": company.cik,
         "name": company.name,
         "ticker": company.tickers[0].upper() if company.tickers else None,
-        "exchange": next((e for e in company.exchanges if e), None),
+        # The exchange that goes with the ticker kept, when SEC names one.
+        "exchange": company.exchanges[0] if company.exchanges else None,
         "stage": state.stage,
         "stage_on": state.stage_on,
         "confidential_on": state.confidential_on,

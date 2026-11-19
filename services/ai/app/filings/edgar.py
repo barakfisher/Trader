@@ -129,7 +129,7 @@ class EdgarFilingsProvider:
             ) from exc
         if response.status_code == 403:
             raise FilingsProviderError(
-                self.name, "HTTP 403: SEC refused the request; check EDGAR_USER_AGENT"
+                self.name, "HTTP 403: SEC refused the request; check EDGAR_USER_AGENT", refused=True
             )
         if response.status_code != 200:
             raise FilingsProviderError(self.name, f"HTTP {response.status_code}")

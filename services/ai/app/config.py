@@ -76,6 +76,10 @@ def _default_calendar_dir() -> str:
 DEFAULT_INTERNAL_API_KEY = "change-me-internal"
 
 
+#: Sent to SEC by default (D404): a tool's name, never a person's name or address.
+DEFAULT_EDGAR_USER_AGENT = "TradersResearch/0.1 research-tool"
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=(".env", "../../.env"),
@@ -241,7 +245,7 @@ class Settings(BaseSettings):
     filings_provider: Literal["edgar", "fixture", "off"] = "edgar"
     #: Sent to SEC with every request; SEC asks automated clients to name
     #: themselves. A generic name by default - never a person's name or address.
-    edgar_user_agent: str = "TradersResearch/0.1 research-tool"
+    edgar_user_agent: str = DEFAULT_EDGAR_USER_AGENT
 
     # LLM access. One gateway module (app/llm) reads all of this; no call site
     # names a provider. An unusable value here degrades to no narration rather

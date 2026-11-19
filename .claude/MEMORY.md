@@ -7050,11 +7050,19 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
     - *Rejected:* submissions alone: they answer one known CIK, and the run's question is who it does not know yet.
     - *Rejected:* a retry loop in the client: EDGAR's search answered 500 to 2 of ~25 requests and then 30 of 30;
       a failed search fails the run, and `RETRY_FAILED_KINDS` asks again within the hour. No package was added.
+    - **Found by the QA review before merge, and fixed:** a 403 on a company history (`data.sec.gov`) only degraded
+      the run, the setting's name reaching the log alone - now any 403 fails the run (`refused`); and a search hit
+      of a form never stored (`S-1MEF`, `RW WD`) would have re-fetched its company every run - such hits are ignored.
+    - *Chosen:* the run's day is the UTC date, not the installation's (guideline 10's rule for shared runs): it only
+      ends an inclusive search window over SEC's Eastern-time dates, and UTC is never behind New York.
     - **Consequence:** an outage longer than 30 days loses filings made in it. If SEC starts refusing the default
       User-Agent the run fails with a 403 that names the setting.
 405. **Dates and stages only: confidential, filed, amended, registered, priced, withdrawn, listed** (#PRNUM,
     2026-11-19). The plan's list plus `priced` (the 424B4 final prospectus, the day before trading), which costs
     nothing: the run reads that form's date like the others. No price range, share count or proceeds, and no model.
+    **A stage never goes backwards:** it is the furthest reached since the last withdrawal, and `withdrawn` only
+    while an RW is the latest filing (QA review: "the latest filing's stage" would move a company back to `amended`
+    on a last S-1/A after its 8-A12B, and to `confidential` when SEC releases an old DRS/A).
     - *Rejected:* a price range or deal size from the prospectus: they sit in prose, and a figure read out of prose is
       the unsourced number guideline 7 bars.
     - *Rejected:* `EFFECT` as a stage: it falls between registered and priced, and adds nothing an agent would act on.
@@ -7086,8 +7094,12 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
     - *Rejected:* "sized after its first filing": found by the integration test - a snapshot of 09-24 sits between
       Anthropic's DRS (06-01) and its pricing, so an older company under the same ticker would have counted.
     - *Rejected:* matching by name: SEC's and Yahoo's names differ in punctuation and suffix.
-    - **Consequence:** a ticker SEC lists late (some registrants have none until near pricing) is marked only when it
-      appears; the read model shows the company meanwhile.
+    - **Found by the QA review, and fixed:** a company's history was fetched again only for a new filing, and after
+      its 424B4 it files nothing the searches see, so a ticker SEC added after pricing was never read and the company
+      could never become `listed`. A `registered` or `priced` company without a ticker is now fetched every run
+      inside the lookback until one appears.
+    - **Consequence:** the read model shows a company without a ticker until it is marked; whether SEC adds tickers
+      late in practice is not measured (all 9 registered/priced on 2026-11-19 had one).
 
 ## Bugs that cost real time, and the lesson from each
 

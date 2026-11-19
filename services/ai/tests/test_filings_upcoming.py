@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
@@ -22,6 +23,8 @@ from app.filings.upcoming import (
     COMMODITY_TRUST_SIC,
     EXCLUSIONS,
     FILING_STAGES,
+    PENDING_STAGES,
+    RECENT_DAYS,
     STAGE_OF_FORM,
     STAGES,
     exclusion,
@@ -124,6 +127,21 @@ def test_the_latest_filing_sets_the_stage_and_a_later_stage_wins_a_tie() -> None
     assert (state.stage, state.withdrawn_on) == ("filed", date(2026, 9, 1))
 
 
+def test_a_stage_never_goes_backwards() -> None:
+    late_amendment = [_filing("8-A12B", date(2026, 11, 17)), _filing("S-1/A", date(2026, 11, 18))]
+    state = progress(late_amendment, seen_on=SEEN)
+    assert (state.stage, state.stage_on) == ("registered", date(2026, 11, 17))
+    assert state.amended_on == date(2026, 11, 18)
+    released_draft = [_filing("S-1", date(2026, 10, 26)), _filing("DRS/A", date(2026, 10, 27))]
+    assert progress(released_draft, seen_on=SEEN).stage == "filed"
+
+
+def test_a_withdrawal_is_the_stage_only_while_it_is_the_latest_filing() -> None:
+    withdrawn = [_filing("S-1", date(2026, 10, 1)), _filing("RW", date(2026, 11, 1))]
+    state = progress(withdrawn, seen_on=SEEN)
+    assert (state.stage, state.stage_on) == ("withdrawn", date(2026, 11, 1))
+
+
 def test_forms_without_a_stage_are_ignored() -> None:
     state = progress(
         [_filing("S-1", date(2026, 10, 1)), _filing("FWP", date(2026, 11, 1))], seen_on=SEEN
@@ -135,6 +153,14 @@ def test_forms_without_a_stage_are_ignored() -> None:
 def test_a_history_behind_the_search_is_filed_on_the_hits_date() -> None:
     state = progress([], seen_on=SEEN)
     assert (state.stage, state.stage_on) == ("filed", SEEN)
+
+
+def test_the_admin_count_reads_the_same_window_and_stages_as_the_read_model() -> None:
+    universe = (SERVICE.parents[1] / "apps/orchestrator/src/db/queries/universe.ts").read_text()
+    days = re.search(r"export const UPCOMING_IPO_DAYS = (\d+);", universe)
+    assert days and int(days.group(1)) == RECENT_DAYS
+    stages = re.search(r"u\.stage IN \(([^)]*)\)", universe)
+    assert stages and re.findall(r"'([a-z_]+)'", stages.group(1)) == list(PENDING_STAGES)
 
 
 def test_the_migration_enumerates_what_the_module_writes() -> None:

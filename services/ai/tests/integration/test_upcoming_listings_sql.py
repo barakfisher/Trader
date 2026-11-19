@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import copy
 import json
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -19,11 +19,12 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from app.filings.base import CompanyFilings
+from app.filings.base import CompanyFilings, FilingsProviderError
 from app.filings.fixture import FIXTURE_FILENAME, FixtureFilingsProvider
 from app.filings.upcoming import (
     MAX_COMPANIES_PER_RUN,
     PENDING_STAGES,
+    RECENT_DAYS,
     recent_upcoming_listings,
     track_upcoming_listings,
 )
@@ -179,6 +180,49 @@ async def test_a_ticker_the_daily_screen_admitted_is_listed(db: Engine) -> None:
     assert again.asked == [] and report.listed == []
 
 
+async def test_a_ticker_sec_adds_after_pricing_is_still_found(db: Engine) -> None:
+    data = _data()
+    data["companies"][ANTHROPIC]["tickers"] = []
+    data["companies"][ANTHROPIC]["exchanges"] = []
+    await track_upcoming_listings(engine=db, provider=CountingProvider(data), today=LISTING_DAY)
+    assert _row(db, ANTHROPIC).ticker is None
+
+    # Nothing new is filed, but a priced company without a ticker is asked again.
+    data["companies"][ANTHROPIC]["tickers"] = ["ANT"]
+    data["companies"][ANTHROPIC]["exchanges"] = ["Nasdaq"]
+    _add_member(db, "ANT", "listed", "2026-11-20T00:00:00Z")
+    provider = CountingProvider(data)
+    report = await track_upcoming_listings(engine=db, provider=provider, today=date(2026, 11, 20))
+    assert provider.asked == [ANTHROPIC]
+    assert report.listed == ["ANT"]
+    assert (_row(db, ANTHROPIC).ticker, _row(db, ANTHROPIC).exchange) == ("ANT", "Nasdaq")
+
+
+async def test_a_hit_of_a_form_never_stored_does_not_refetch(db: Engine) -> None:
+    data = _data()
+    await track_upcoming_listings(engine=db, provider=CountingProvider(data), today=LISTING_DAY)
+    data["hits"].append(
+        {
+            "cik": ANTHROPIC,
+            "accession": "0001628280-26-074904",
+            "form": "S-1MEF",
+            "filed_on": "2026-11-18",
+        }
+    )
+    provider = CountingProvider(data)
+    await track_upcoming_listings(engine=db, provider=provider, today=LISTING_DAY)
+    assert provider.asked == []
+
+
+async def test_a_refused_history_fails_the_run(db: Engine) -> None:
+    class Refusing(CountingProvider):
+        async def company(self, cik: str) -> CompanyFilings:
+            raise FilingsProviderError("edgar", "HTTP 403", refused=True)
+
+    with pytest.raises(FilingsProviderError):
+        await track_upcoming_listings(engine=db, provider=Refusing(_data()), today=LISTING_DAY)
+
+
 async def test_an_older_member_under_the_same_ticker_is_another_company(db: Engine) -> None:
     data = _data()
     data["companies"][ANTHROPIC]["tickers"] = ["OLDT"]
@@ -250,13 +294,15 @@ async def test_the_read_model_is_pending_recent_and_newest_first(db: Engine) -> 
             text(
                 """
                 INSERT INTO upcoming_listings (cik, company_name, stage, stage_on, filed_on) VALUES
-                  ('0000000101', 'Old Filer', 'filed', '2026-09-01', '2026-09-01'),
+                  ('0000000101', 'Old Filer', 'filed', :old, :old),
                   ('0000000102', 'Recent Filer', 'filed', '2026-11-10', '2026-11-10'),
                   ('0000000103', 'Registered Co', 'registered', '2026-11-15', '2026-11-01'),
                   ('0000000104', 'Withdrawn Co', 'withdrawn', '2026-11-16', '2026-11-01'),
                   ('0000000105', 'Draft Co', 'confidential', '2026-11-16', NULL)
                 """
-            )
+            ),
+            # Just outside the read model's window, whatever it is tuned to.
+            {"old": LISTING_DAY - timedelta(days=RECENT_DAYS + 1)},
         )
         connection.execute(
             text(

@@ -16,7 +16,7 @@ from typing import Any
 import httpx
 import pytest
 
-from app.config import Settings
+from app.config import DEFAULT_EDGAR_USER_AGENT, Settings
 from app.filings.base import FilingsProviderError
 from app.filings.edgar import (
     REQUESTS_PER_SECOND,
@@ -166,7 +166,8 @@ def test_the_setting_picks_the_provider() -> None:
     assert build_filings_provider(settings("off")) is None
 
 
-def test_the_default_user_agent_names_no_person() -> None:
+def test_the_default_user_agent_names_no_person(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("EDGAR_USER_AGENT", raising=False)
     agent = Settings(_env_file=None).edgar_user_agent  # type: ignore[call-arg]
+    assert agent == DEFAULT_EDGAR_USER_AGENT
     assert "@" not in agent
-    assert agent
