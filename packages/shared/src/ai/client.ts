@@ -42,6 +42,7 @@ import {
   portfolioScanResponseSchema,
   profileRequestResponseSchema,
   rescreenResponseSchema,
+  newListingsResponseSchema,
   newsCollectResponseSchema,
   quoteResponseSchema,
 } from './schemas.js';
@@ -88,6 +89,7 @@ export type ConceptSearchResponse = components['schemas']['ConceptSearchResponse
 export type ConceptSearchMatch = components['schemas']['ConceptSearchMatch'];
 export type ProfileRequestResponse = components['schemas']['ProfileRequestResponse'];
 export type RescreenResponse = components['schemas']['RescreenResponse'];
+export type NewListingsResponse = components['schemas']['NewListingsResponse'];
 
 /**
  * A scan loads history for every holding and may call a model once per finding,
@@ -261,6 +263,19 @@ export class AiClient {
       method: 'POST',
       body: JSON.stringify({ run_id: runId }),
       requestId,
+    });
+  }
+
+  /**
+   * The daily new-listings screen (migration 0088): the screen alone, and at
+   * most a run's cap of profiles, answered when done - so it shares the scan's
+   * longer timeout rather than the default.
+   */
+  newListings(requestId?: string): Promise<NewListingsResponse> {
+    return this.request('/universe/new-listings', newListingsResponseSchema, {
+      method: 'POST',
+      requestId,
+      timeoutMs: SCAN_TIMEOUT_MS,
     });
   }
 

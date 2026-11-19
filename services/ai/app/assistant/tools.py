@@ -1038,8 +1038,10 @@ async def get_universe_info(context: ToolContext, arguments: Mapping[str, Any]) 
         ),
         "dropped_symbols": dropped,
         "note": (
-            "membership: screened (passed the screen), on_demand (outside it, profiled because "
-            "a user named it), dropped (left at a rescreen; kept so history still resolves)"
+            "membership: screened (passed the screen), listed (passed the daily new-listings "
+            "screen since the last rescreen; a member like screened), on_demand (outside it, "
+            "profiled because a user named it), dropped (left at a rescreen; kept so history "
+            "still resolves)"
         ),
     }
     if symbol:

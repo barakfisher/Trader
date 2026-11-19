@@ -4,6 +4,7 @@
  * disagree about which kinds fan out to users.
  */
 
+import { NEW_LISTINGS_KIND } from './services/newListings.js';
 import { RESCREEN_KIND } from './services/universeRescreen.js';
 
 /**
@@ -32,6 +33,8 @@ export const INSTALLATION_KINDS: ReadonlySet<string> = new Set([
   // Fills every account's approvals for the open once their market opens (D398, D401).
   'open_approvals',
   RESCREEN_KIND,
+  // Members admitted between rescreens (migration 0088): the installation's universe.
+  NEW_LISTINGS_KIND,
 ]);
 
 /** A user's work: one run per active user, each under its own run key. */

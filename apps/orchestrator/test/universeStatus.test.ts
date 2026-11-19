@@ -32,6 +32,7 @@ const COUNTS = {
   embedded: 5223,
   etf_holdings: 16363,
   on_demand: 0,
+  listed: 0,
   dropped: 0,
 };
 

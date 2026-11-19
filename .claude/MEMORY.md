@@ -4,7 +4,26 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-18 - **Approve at the open (D398-D401, VERSION 0.0.6).** Not deployed.
+Updated: 2026-11-19 - **The daily new-listings screen (D402-D403, VERSION 0.0.7).** Not merged, not deployed.
+- **Why:** Anthropic listed (ANT, Nasdaq) on 2026-11-19 and was in no table: the universe is a quarterly snapshot
+  (2026-09-24), next due 12-24. Measured on production that day: 189 listings since the snapshot pass the screen.
+- **What changed:** a daily run, `new_listings` (migration `0088`), screens Yahoo (~18 s) and admits each new member as
+  `listed`, found by topics and tradable from the next scan. The startup loader leaves `listed` alone; a later
+  snapshot promotes or drops it. Admin page counts it apart, like on-demand.
+- **Lesson - a deploy reloads an old snapshot.** `mark_dropped` runs on every stack start against the newest snapshot,
+  so any member admitted outside a snapshot must carry its own date, or the next deploy removes it without a word.
+- **Not verified:** a real Yahoo run through the endpoint (the screen and `info` were measured by hand, the run only on
+  fixtures); ANT itself, which Yahoo had not sized on listing day. After deploy: read the first `new_listings` run's
+  stats and `SELECT count(*) FROM instrument_profiles WHERE membership = 'listed'`, then look for ANT a day or two later.
+- **The plan this is PR 1 of (the user, 2026-11-19):** PR 2, upcoming IPOs from SEC EDGAR filings (DRS, S-1, S-1/A,
+  8-A12B) with dates and stages only - no price range, which sits in prospectus prose (guideline 7); maybe news for an
+  upcoming IPO by its name, measured first. PR 3, a briefing section with new listings and upcoming IPOs (a tool would
+  not be called: agents made 1 `search_universe` call of 80). PR 4, a briefing built from each agent's mandate (D15's
+  "followed topics" part was never built; the plan's section 7 item 2). EDGAR measured 2026-11-19: ANT's public S-1
+  on 10-26, 24 days before listing; Yahoo's IPO calendar listed it about two weeks ahead with no price range.
+- **Decisions reach 403** (next: **404**).
+
+Earlier: 2026-11-18 - **Approve at the open (D398-D401, VERSION 0.0.6).** Not deployed.
 - **What changed:** a trade raised while its market is closed carries *Approve at the open* instead of Approve, in
   Telegram, `/pending` and the web page. A tap queues it (migration `0087`, `proposals.open_approval`); a one-minute tick
   (`open_approvals`) fills it at the open through Approve's own checks, retries transient refusals, and announces a
@@ -6950,6 +6969,42 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
     - **Consequence:** compose's scheduler and the `run-open-approvals` CronJob both tick every minute;
       `cronJobContract.test.ts` exempts every-minute jobs from the start-order check. Scans are not told about
       waiting approvals.
+
+402. **A listing that passes the screen between rescreens is admitted daily as `listed`, a member the startup loader
+    cannot drop** (the user, 2026-11-19, the day Anthropic listed as ANT). Measured first on production: the universe
+    was the 2026-09-24 snapshot, the next rescreen was due 12-24, and ANT was in no table; the screen alone took 18 s
+    and found 189 listings since the snapshot that pass its rule (77 equities, 112 ETFs - about three a day). A daily
+    run, `new_listings` (migration 0088), screens, keeps one listing per company (`select`), and profiles every
+    non-member through the on-demand profile source as `listed`. `MEMBERS` (`profiles.py`) is what every topic reader,
+    the gap check, `find_listing` and the instrument directory read. A snapshot that holds a `listed` profile makes it
+    `screened`; one that lacks it drops it only if it was taken after the listing (`size_as_of`).
+    - *Rejected:* admitting it as `screened`: every deploy reloads the newest snapshot - older than the listing - and
+      `mark_dropped` would remove it at the next deploy, silently.
+    - *Rejected:* a full rescreen every day: half an hour and ~5,000 Yahoo fetches under rate limits, for ~3 listings.
+    - *Rejected:* an agent tool that adds listings, or an agent that reads the news and updates the universe: both put
+      membership in a model's hands (D39), and the tool needs the ticker already. Agents also hardly search: 1
+      `search_universe` call of 80 tool calls in 24 production scans since 2026-11-09.
+    - **Consequence:** being in the universe makes a listing findable, not known: scans start from the briefing. The
+      plan's next steps (EDGAR IPO filings, a briefing section, a mandate-built briefing) are in the handoff above.
+403. **The daily screen only adds, at most 60 profiles a run within 180 s, largest first, and remembers nothing between
+    runs** (the user, 2026-11-19). Dropping stays the rescreen's. A listing Yahoo has not described yet, or with no
+    currency, is skipped and asked about the next day; a source failure is `failed` and degrades the run; a screen that
+    cannot be fetched fails the run, which is a `RETRY_FAILED_KINDS` kind, so the next hourly ask retries it. Found by
+    the QA review before merge, and fixed:
+    - **A row turned away every day would hold its place at the top of the cap every day.** The last snapshot's
+      undescribed members (71 on 2026-09-24, more than the cap) are therefore asked about last.
+    - **`select` keeps one class per company only within the day's screen**, so a second class of a member could be
+      admitted beside it; a candidate whose `longName` is a member's name is left out (`same_company`).
+    - **A throttled Yahoo could keep the run past the orchestrator's five-minute wait**; profiles not asked within
+      `PROFILE_BUDGET_SECONDS` are deferred.
+    - **A failed embedding was never retried**; every run now embeds whatever is missing a vector.
+    - *Rejected:* dropping daily too: a member near the $1B or $100M floor would leave and rejoin every few days.
+    - *Rejected:* caching "no description": measured on listing day, Yahoo had ANT's name and description but no
+      currency, price or market cap, exchange `NAS` - an answer that changes within days, cached as permanent.
+    - *Rejected:* no cap: the first production run has ~190 candidates; one request should not ask Yahoo for all.
+    - **Consequence:** the first runs take about four days to catch up. A new ETF has no holdings until the next
+      rescreen, and the sector/industry taxonomy (D164) stays built from `screened` profiles only, so a listing in an
+      industry the snapshot lacks is not offered in a mandate's picker until then.
 
 ## Bugs that cost real time, and the lesson from each
 

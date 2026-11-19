@@ -27,6 +27,8 @@ export interface UniverseCountsRow {
   etf_holdings: number;
   /** Fetched for a listing a user named (decision 89); never compared with a snapshot. */
   on_demand: number;
+  /** Admitted by the daily new-listings screen since the snapshot (migration 0088): members, never compared with it. */
+  listed: number;
   /** Former members a newer snapshot no longer holds (decision 90); kept, never searched. */
   dropped: number;
 }
@@ -41,12 +43,13 @@ export async function countUniverse(): Promise<UniverseCountsRow> {
             count(p.embedding_model) FILTER (WHERE p.membership = 'screened')::int AS embedded,
             (SELECT count(*)::int FROM etf_holdings) AS etf_holdings,
             count(*) FILTER (WHERE p.membership = 'on_demand')::int AS on_demand,
+            count(*) FILTER (WHERE p.membership = 'listed')::int AS listed,
             count(*) FILTER (WHERE p.membership = 'dropped')::int AS dropped
        FROM instrument_profiles p
        JOIN instruments i ON i.id = p.instrument_id`,
   );
   return (
-    row ?? { profiles: 0, equities: 0, etfs: 0, embedded: 0, etf_holdings: 0, on_demand: 0, dropped: 0 }
+    row ?? { profiles: 0, equities: 0, etfs: 0, embedded: 0, etf_holdings: 0, on_demand: 0, listed: 0, dropped: 0 }
   );
 }
 

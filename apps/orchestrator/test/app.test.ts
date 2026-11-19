@@ -669,6 +669,31 @@ describe('API', () => {
     expect(queries.getUser).not.toHaveBeenCalled();
   });
 
+  it("runs the daily new-listings screen as the installation's run and records its answer", async () => {
+    const response = await app.request('/internal/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
+      body: JSON.stringify({ kind: 'new_listings', trigger: 'scheduler' }),
+    });
+    expect(response.status).toBe(200);
+    expect(queries.claimRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: null,
+        kind: 'new_listings',
+        runKey: expect.stringMatching(/^new_listings:installation:\d{4}-\d{2}-\d{2}$/),
+        // A screen Yahoo refused is claimed again by the next hourly ask.
+        retryFailed: true,
+      }),
+    );
+    // A listing not described yet waits for tomorrow: not a degraded run.
+    expect(queries.finishRun).toHaveBeenCalledWith(
+      expect.any(String),
+      'ok',
+      expect.objectContaining({ admitted: ['ANT'], noDescription: ['LATER'] }),
+    );
+    expect(queries.getUser).not.toHaveBeenCalled();
+  });
+
   it('deduplicates a repeated run so a double trigger is a no-op', async () => {
     const init = {
       method: 'POST',

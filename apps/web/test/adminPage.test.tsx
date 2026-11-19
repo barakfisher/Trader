@@ -190,6 +190,7 @@ describe('the admin page', () => {
                 embedded: 5223,
                 etfHoldings: 16363,
                 onDemand: 2,
+                listed: 3,
                 dropped: 0,
               },
               reconciliation: [
@@ -380,6 +381,7 @@ describe('the admin page', () => {
   it('counts on-demand profiles apart from the members', async () => {
     renderAt('/admin?tab=operations', ADMIN);
     expect(await screen.findByText(/Also 2 profiled on demand for listings users named/)).toBeTruthy();
+    expect(screen.getByText(/Also 3 added since the snapshot by the daily new-listings screen/)).toBeTruthy();
   });
 
   it('shows what administrators have done, and from where', async () => {

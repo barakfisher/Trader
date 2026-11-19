@@ -651,6 +651,29 @@ export const rescreenResponseSchema = z.object({
   reason: z.string().nullable().optional(),
 });
 
+export const newListingsResponseSchema = z.object({
+  // `done`: the screen ran; the lists say what became of each candidate.
+  // `unavailable`: no profile source here (`reason` says why).
+  status: z.enum(['done', 'unavailable']),
+  reason: z.string().nullable().optional(),
+  screened: z.number().int(),
+  kept: z.number().int(),
+  candidates: z.number().int(),
+  same_company: z.number().int(),
+  deferred: z.number().int(),
+  admitted: z.array(z.string()).optional(),
+  no_listing: z.array(z.string()).optional(),
+  outside_screen: z.array(z.string()).optional(),
+  no_description: z.array(z.string()).optional(),
+  no_currency: z.array(z.string()).optional(),
+  failed: z.array(z.string()).optional(),
+  unembedded: z.array(z.string()).optional(),
+});
+
+export type _AssertNewListingsResponse = Expect<
+  Equal<z.infer<typeof newListingsResponseSchema>, Schemas['NewListingsResponse']>
+>;
+
 export type _AssertRescreenResponse = Expect<
   Equal<z.infer<typeof rescreenResponseSchema>, Schemas['RescreenResponse']>
 >;

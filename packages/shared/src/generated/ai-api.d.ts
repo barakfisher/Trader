@@ -552,6 +552,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/universe/new-listings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** New Listings */
+        post: operations["new_listings_universe_new_listings_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/universe/profiles": {
         parameters: {
             query?: never;
@@ -1446,6 +1463,67 @@ export interface components {
             enabled: boolean;
             /** Provider */
             provider: string;
+        };
+        /**
+         * NewListingsResponse
+         * @description What one run of the daily new-listings screen found and admitted (migration 0088).
+         *
+         *     `done`: the screen ran, and the lists say what became of each candidate.
+         *     `unavailable`: the installation has no profile source (a fixture-only
+         *     market-data chain) - a configuration, and `reason` names it. A screen that
+         *     could not be fetched is not an answer here: the endpoint fails, and the run
+         *     is retried.
+         *
+         *     A listing in `no_description`, `no_currency` or `failed` is asked about again
+         *     by the next run; `deferred` counts the candidates left for it by the cap.
+         */
+        NewListingsResponse: {
+            /** Admitted */
+            admitted?: string[];
+            /**
+             * Candidates
+             * @default 0
+             */
+            candidates: number;
+            /**
+             * Deferred
+             * @default 0
+             */
+            deferred: number;
+            /** Failed */
+            failed?: string[];
+            /**
+             * Kept
+             * @default 0
+             */
+            kept: number;
+            /** No Currency */
+            no_currency?: string[];
+            /** No Description */
+            no_description?: string[];
+            /** No Listing */
+            no_listing?: string[];
+            /** Outside Screen */
+            outside_screen?: string[];
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Same Company
+             * @default 0
+             */
+            same_company: number;
+            /**
+             * Screened
+             * @default 0
+             */
+            screened: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "done" | "unavailable";
+            /** Unembedded */
+            unembedded?: string[];
         };
         /** NewsCollectRequest */
         NewsCollectRequest: {
@@ -3111,6 +3189,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResearchRunStarted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    new_listings_universe_new_listings_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewListingsResponse"];
                 };
             };
             /** @description Validation Error */

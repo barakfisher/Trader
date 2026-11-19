@@ -884,6 +884,7 @@
     "profiles": {
       "on_demand": "profiled on demand; agents' searches by theme skip it until a rescreen admits it",
       "screened": "now in the universe",
+      "listed": "now in the universe, added by the daily new-listings screen",
       "dropped": "dropped by a later snapshot"
     }
   },
@@ -1278,6 +1279,7 @@
     "universeFailed": "Could not load the universe status.",
     "profiled": "{{profiles}} profiled ({{equities}} equities, {{etfs}} ETFs), {{embedded}} embedded, {{holdings}} ETF holdings.",
     "dropped": "{{value}} dropped by a later snapshot: kept, because holdings refer to them, but no longer members.",
+    "listed": "Also {{value}} added since the snapshot by the daily new-listings screen. They are members - found by agents' searches by theme and tradable - but not compared with the snapshot; the next rescreen keeps or drops them.",
     "onDemand": "Also {{value}} profiled on demand for listings users named. They are described but not members: agents' searches by theme skip them, and they are not compared with the snapshot.",
     "lastLoad": "Snapshot of {{snapshot}}, last loaded {{age}}.",
     "noLoad": "No load has been recorded, so there is nothing to compare the database against. The universe loader records one every time it runs.",

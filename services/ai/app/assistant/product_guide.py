@@ -129,7 +129,10 @@ SECTIONS = MappingProxyType(
             "stocks with a market cap of at least $1B and ETFs with net assets of at least "
             "$100M, screened from Yahoo Finance, with each ETF's top holdings. It is "
             "rescreened about once a quarter, automatically; an admin can also start a "
-            "rescreen. A ticker outside it that a user names is profiled on demand."
+            "rescreen. Between rescreens, a daily screen adds listings that newly pass the "
+            "same rules, such as a company that has just gone public, once Yahoo reports its "
+            "size; it never removes one. A ticker outside it that a user names is profiled "
+            "on demand."
         ),
         "assistant": (
             "This assistant answers questions about the user's portfolio, agents, proposals, "

@@ -34,8 +34,8 @@ export interface OpsEventRow {
   profile_membership: ProfileMembership | null;
 }
 
-/** `instrument_profiles.membership` (migration 0030). */
-export type ProfileMembership = 'screened' | 'on_demand' | 'dropped';
+/** `instrument_profiles.membership` (migrations 0030, 0088). */
+export type ProfileMembership = 'screened' | 'listed' | 'on_demand' | 'dropped';
 
 export function listOpsEvents(kind: OpsEventKind | undefined, limit = 100): Promise<OpsEventRow[]> {
   // A missing ticker's listing may have been profiled since: on demand, or by

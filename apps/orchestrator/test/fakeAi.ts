@@ -82,6 +82,25 @@ export function createFakeAi(options: FakeAiOptions = {}): AiClient {
         agents: [],
       };
     },
+    /** The daily new-listings screen: one listing admitted, one Yahoo has not described yet. */
+    async newListings() {
+      return {
+        status: 'done' as const,
+        reason: null,
+        screened: 5400,
+        kept: 5265,
+        candidates: 2,
+        same_company: 0,
+        deferred: 0,
+        admitted: ['ANT'],
+        no_listing: [],
+        outside_screen: [],
+        no_description: ['LATER'],
+        no_currency: [],
+        failed: [],
+        unembedded: [],
+      };
+    },
     /** A claimed rescreen, accepted: the real one builds in the background. */
     async rescreen(runId: string) {
       return { run_id: runId, status: 'started' as const, reason: null };

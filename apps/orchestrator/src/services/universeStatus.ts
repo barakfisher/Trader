@@ -8,7 +8,8 @@
  * something without counting it - shows up as `unexplained`, which is exactly
  * the disagreement the page exists to make visible. On-demand profiles
  * (decision 89) are not members and are counted apart, never against the
- * snapshot. Measured on the 2026-09-24 snapshot: 71 members without a
+ * snapshot; nor are listed ones (migration 0088), which are members the daily
+ * screen admitted after it. Measured on the 2026-09-24 snapshot: 71 members without a
  * description, and 33 holding rows (19 implausible weights, 14 of three
  * unprofiled funds) - with those named, nothing is left over.
  */
@@ -48,6 +49,7 @@ export function universeStatus(
     embedded: counts.embedded,
     etfHoldings: counts.etf_holdings,
     onDemand: counts.on_demand,
+    listed: counts.listed,
     dropped: counts.dropped,
   };
   if (!load) return { lastLoad: null, database, reconciliation: [] };

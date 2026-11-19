@@ -1712,6 +1712,109 @@
         "title": "NarrationConfigResponse",
         "type": "object"
       },
+      "NewListingsResponse": {
+        "description": "What one run of the daily new-listings screen found and admitted (migration 0088).\n\n`done`: the screen ran, and the lists say what became of each candidate.\n`unavailable`: the installation has no profile source (a fixture-only\nmarket-data chain) - a configuration, and `reason` names it. A screen that\ncould not be fetched is not an answer here: the endpoint fails, and the run\nis retried.\n\nA listing in `no_description`, `no_currency` or `failed` is asked about again\nby the next run; `deferred` counts the candidates left for it by the cap.",
+        "properties": {
+          "admitted": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Admitted",
+            "type": "array"
+          },
+          "candidates": {
+            "default": 0,
+            "title": "Candidates",
+            "type": "integer"
+          },
+          "deferred": {
+            "default": 0,
+            "title": "Deferred",
+            "type": "integer"
+          },
+          "failed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Failed",
+            "type": "array"
+          },
+          "kept": {
+            "default": 0,
+            "title": "Kept",
+            "type": "integer"
+          },
+          "no_currency": {
+            "items": {
+              "type": "string"
+            },
+            "title": "No Currency",
+            "type": "array"
+          },
+          "no_description": {
+            "items": {
+              "type": "string"
+            },
+            "title": "No Description",
+            "type": "array"
+          },
+          "no_listing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "No Listing",
+            "type": "array"
+          },
+          "outside_screen": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Outside Screen",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "same_company": {
+            "default": 0,
+            "title": "Same Company",
+            "type": "integer"
+          },
+          "screened": {
+            "default": 0,
+            "title": "Screened",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "done",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "unembedded": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unembedded",
+            "type": "array"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "NewListingsResponse",
+        "type": "object"
+      },
       "NewsCollectRequest": {
         "properties": {
           "instruments": {
@@ -4773,6 +4876,55 @@
         "summary": "Start Research",
         "tags": [
           "research"
+        ]
+      }
+    },
+    "/universe/new-listings": {
+      "post": {
+        "operationId": "new_listings_universe_new_listings_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewListingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "New Listings",
+        "tags": [
+          "universe"
         ]
       }
     },

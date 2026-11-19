@@ -38,10 +38,11 @@ export function gapExplanation(gap: UniverseGap): string {
 
 /**
  * Only a gap a rescreen could close deserves the eye; the rest are expected,
- * and one a rescreen has already closed is history.
+ * and one already closed - by a rescreen, or by the daily new-listings screen
+ * (`listed`) - is history.
  */
 export function isRealGap(gap: UniverseGap): boolean {
-  if (gap.profile === 'screened') return false;
+  if (gap.profile === 'screened' || gap.profile === 'listed') return false;
   return gap.detail.gap === 'not_in_universe';
 }
 
@@ -54,6 +55,7 @@ export function gapProfile(gap: UniverseGap): string | null {
   switch (gap.profile) {
     case 'on_demand':
     case 'screened':
+    case 'listed':
     case 'dropped':
       return t(`gaps.profiles.${gap.profile}`);
     default:

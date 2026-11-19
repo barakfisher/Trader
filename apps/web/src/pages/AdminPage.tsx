@@ -267,6 +267,11 @@ function UniverseCard() {
               {t('admin.dropped', { value: count.format(data.database.dropped) })}
             </p>
           )}
+          {data.database.listed > 0 && (
+            <p className="text-text-muted">
+              {t('admin.listed', { value: count.format(data.database.listed) })}
+            </p>
+          )}
           {data.database.onDemand > 0 && (
             <p className="text-text-muted">
               {t('admin.onDemand', { value: count.format(data.database.onDemand) })}

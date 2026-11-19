@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import type { AssetClass } from '@traders/shared';
 import { query, queryOne } from '../pool.js';
+import type { ProfileMembership } from './opsEvents.js';
 
 export interface InstrumentRow {
   id: string;
@@ -138,7 +139,7 @@ export function getUniverseProfile(symbol: string): Promise<UniverseProfileRow |
 
 export interface TradableInstrumentRow extends InstrumentRow {
   /** `instrument_profiles.membership`, or null when the universe does not hold it. */
-  membership: 'screened' | 'on_demand' | 'dropped' | null;
+  membership: ProfileMembership | null;
 }
 
 /**
@@ -164,7 +165,8 @@ export interface InstrumentDirectoryRow {
 
 /**
  * The instruments a user may be offered while adding a holding (D324, D325):
- * the screened universe, which is the installation's own reference list, plus
+ * the universe's members (screened, and listed since the snapshot by the daily
+ * screen, migration 0088), which is the installation's own reference list, plus
  * whatever this user already holds or has traded. ~5,200 rows (67 KB gzipped,
  * measured 2026-10-27): sent whole once and filtered in the browser.
  *
@@ -179,7 +181,7 @@ export function listInstrumentDirectory(userId: string): Promise<InstrumentDirec
      SELECT i.symbol, i.name, i.asset_class, i.exchange
        FROM instruments i
       WHERE EXISTS (SELECT 1 FROM instrument_profiles p
-                     WHERE p.instrument_id = i.id AND p.membership = 'screened')
+                     WHERE p.instrument_id = i.id AND p.membership IN ('screened', 'listed'))
          OR EXISTS (SELECT 1 FROM holdings h WHERE h.instrument_id = i.id AND h.user_id = $1)
          OR EXISTS (SELECT 1 FROM fills f WHERE f.instrument_id = i.id AND f.user_id = $1)
       ORDER BY i.symbol`,
