@@ -7,6 +7,7 @@ import { MAX_AGENTS_PER_USER_CEILING, type AgentView, type SimulatedAgentStandin
 import { AgentField } from '../components/AgentField.tsx';
 import { InstructionsField } from '../components/InstructionsField.tsx';
 import { MandateFields } from '../components/MandateFields.tsx';
+import { TopicsField } from '../components/TopicsField.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { Drawer } from '../components/Drawer.tsx';
 import { OwnKeyNotice } from '../components/OwnKeyNotice.tsx';
@@ -41,6 +42,7 @@ import {
   templatePersona,
   type PersonaTemplate,
 } from '../lib/personaTemplates.ts';
+import { parseTopics, topicsValid } from '../lib/agentTopics.ts';
 import { useAgentLimitQuery, useAgentsQuery, useCheckInstructions, useCreateAgent } from '../queries/agents.ts';
 import { useModelAccess, type ModelAccess } from '../queries/modelAccess.ts';
 import { useConsolidatedQuery } from '../queries/portfolio.ts';
@@ -235,9 +237,18 @@ interface AgentDraft {
   /** The instructions last written from the settings (D174): while `persona` equals it, it is rewritten. */
   generated: string;
   mandate: MandateDraft;
+  /** One per line, as typed (D412). */
+  topics: string;
 }
 
-const EMPTY_DRAFT: AgentDraft = { name: '', budget: '', persona: '', generated: '', mandate: EMPTY_MANDATE_DRAFT };
+const EMPTY_DRAFT: AgentDraft = {
+  name: '',
+  budget: '',
+  persona: '',
+  generated: '',
+  mandate: EMPTY_MANDATE_DRAFT,
+  topics: '',
+};
 
 function CreateAgentForm({
   draft,
@@ -255,7 +266,7 @@ function CreateAgentForm({
   const { t } = useTranslation();
   const create = useCreateAgent();
   const taxonomy = useTaxonomyQuery();
-  const { name, budget, persona, generated, mandate } = draft;
+  const { name, budget, persona, generated, mandate, topics } = draft;
   const budgetValid = BUDGET_INPUT.test(budget.trim());
   const mandateValid = mandateProblems(mandate).length === 0;
   // A disabled button says why (D225): what is still missing, beside it.
@@ -287,6 +298,7 @@ function CreateAgentForm({
         budget: budget.trim(),
         persona: persona.trim() || null,
         mandate: mandateInput(mandate),
+        topics: parseTopics(topics),
         ...(pausedAtLimit === null ? {} : { state: 'paused' as const }),
       },
       { onSuccess: (agent) => onCreated(agent.id, persona.trim() !== '' && persona !== generated) },
@@ -318,6 +330,7 @@ function CreateAgentForm({
         />
       </AgentField>
       <MandateFields draft={mandate} onChange={(next) => onChange(withMandate(draft, next))} />
+      <TopicsField value={topics} onChange={(value) => onChange({ ...draft, topics: value })} />
       <InstructionsField
         value={persona}
         generated={generated}
@@ -332,7 +345,7 @@ function CreateAgentForm({
       <div className="flex flex-wrap items-center gap-3">
         <Button
           type="submit"
-          disabled={create.isPending || missing.length > 0 || !mandateValid}
+          disabled={create.isPending || missing.length > 0 || !mandateValid || !topicsValid(topics)}
           describedBy={missing.length > 0 ? 'create-agent-missing' : undefined}
         >
           <span className="flex items-center gap-1">

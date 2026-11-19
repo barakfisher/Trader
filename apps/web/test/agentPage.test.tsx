@@ -27,7 +27,7 @@ import type {
   HoldingView,
   TradePreview,
 } from '@traders/shared';
-import { MAX_AGENTS_PER_USER_CEILING } from '@traders/shared';
+import { MAX_AGENTS_PER_USER_CEILING, MAX_TOPIC_LENGTH, MAX_TOPICS } from '@traders/shared';
 
 const get = vi.fn();
 const post = vi.fn();
@@ -63,6 +63,7 @@ const AGENT: AgentView = {
   scanCost: { microUsd: 36_000, basis: 'measured' },
   waitingForBrief: true,
   mandate: null,
+  topics: [],
   instructionsConflicts: null,
   scheduling: { enabled: true, nextAt: '2026-10-08T13:00:00Z' },
 };
@@ -821,6 +822,28 @@ describe('AgentPage with the ledger', () => {
     expect(quote?.getAttribute('dir')).toBe('auto');
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith(`/agents/${AGENT_ID}/instructions-check/dismiss`));
+  });
+
+  it('saves its topics alone, without checking the instructions, and refuses more than the limit (D412)', async () => {
+    const patch = (await import('../src/api/client.ts')).api.patch as ReturnType<typeof vi.fn>;
+    patch.mockResolvedValue(AGENT);
+    serveAgent({ ...AGENT, persona: 'Patient.', waitingForBrief: false, topics: ['AI chips'] });
+    await renderAgentTab('Settings');
+    const field = (await screen.findByLabelText('Topics to follow')) as HTMLTextAreaElement;
+    expect(field.value).toBe('AI chips');
+
+    const tooMany = Array.from({ length: MAX_TOPICS + 1 }, (_, n) => `topic ${n}`).join('\n');
+    fireEvent.change(field, { target: { value: tooMany } });
+    expect(screen.getByText(`At most ${MAX_TOPICS} topics, each up to ${MAX_TOPIC_LENGTH} characters.`)).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(field, { target: { value: ' AI chips \n\nregional banks\nai CHIPS' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith(`/agents/${AGENT_ID}`, expect.objectContaining({ topics: ['AI chips', 'regional banks'] })),
+    );
+    expect(patch.mock.calls.at(-1)![1]).not.toHaveProperty('mandate');
+    expect(post).not.toHaveBeenCalledWith(`/agents/${AGENT_ID}/instructions-check`);
   });
 
   it('checks edited instructions after a save, and says so when they fit', async () => {

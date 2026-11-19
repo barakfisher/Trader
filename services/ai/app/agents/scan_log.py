@@ -59,6 +59,9 @@ class ScanAgent:
     mandate: Mandate = Mandate()
     #: Trades one answer may decide (0061, D197).
     max_decisions: int = 1
+    #: What it follows (0090, D412): the briefing's `followed_topics`. Not part of
+    #: `mandate`, so topics alone never make an agent ready to scan (D174).
+    topics: tuple[str, ...] = ()
 
     @property
     def ready(self) -> bool:
@@ -84,7 +87,7 @@ def find_agent(engine: Engine, user_id: str, agent_id: str) -> ScanAgent | None:
                        a.risk_level, a.horizon, a.thesis_style, a.max_position_bps,
                        a.cash_buffer_bps, a.max_holdings, a.allow_etfs, a.market_caps,
                        a.sectors, a.industries, a.etf_categories, a.blocked_symbols,
-                       a.max_decisions
+                       a.max_decisions, a.topics
                   FROM agents a
                   LEFT JOIN user_settings s ON s.user_id = a.user_id
                  WHERE a.id = CAST(:agent AS uuid) AND a.user_id = CAST(:user AS uuid)
@@ -103,6 +106,7 @@ def find_agent(engine: Engine, user_id: str, agent_id: str) -> ScanAgent | None:
         is_primary=row.is_primary,
         language=row.language,
         max_decisions=row.max_decisions,
+        topics=tuple(row.topics),
         mandate=Mandate(
             risk_level=row.risk_level,
             horizon=row.horizon,

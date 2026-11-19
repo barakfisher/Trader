@@ -3,10 +3,10 @@ briefing sections a scan is told about."""
 
 from __future__ import annotations
 
-from app.agents.briefing import NEW_IN_UNIVERSE_KEY, UPCOMING_IPOS_KEY
+from app.agents.briefing import FOLLOWED_TOPICS_KEY, NEW_IN_UNIVERSE_KEY, UPCOMING_IPOS_KEY
 from app.agents.scan import (
+    BRIEFING_SECTIONS_LINE,
     JUDGMENT_RULES,
-    NEW_LISTINGS_LINE,
     PRICE_MOVE_RULE,
     UPCOMING_IPO_RULE,
     instructions,
@@ -34,15 +34,16 @@ def test_research_is_not_told_the_price_move_rule() -> None:
 
 
 def test_a_scan_is_told_the_new_sections_and_that_an_upcoming_ipo_is_not_tradable() -> None:
-    # D411: the briefing's two sections from the new-listings plan.
+    # D411, D412: the briefing's sections from the new-listings plan and the topics.
     prompt = instructions(AGENT)
-    assert NEW_LISTINGS_LINE in prompt
+    assert BRIEFING_SECTIONS_LINE in prompt
     assert UPCOMING_IPO_RULE in prompt
-    assert f'"{NEW_IN_UNIVERSE_KEY}"' in prompt and f'"{UPCOMING_IPOS_KEY}"' in prompt
+    for key in (FOLLOWED_TOPICS_KEY, NEW_IN_UNIVERSE_KEY, UPCOMING_IPOS_KEY):
+        assert f'"{key}"' in prompt
 
 
 def test_research_is_not_told_the_briefing_sections() -> None:
     # A research view has no scan briefing; naming its sections would invite a search.
     prompt = research_instructions(AGENT, held=False)
-    assert UPCOMING_IPOS_KEY not in prompt
-    assert NEW_IN_UNIVERSE_KEY not in prompt
+    for key in (FOLLOWED_TOPICS_KEY, NEW_IN_UNIVERSE_KEY, UPCOMING_IPOS_KEY):
+        assert key not in prompt

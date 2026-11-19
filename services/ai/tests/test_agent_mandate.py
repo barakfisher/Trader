@@ -17,8 +17,8 @@ from app.agents.mandate import (
     MID_CAP_FLOOR_MINOR,
     RISK_BANDS,
     Mandate,
+    UniverseProfile,
     _Book,
-    _Profile,
     cap_band,
     cash_above_buffer,
     mandate_brief,
@@ -30,9 +30,9 @@ from app.agents.mandate import (
 from app.core.fees import fee_minor
 from app.narration.evidence_validator import unsourced_figures
 
-URANIUM_MINER = _Profile("equity", "Energy", "Uranium", None, LARGE_CAP_FLOOR_MINOR, "USD")
-GOLD_MINERS_ETF = _Profile("etf", None, None, "Equity Precious Metals", None, None)
-BROAD_ETF = _Profile("etf", None, None, "Large Blend", None, None)
+URANIUM_MINER = UniverseProfile("equity", "Energy", "Uranium", None, LARGE_CAP_FLOOR_MINOR, "USD")
+GOLD_MINERS_ETF = UniverseProfile("etf", None, None, "Equity Precious Metals", None, None)
+BROAD_ETF = UniverseProfile("etf", None, None, "Large Blend", None, None)
 
 
 def _buy(quantity: int, price_minor: int, symbol: str = "CCJ") -> Trade:
@@ -88,7 +88,7 @@ def test_the_etf_ban_refuses_etfs_only() -> None:
 def test_market_caps_apply_to_equities_and_an_unsized_one_is_not_assumed_to_fit() -> None:
     assert universe_problems(Mandate(market_caps=("large",)), "CCJ", URANIUM_MINER) == []
     assert universe_problems(Mandate(market_caps=("small",)), "CCJ", URANIUM_MINER)
-    unsized = _Profile("equity", "Energy", "Uranium", None, None, None)
+    unsized = UniverseProfile("equity", "Energy", "Uranium", None, None, None)
     assert universe_problems(Mandate(market_caps=("small",)), "X", unsized)
     # An ETF has no market cap; the cap filter is not about funds.
     assert universe_problems(Mandate(market_caps=("small",)), "GDX", GOLD_MINERS_ETF) == []

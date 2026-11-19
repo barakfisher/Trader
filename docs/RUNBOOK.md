@@ -160,6 +160,13 @@ row: `DELETE FROM upcoming_listings WHERE cik = '<10 digits>'`. `FILINGS_PROVIDE
 run. What it holds: `SELECT company_name, ticker, stage, stage_on FROM upcoming_listings WHERE
 excluded IS NULL ORDER BY stage_on DESC LIMIT 20`.
 
+**What a scan's briefing offered** (D409-D414): `new_in_universe` and `upcoming_ipos` come from the
+two runs above, `followed_topics` from the agent's own topics (`agents.topics`, edited under *Topics
+to follow*; none, no section). All three are stored with the scan:
+`SELECT started_at, briefing->'followed_topics' FROM agent_scans WHERE agent_id = '<id>' ORDER BY
+started_at DESC LIMIT 1`. A topic noted "could not be searched today" had its embedding fail
+(`briefing.topic_unresolved` in the AI service's log, by its position); the scan went on without it.
+
 On the cluster, `kubectl create job --from=cronjob/run-<kind> <name>` triggers the same request as
 the schedule - with the default key, so it is `skipped` if the bucket already ran.
 

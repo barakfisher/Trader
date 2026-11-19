@@ -16,6 +16,8 @@ import {
   MAX_AGENTS_PER_USER_CEILING,
   MAX_DECISIONS_PER_SCAN,
   MAX_SCAN_EVERY_HOURS,
+  MAX_TOPIC_LENGTH,
+  MAX_TOPICS,
   type ScanSchedule,
 } from '@traders/shared';
 
@@ -66,6 +68,7 @@ function row(overrides: Record<string, unknown> = {}) {
     industries: [],
     etf_categories: [],
     blocked_symbols: [],
+    topics: [],
     ...overrides,
   };
 }
@@ -127,6 +130,8 @@ const { createApp } = await import('../src/http/app.js');
 const { MAX_BUDGET_MINOR, MAX_PERSONA_LENGTH, MAX_LLM_BUDGET_MICRO_USD, MEASURED_SCAN_COST_MICRO_USD, scanCostOf } =
   await import('../src/http/routes/agents.js');
 const { createFakeAi } = await import('./fakeAi.js');
+const { readyToScan } = await import('../src/services/agentReadiness.js');
+const { instructionsFingerprint } = await import('../src/services/instructionsCheck.js');
 const queries = await import('../src/db/queries.js');
 
 const ENV = {
@@ -582,6 +587,77 @@ describe("an agent's mandate (0057, D165)", () => {
     expect(agent.mandate).toMatchObject({ maxPositionBps: 1250, sectors: ['Energy'], allowEtfs: true, horizon: null });
     const primary = await (await send('GET', `/agents/${PRIMARY}`)).json();
     expect(primary.mandate).toBeNull();
+  });
+});
+
+describe('an agent\'s topics (D412-D414)', () => {
+  let app: ReturnType<typeof buildApp>;
+  let cookie: string;
+  const send = (method: string, path: string, body?: unknown) =>
+    app.request(path, {
+      method,
+      headers: { ...ORIGIN, cookie },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    app = buildApp();
+    cookie = sessionCookie();
+  });
+
+  it('stores them trimmed, a repeat in another case dropped, and none when left out', async () => {
+    await send('POST', '/agents', { name: 'A', budget: '1', topics: [' AI chips ', 'ai CHIPS', 'Regional banks'] });
+    await send('POST', '/agents', { name: 'B', budget: '1' });
+    const created = vi.mocked(queries.createAgent).mock.calls.map(([agent]) => agent.topics);
+    expect(created).toEqual([['AI chips', 'Regional banks'], []]);
+  });
+
+  it('counts a repeat once, so the limit is of distinct topics', async () => {
+    const distinct = Array.from({ length: MAX_TOPICS }, (_, n) => `topic ${n}`);
+    const response = await send('PATCH', `/agents/${SIMULATED}`, { topics: [...distinct, 'TOPIC 0'] });
+    expect(response.status).toBe(200);
+    expect(vi.mocked(queries.updateAgent).mock.calls[0]![2].topics).toEqual(distinct);
+  });
+
+  it('refuses a new agent with too many topics, before any SQL', async () => {
+    const topics = Array.from({ length: MAX_TOPICS + 1 }, (_, n) => `topic ${n}`);
+    expect((await send('POST', '/agents', { name: 'A', budget: '1', topics })).status).toBe(400);
+    expect(queries.createAgent).not.toHaveBeenCalled();
+  });
+
+  it('refuses more than the limit, a blank one and one too long, before any SQL', async () => {
+    for (const topics of [
+      Array.from({ length: MAX_TOPICS + 1 }, (_, n) => `topic ${n}`),
+      ['  '],
+      ['x'.repeat(MAX_TOPIC_LENGTH + 1)],
+      'AI chips',
+    ]) {
+      const response = await send('PATCH', `/agents/${SIMULATED}`, { topics });
+      expect(response.status, JSON.stringify(topics)).toBe(400);
+    }
+    expect(queries.updateAgent).not.toHaveBeenCalled();
+  });
+
+  it('changes them alone, leaving the mandate untouched', async () => {
+    const response = await send('PATCH', `/agents/${SIMULATED}`, { topics: ['uranium miners'] });
+    expect(response.status).toBe(200);
+    const patch = vi.mocked(queries.updateAgent).mock.calls[0]![2];
+    expect(patch.topics).toEqual(['uranium miners']);
+    expect(patch.mandate).toBeUndefined();
+  });
+
+  it('reads them back on a simulated agent, and none on the primary (D1)', async () => {
+    vi.mocked(queries.getAgent).mockResolvedValueOnce(row({ topics: ['uranium miners'] }) as never);
+    expect((await (await send('GET', `/agents/${SIMULATED}`)).json()).topics).toEqual(['uranium miners']);
+    expect((await (await send('GET', `/agents/${PRIMARY}`)).json()).topics).toBeNull();
+  });
+
+  it('does not make an agent ready to scan, nor change what the instructions check judged', () => {
+    const plain = row() as never;
+    const topical = row({ topics: ['uranium miners'] }) as never;
+    expect(readyToScan(topical)).toBe(false);
+    expect(instructionsFingerprint(topical)).toBe(instructionsFingerprint(plain));
   });
 });
 

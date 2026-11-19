@@ -163,7 +163,7 @@ def mandate_brief(mandate: Mandate) -> dict[str, Any] | None:
 
 
 @dataclass(frozen=True)
-class _Profile:
+class UniverseProfile:
     asset_class: str
     sector: str | None
     industry: str | None
@@ -185,7 +185,7 @@ class _Book:
         return self.cash_minor + self.holdings_cost
 
 
-def _profile(engine: Engine, symbol: str) -> _Profile | None:
+def _profile(engine: Engine, symbol: str) -> UniverseProfile | None:
     with engine.connect() as connection:
         row = connection.execute(
             text(
@@ -201,7 +201,7 @@ def _profile(engine: Engine, symbol: str) -> _Profile | None:
         ).one_or_none()
     if row is None:
         return None
-    return _Profile(
+    return UniverseProfile(
         row.asset_class,
         row.sector,
         row.industry,
@@ -211,7 +211,44 @@ def _profile(engine: Engine, symbol: str) -> _Profile | None:
     )
 
 
-def universe_problems(mandate: Mandate, symbol: str, profile: _Profile | None) -> list[str]:
+def member_profiles(engine: Engine, symbols: list[str]) -> dict[str, UniverseProfile]:
+    """The profiles of the symbols an agent may trade: in the universe, not dropped,
+    priced in USD (D7, D8) - `tools.find_listing`'s rule, for a whole list in one query.
+
+    A symbol missing from the answer is not tradable. The briefing reads it so that
+    what it offers is what `universe_problems` would let through (D412).
+    """
+    if not symbols:
+        return {}
+    with engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                """
+                SELECT i.symbol, i.asset_class, p.sector, p.industry, p.category,
+                       p.market_cap_minor, p.size_currency
+                  FROM instruments i
+                  JOIN instrument_profiles p ON p.instrument_id = i.id
+                 WHERE i.symbol = ANY(:symbols)
+                   AND p.membership <> 'dropped'
+                   AND upper(i.currency) = 'USD'
+                """
+            ),
+            {"symbols": symbols},
+        )
+        return {
+            row.symbol: UniverseProfile(
+                row.asset_class,
+                row.sector,
+                row.industry,
+                row.category,
+                row.market_cap_minor,
+                row.size_currency,
+            )
+            for row in rows
+        }
+
+
+def universe_problems(mandate: Mandate, symbol: str, profile: UniverseProfile | None) -> list[str]:
     """Why `symbol` is outside the agent's universe; empty when it is inside."""
     if symbol in mandate.blocked_symbols:
         return [f"{symbol} is on this agent's blocked list"]
@@ -237,7 +274,7 @@ def universe_problems(mandate: Mandate, symbol: str, profile: _Profile | None) -
     return problems
 
 
-def _in_selection(mandate: Mandate, profile: _Profile) -> bool:
+def _in_selection(mandate: Mandate, profile: UniverseProfile) -> bool:
     if profile.asset_class == "etf":
         if profile.category is None:
             return False

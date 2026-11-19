@@ -422,3 +422,6 @@ while this file is out of date.
 | 409 | The briefing's `new_in_universe` lists the daily screen's admissions of the last 14 days, at most 10, largest first |
 | 410 | The briefing's `upcoming_ipos` lists only companies registered on an exchange or priced, in the last 30 days, at most 10 |
 | 411 | Every agent's instructions name the two sections and say a company about to list cannot be bought until it does |
+| 412 | Each agent follows up to five topics, and its briefing offers only what its mandate lets it buy |
+| 413 | Five topics per agent, five candidates per topic |
+| 414 | An agent with no topics has no topics section; nothing is filled in for it |

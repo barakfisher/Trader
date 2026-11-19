@@ -4,8 +4,29 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-19, evening - **The agents' briefing lists new listings and IPOs about to trade (D409-D411, VERSION
-0.0.9).** Not merged, not deployed. PR 3 of the new-listings plan; #394 and #395 are merged, none of the three deployed.
+Updated: 2026-11-19, night - **Each agent follows topics, and its briefing offers only what its mandate allows
+(D412-D414, VERSION 0.0.10).** Not merged, not deployed. PR 4, the last of the new-listings plan; #394-#396 are merged,
+none deployed.
+- **Why:** agents act on the briefing and hardly search (1 `search_universe` call in 80 tool calls), so it was the
+  day's movers or nothing. Measured first on production: the user's two agents select no sector, industry or ETF
+  category, and their instructions name a style, not topics - a briefing "from the mandate" would have shown them
+  nothing new. The user chose topics per agent plus the mandate filter, five topics of five candidates, and no section
+  when an agent has none.
+- **What changed:** `agents.topics` (`0090`, at most 5, none on the primary). The agents API takes and returns
+  `topics` beside `mandate`, not in it; the web edits them under "Topics to follow" (one per line, en/he). Each scan's
+  briefing gains `followed_topics` (per topic, `resolve_topic` then five candidates the agent may buy and does not
+  hold); movers, `new_in_universe` and `upcoming_ipos` are filtered by the mandate before they are cut.
+- **Deliberate:** topics are outside `MANDATE_COLUMNS`, the Python `Mandate`, readiness and the instructions-check
+  fingerprint (D412). Moving them in would make every stored check stale on deploy and let topics alone start scans.
+- **Not verified:** no real model has read a topics section (a paid run is the user's word); topic resolution was not
+  measured on real topics or in Hebrew (the universe's descriptions are English); the feature does nothing until the
+  user types topics for each agent after deploy.
+- **Next:** deploy #394-#397 on the user's word (compose first), then the user writes topics; after a week, read
+  whether theses cite `followed_topics`, `new_in_universe` or `upcoming_ipos`.
+- **Decisions reach 414** (next: **415**). This PR is #PRNUM.
+
+Earlier: 2026-11-19, evening - **The agents' briefing lists new listings and IPOs about to trade (D409-D411, VERSION
+0.0.9).** Merged (#396), not deployed. PR 3 of the new-listings plan.
 - **What changed:** `build_briefing` adds `new_in_universe` (the daily screen's admissions of the last 14 days, at most
   10, largest first, tradable) and `upcoming_ipos` (registered or priced in the last 30 days, at most 10, dates and
   stages only), each left out when empty. Every agent's instructions name both and say an IPO is not tradable until it
@@ -14,8 +35,11 @@ Updated: 2026-11-19, evening - **The agents' briefing lists new listings and IPO
   read on production until #394 and #395 are deployed: the sections are empty until `new_listings` and
   `upcoming_ipos` have run. After deploy: read a scan's stored `briefing` for the two keys, and whether a thesis
   mentions one.
-- **Next:** PR 4, a briefing built from each agent's mandate (D15's "followed topics" part, never built).
-- **Decisions reach 411** (next: **412**). This PR is #396.
+- **Lesson - a fixed date against the real clock is a time bomb.** `telegramOpenApproval.test.ts` (#393) set the
+  open to 2026-11-19 14:30 UTC and read `new Date()`: it passed for ten days and then failed every branch, `main`
+  included, from that minute. #396 pinned its clock (`vi.setSystemTime`). A test that writes a literal date near
+  today must also set the clock it is compared with.
+- **Then:** PR 4 (above).
 
 Earlier: 2026-11-19, later - **Upcoming IPOs from SEC EDGAR (D404-D408, VERSION 0.0.8).** Merged (#395), not deployed.
 - **Why:** PR 2 of the new-listings plan (below). Anthropic's public S-1 was on EDGAR 24 days before it listed; the
@@ -7148,6 +7172,51 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
       unsourced figures appear in theses, the fix is a validator rule for name fields, not dropping the names.
     - **Consequence:** every agent's prompt changed, like D394; no real model has run it yet, and a paid run is the
       user's to approve. Research views and re-checks do not see the sections.
+412. **Each agent follows up to five topics, and its briefing offers only what its mandate lets it buy** (#PRNUM, the
+    user, 2026-11-19, PR 4 of the new-listings plan). `agents.topics` (migration `0090`), edited under "Topics to
+    follow" on the new-agent drawer and the agent's settings. Each scan resolves every topic the way
+    `search_universe` does and lists the candidates under `followed_topics`; the movers, `new_in_universe` and
+    `upcoming_ipos` are filtered by `mandate.universe_problems` before they are cut, so a narrow mandate still sees
+    full lists (IPOs by the blocked list only: an unlisted company has no profile). The prompt's step 1 names the
+    section (`NEW_LISTINGS_LINE` became `BRIEFING_SECTIONS_LINE`). D15's "followed topics", never built until now.
+    - **Measured first, read-only on production (2026-11-19, `2639c47`):** neither of the user's agents selects a
+      sector, an industry or an ETF category, and both allow every market-cap band. Their instructions describe a
+      style (Soros-style macro and contrarian; Buffett-style value), not topics. So "a briefing built from the
+      mandate" as planned would have changed nothing for them, and matching the instructions' text to company
+      descriptions would match a style to businesses - noise. There are no fundamentals and no universe-wide price
+      history to pick candidates by style.
+    - *Rejected:* the mandate filter alone: right for a future agent with sectors, a no-op for both real ones.
+    - *Rejected:* candidates by style (value, contrarian): needs EDGAR financials (the agent plan's phase 3) or
+      universe-wide prices; deferred, not refused.
+    - **Topics are not a mandate column, on purpose.** They limit nothing: no buy is refused for being off-topic.
+      Kept out of `MANDATE_COLUMNS`, the Python `Mandate`, readiness (D174: topics alone do not make an agent ready
+      to scan) and the instructions check's fingerprint (adding a column to it would have made every stored check
+      stale on deploy). A topics edit never asks for the instructions check. Do not "fix" this by moving them in.
+    - **Consequence:** every agent's prompt changed again (one line), and one embedding call per topic per scan
+      (text-embedding-3-small; a fraction of a cent). An `EmbeddingError` costs that topic its candidates for the
+      day, with a note, never the scan. Topic names in the briefing source their digits, like D411's names.
+    - **Found by the QA review:** the new-listings filter's test could not fail (fewer rows than the cut); it now
+      seeds ten larger funds ahead of the in-mandate rows. Fixed too: a repeat counts once against the limit (tested),
+      and the log names a failed topic by its position, not its words.
+    - **Accepted, from the same review:** the database checks only the count (length and blanks are the
+      orchestrator's, the only writer); and the embedding calls run while a connection is open, as `search_universe`
+      already does - up to five a scan now. If scans start holding connections long, resolve before connecting.
+413. **Five topics per agent, five candidates per topic** (#PRNUM, the user, 2026-11-19). Each at most 80 characters;
+    trimmed, a repeat in another case dropped. Candidates are the topic's resolution order (largest first),
+    skipping what the agent holds, what an earlier topic showed, what is not tradable and what the mandate refuses.
+    `MAX_TOPICS`/`MAX_TOPIC_LENGTH` in `packages/shared`, the migration's CHECK and `briefing.py`, held equal by
+    `test_agent_topics.py`; `CANDIDATES_PER_TOPIC` in `briefing.py`.
+    - *Rejected:* 3 topics: too few for a macro agent's themes.
+    - *Rejected:* 10 topics with 3 candidates each: three candidates a topic is too shallow to choose from.
+    - **Consequence:** at most 25 rows, fewer after the de-duplication; as many per topic as a movers list.
+414. **An agent with no topics has no topics section; nothing is filled in for it** (#PRNUM, the user, 2026-11-19). The
+    field's hint says that without topics the agent starts from the day's movers. Both of the user's agents have none
+    until the user types them, after deploy.
+    - *Rejected:* the largest members of the mandate's sectors as a fallback: neither real agent selects a sector, so
+      it would add code and change nothing.
+    - *Rejected:* default topics per template (value themes for Warren, macro for George): the app would be choosing
+      what the user's agents look for.
+    - **Consequence:** the feature does nothing on production until the user writes topics for each agent.
 
 ## Bugs that cost real time, and the lesson from each
 

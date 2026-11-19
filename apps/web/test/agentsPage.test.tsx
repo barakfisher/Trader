@@ -46,6 +46,7 @@ const PRIMARY: AgentView = {
   scanCost: null,
   waitingForBrief: false,
   mandate: null,
+  topics: null,
   instructionsConflicts: null,
 };
 const MOMENTUM: AgentView = {
@@ -143,7 +144,21 @@ describe('AgentsPage', () => {
         budget: '2500.5',
         persona: null,
         mandate: expect.objectContaining({ riskLevel: null, maxPositionBps: null, allowEtfs: true, sectors: [] }),
+        topics: [],
       }),
+    );
+  });
+
+  it('creates an agent with the topics it follows, one per line (D412)', async () => {
+    post.mockResolvedValue(MOMENTUM);
+    renderPage(<AgentsPage />);
+    await openCreateForm();
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Macro' } });
+    fireEvent.change(screen.getByLabelText('Paper budget ($)'), { target: { value: '1000' } });
+    fireEvent.change(screen.getByLabelText('Topics to follow'), { target: { value: 'uranium miners\n defense ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }));
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/agents', expect.objectContaining({ topics: ['uranium miners', 'defense'] })),
     );
   });
 

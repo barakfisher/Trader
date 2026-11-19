@@ -14,6 +14,8 @@ import { z } from 'zod';
 import {
   HORIZONS,
   MARKET_CAPS,
+  MAX_TOPIC_LENGTH,
+  MAX_TOPICS,
   THESIS_STYLES,
   type AgentMandate,
   type Horizon,
@@ -30,6 +32,23 @@ export const BPS = 10_000;
 export const MAX_HOLDINGS_LIMIT = 100;
 export const MAX_CLASSIFICATIONS = 200;
 export const MAX_BLOCKED_SYMBOLS = 100;
+/**
+ * An agent's topics (D412-D413), beside the mandate rather than in it: they direct
+ * the briefing and limit nothing.
+ *
+ * Trimmed, at most `MAX_TOPICS` once repeats in another case are dropped (first kept). */
+export const topicsSchema = z
+  .array(z.string().trim().min(1).max(MAX_TOPIC_LENGTH))
+  .transform((topics) => {
+    const seen = new Set<string>();
+    return topics.filter((topic) => {
+      const key = topic.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  })
+  .pipe(z.array(z.string()).max(MAX_TOPICS));
 
 /** A ticker as the universe spells them: BRK-B, BF.B, ^GSPC never trade but cost nothing to allow. */
 const SYMBOL = /^[A-Z0-9][A-Z0-9.\-^=]{0,14}$/;
