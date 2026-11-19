@@ -932,6 +932,27 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe('upcoming IPOs (migration 0089)', () => {
+    it('counts tracked companies at a pending stage inside the window, and nothing else', async () => {
+      const recent = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+      const old = new Date(Date.now() - (queries.UPCOMING_IPO_DAYS + 2) * 86_400_000).toISOString().slice(0, 10);
+      const before = await queries.countUniverse();
+      await getPool().query(
+        `INSERT INTO upcoming_listings (cik, company_name, excluded, stage, stage_on) VALUES
+           ('0000009901', 'Counted', NULL, 'registered', $1),
+           ('0000009902', 'Too old', NULL, 'filed', $2),
+           ('0000009903', 'Withdrawn', NULL, 'withdrawn', $1),
+           ('0000009904', 'A SPAC', 'blank_check', NULL, NULL)`,
+        [recent, old],
+      );
+      try {
+        expect((await queries.countUniverse()).upcoming_ipos).toBe(before.upcoming_ipos + 1);
+      } finally {
+        await getPool().query(`DELETE FROM upcoming_listings WHERE cik LIKE '000000990_'`);
+      }
+    });
+  });
+
   describe('the universe status', () => {
     it('counts profiles by asset class and reads the latest load back as JSON', async () => {
       const counts = await queries.countUniverse();

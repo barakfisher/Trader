@@ -121,7 +121,7 @@ curl -s -X POST http://127.0.0.1:8089/internal/runs \
 ```
 
 Kinds: `backfill`, `instrument_metadata`, `snapshot`, `news_collect`, `portfolio_scan`,
-`proposal_sweep`, `daily_digest`, `universe_rescreen`, `new_listings`. The answer carries the run's
+`proposal_sweep`, `daily_digest`, `universe_rescreen`, `new_listings`, `upcoming_ipos`. The answer carries the run's
 status and its result. Replaying is safe for every kind: each writes idempotently (observations
 and notifications carry a `dedupe_key`; the backfill rewrites only its own rows). The one kind to
 think twice about is **`daily_digest`**: a second digest the same day splits the day's deferred
@@ -145,6 +145,20 @@ a second or so per new listing, at most 60 a run). `stats.admitted` names what i
 `listed`; `noDescription` and `noCurrency` are listings Yahoo has not finished describing - they
 are asked about again tomorrow, not failures. A failed run is retried by the next hourly ask.
 Re-running is safe: it only adds, and a member is never rewritten.
+
+**`upcoming_ipos`** (D404-D408) reads SEC EDGAR for companies on their way to an IPO - dates and
+stages only, into `upcoming_listings`. It belongs to no account and waits for the AI service's
+answer: two full-text searches over the last 30 days and at most 120 company histories at 8
+requests a second (about 45 s on a first run, seconds after it). `stats.tracked` names registrants
+seen for the first time and followed, `excluded` counts the rest by reason (`blank_check`,
+`reporting_company`, `fund` - never fetched again), `advanced` lists stage changes, `listed` the
+tickers that became members, `deferred` what the cap left for tomorrow. `failed` CIKs are asked
+again next run. A failed search (EDGAR answers an occasional 500) fails the run, and the next hourly
+ask retries it. HTTP 403 means SEC refused the User-Agent: set `EDGAR_USER_AGENT` to another generic
+name - never a person's name or email. To make it look again at an excluded registrant, delete its
+row: `DELETE FROM upcoming_listings WHERE cik = '<10 digits>'`. `FILINGS_PROVIDER=off` skips the
+run. What it holds: `SELECT company_name, ticker, stage, stage_on FROM upcoming_listings WHERE
+excluded IS NULL ORDER BY stage_on DESC LIMIT 20`.
 
 On the cluster, `kubectl create job --from=cronjob/run-<kind> <name>` triggers the same request as
 the schedule - with the default key, so it is `skipped` if the bucket already ran.

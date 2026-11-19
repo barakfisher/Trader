@@ -305,6 +305,29 @@ class NewListingsResponse(BaseModel):
     unembedded: list[str] = Field(default_factory=list)
 
 
+class UpcomingIposResponse(BaseModel):
+    """What one run of the daily upcoming-IPO tracker found (migration 0089).
+
+    `done`: the searches ran. `tracked` names the registrants seen for the first
+    time and followed; `excluded` counts the others by reason; `advanced` lists
+    tracked companies whose stage or dates changed ("NAME: stage"); `listed`
+    the tickers that became universe members. `failed` holds CIKs whose history
+    could not be fetched, asked again by the next run; `deferred` counts those
+    left for it by the cap. `unavailable`: `filings_provider` is `off`. A search
+    that failed is not an answer here: the endpoint fails, and the run is retried.
+    """
+
+    status: Literal["done", "unavailable"]
+    reason: str | None = None
+    searched: int = 0
+    tracked: list[str] = Field(default_factory=list)
+    excluded: dict[str, int] = Field(default_factory=dict)
+    advanced: list[str] = Field(default_factory=list)
+    listed: list[str] = Field(default_factory=list)
+    failed: list[str] = Field(default_factory=list)
+    deferred: int = 0
+
+
 class RescreenRequest(BaseModel):
     """A `universe_rescreen` run the orchestrator has claimed, to be carried out here."""
 

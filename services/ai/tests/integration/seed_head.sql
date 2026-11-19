@@ -455,3 +455,29 @@ INSERT INTO runs (id, kind, run_key, status) VALUES
   ('20000000-0000-0000-0000-0000000000ab', 'open_approvals', 'open_approvals:installation:2026-11-18:0990', 'ok');
 INSERT INTO runs (id, kind, run_key, status) VALUES
   ('20000000-0000-0000-0000-0000000000ac', 'new_listings', 'new_listings:installation:2026-11-19', 'ok');
+-- Upcoming IPOs from SEC filings (0089): every stage, exclusion and stored form.
+INSERT INTO upcoming_listings (cik, company_name, excluded) VALUES
+  ('0000000201', 'Seed Acquisition Corp.', 'blank_check'),
+  ('0000000202', 'Seed Industries, Inc.', 'reporting_company'),
+  ('0000000203', 'Seed Token ETF', 'fund');
+INSERT INTO upcoming_listings (cik, company_name, ticker, stage, stage_on, confidential_on, filed_on, amended_on, registered_on, priced_on, withdrawn_on, listed_on) VALUES
+  ('0000000211', 'Seed Draft, Inc.', NULL, 'confidential', '2026-06-01', '2026-06-01', NULL, NULL, NULL, NULL, NULL, NULL),
+  ('0000000212', 'Seed Filed, Inc.', NULL, 'filed', '2026-10-26', NULL, '2026-10-26', NULL, NULL, NULL, NULL, NULL),
+  ('0000000213', 'Seed Amended, Inc.', NULL, 'amended', '2026-11-02', NULL, '2026-10-26', '2026-11-02', NULL, NULL, NULL, NULL),
+  ('0000000214', 'Seed Registered, Inc.', 'SREG', 'registered', '2026-11-17', NULL, '2026-10-26', '2026-11-10', '2026-11-17', NULL, NULL, NULL),
+  ('0000000215', 'Seed Priced, Inc.', 'SPRC', 'priced', '2026-11-19', NULL, '2026-10-26', '2026-11-10', '2026-11-17', '2026-11-19', NULL, NULL),
+  ('0000000216', 'Seed Withdrawn, Inc.', NULL, 'withdrawn', '2026-11-16', NULL, '2026-10-01', NULL, NULL, NULL, '2026-11-16', NULL),
+  ('0000000217', 'Seed Listed, Inc.', 'NEWL', 'listed', '2026-11-20', NULL, '2026-10-01', NULL, '2026-11-17', '2026-11-19', NULL, '2026-11-20');
+INSERT INTO upcoming_listing_filings (accession, cik, form, stage, filed_on, url) VALUES
+  ('0000000211-26-000001', '0000000211', 'DRS', 'confidential', '2026-06-01', 'https://www.sec.gov/Archives/edgar/data/211/000000021126000001/a.htm'),
+  ('0000000211-26-000002', '0000000211', 'DRS/A', 'confidential', '2026-07-01', 'https://www.sec.gov/Archives/edgar/data/211/000000021126000002/a.htm'),
+  ('0000000212-26-000001', '0000000212', 'S-1', 'filed', '2026-10-26', 'https://www.sec.gov/Archives/edgar/data/212/000000021226000001/a.htm'),
+  ('0000000212-26-000002', '0000000212', 'F-1', 'filed', '2026-10-26', 'https://www.sec.gov/Archives/edgar/data/212/000000021226000002/a.htm'),
+  ('0000000213-26-000001', '0000000213', 'S-1/A', 'amended', '2026-11-02', 'https://www.sec.gov/Archives/edgar/data/213/000000021326000001/a.htm'),
+  ('0000000213-26-000002', '0000000213', 'F-1/A', 'amended', '2026-11-02', 'https://www.sec.gov/Archives/edgar/data/213/000000021326000002/a.htm'),
+  ('0000000214-26-000001', '0000000214', '8-A12B', 'registered', '2026-11-17', 'https://www.sec.gov/Archives/edgar/data/214/000000021426000001/a.htm'),
+  ('0000000214-26-000002', '0000000214', '8-A12B/A', 'registered', '2026-11-17', 'https://www.sec.gov/Archives/edgar/data/214/000000021426000002/a.htm'),
+  ('0000000215-26-000001', '0000000215', '424B4', 'priced', '2026-11-19', 'https://www.sec.gov/Archives/edgar/data/215/000000021526000001/a.htm'),
+  ('0000000216-26-000001', '0000000216', 'RW', 'withdrawn', '2026-11-16', 'https://www.sec.gov/Archives/edgar/data/216/000000021626000001/a.htm');
+INSERT INTO runs (id, kind, run_key, status) VALUES
+  ('20000000-0000-0000-0000-0000000000ad', 'upcoming_ipos', 'upcoming_ipos:installation:2026-11-19', 'ok');

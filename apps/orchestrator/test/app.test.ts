@@ -669,6 +669,31 @@ describe('API', () => {
     expect(queries.getUser).not.toHaveBeenCalled();
   });
 
+  it("runs the daily upcoming-IPO tracker as the installation's run and records its answer", async () => {
+    const response = await app.request('/internal/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
+      body: JSON.stringify({ kind: 'upcoming_ipos', trigger: 'scheduler' }),
+    });
+    expect(response.status).toBe(200);
+    expect(queries.claimRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: null,
+        kind: 'upcoming_ipos',
+        runKey: expect.stringMatching(/^upcoming_ipos:installation:\d{4}-\d{2}-\d{2}$/),
+        // A search EDGAR answered with a 500 is claimed again by the next hourly ask.
+        retryFailed: true,
+      }),
+    );
+    // Histories the cap left for tomorrow are not a degraded run.
+    expect(queries.finishRun).toHaveBeenCalledWith(
+      expect.any(String),
+      'ok',
+      expect.objectContaining({ tracked: ['Anthropic, PBC'], deferred: 2 }),
+    );
+    expect(queries.getUser).not.toHaveBeenCalled();
+  });
+
   it("runs the daily new-listings screen as the installation's run and records its answer", async () => {
     const response = await app.request('/internal/runs', {
       method: 'POST',

@@ -1,0 +1,201 @@
+{
+ "_comment": "EDGAR full-text search rows and submissions documents, in SEC's shapes (app/filings/fixture.py). Anthropic's are its public filings of 2026; the other three registrants are invented to show each exclusion.",
+ "hits": [
+  {
+   "cik": "0002130357",
+   "accession": "0001628280-26-074944",
+   "form": "424B4",
+   "filed_on": "2026-11-19"
+  },
+  {
+   "cik": "0002130357",
+   "accession": "0001628280-26-074342",
+   "form": "8-A12B",
+   "filed_on": "2026-11-17"
+  },
+  {
+   "cik": "0002130357",
+   "accession": "0001628280-26-074338",
+   "form": "S-1/A",
+   "filed_on": "2026-11-17"
+  },
+  {
+   "cik": "0002130357",
+   "accession": "0001628280-26-072484",
+   "form": "S-1/A",
+   "filed_on": "2026-11-10"
+  },
+  {
+   "cik": "0002130357",
+   "accession": "0001628280-26-068676",
+   "form": "S-1/A",
+   "filed_on": "2026-11-02"
+  },
+  {
+   "cik": "0002130357",
+   "accession": "0001628280-26-067168",
+   "form": "S-1",
+   "filed_on": "2026-10-26"
+  },
+  {
+   "cik": "0009000001",
+   "accession": "0009000001-26-000001",
+   "form": "S-1",
+   "filed_on": "2026-11-04"
+  },
+  {
+   "cik": "0009000002",
+   "accession": "0009000002-26-000003",
+   "form": "S-1",
+   "filed_on": "2026-11-05"
+  },
+  {
+   "cik": "0009000003",
+   "accession": "0009000003-26-000001",
+   "form": "S-1",
+   "filed_on": "2026-11-06"
+  }
+ ],
+ "companies": {
+  "0002130357": {
+   "cik": "2130357",
+   "name": "Anthropic, PBC",
+   "sic": "7372",
+   "tickers": [
+    "ANT"
+   ],
+   "exchanges": [
+    null
+   ],
+   "filings": {
+    "recent": {
+     "accessionNumber": [
+      "0001628280-26-074944",
+      "0001628280-26-074342",
+      "0001628280-26-074338",
+      "0001628280-26-072484",
+      "0001628280-26-068676",
+      "0001628280-26-067168",
+      "0002130357-26-000014",
+      "0002130357-26-000005"
+     ],
+     "form": [
+      "424B4",
+      "8-A12B",
+      "S-1/A",
+      "S-1/A",
+      "S-1/A",
+      "S-1",
+      "DRS/A",
+      "DRS"
+     ],
+     "filingDate": [
+      "2026-11-19",
+      "2026-11-17",
+      "2026-11-17",
+      "2026-11-10",
+      "2026-11-02",
+      "2026-10-26",
+      "2026-10-09",
+      "2026-06-01"
+     ],
+     "primaryDocument": [
+      "anthropicpbc-424b4.htm",
+      "anthropic-8xa12b.htm",
+      "anthropicpbc-sx1ax3.htm",
+      "anthropicpbc-sx1ax2.htm",
+      "anthropicpbc-sx1ax1.htm",
+      "anthropicpbc-sx1.htm",
+      "filename1.htm",
+      "filename1.htm"
+     ]
+    },
+    "files": []
+   }
+  },
+  "0009000001": {
+   "cik": "9000001",
+   "name": "Example Growth Acquisition Corp.",
+   "sic": "6770",
+   "tickers": [],
+   "exchanges": [],
+   "filings": {
+    "recent": {
+     "accessionNumber": [
+      "0009000001-26-000001"
+     ],
+     "form": [
+      "S-1"
+     ],
+     "filingDate": [
+      "2026-11-04"
+     ],
+     "primaryDocument": [
+      "s1.htm"
+     ]
+    },
+    "files": []
+   }
+  },
+  "0009000002": {
+   "cik": "9000002",
+   "name": "Example Industries, Inc.",
+   "sic": "3560",
+   "tickers": [
+    "EXIN"
+   ],
+   "exchanges": [
+    "NYSE"
+   ],
+   "filings": {
+    "recent": {
+     "accessionNumber": [
+      "0009000002-26-000003",
+      "0009000002-26-000002",
+      "0009000002-26-000001"
+     ],
+     "form": [
+      "S-1",
+      "10-Q",
+      "10-K"
+     ],
+     "filingDate": [
+      "2026-11-05",
+      "2026-08-10",
+      "2026-03-01"
+     ],
+     "primaryDocument": [
+      "s1.htm",
+      "q.htm",
+      "k.htm"
+     ]
+    },
+    "files": []
+   }
+  },
+  "0009000003": {
+   "cik": "9000003",
+   "name": "Example Staked Token ETF",
+   "sic": "6221",
+   "tickers": [],
+   "exchanges": [],
+   "filings": {
+    "recent": {
+     "accessionNumber": [
+      "0009000003-26-000001"
+     ],
+     "form": [
+      "S-1"
+     ],
+     "filingDate": [
+      "2026-11-06"
+     ],
+     "primaryDocument": [
+      "s1.htm"
+     ]
+    },
+    "files": []
+   }
+  }
+ }
+}

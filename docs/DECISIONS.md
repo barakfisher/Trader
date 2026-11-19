@@ -414,3 +414,8 @@ while this file is out of date.
 | 401 | The open's fills run on a one-minute tick, `open_approvals`, which writes a run row only when something is due |
 | 402 | A listing that passes the screen between rescreens is admitted daily as `listed`, a member the startup loader cannot drop |
 | 403 | The daily screen only adds, at most 60 profiles a run within 180 s, largest first, and remembers nothing between runs |
+| 404 | Upcoming IPOs are found by EDGAR's full-text search and confirmed by each company's submissions, behind a `FilingsProvider` |
+| 405 | Dates and stages only: confidential, filed, amended, registered, priced, withdrawn, listed |
+| 406 | `upcoming_listings` has no `user_id` |
+| 407 | A registrant is excluded at first sight, and for good, when it is a blank check, a fund or a public company |
+| 408 | A tracked company is `listed` when its ticker is a member admitted after its latest filing |

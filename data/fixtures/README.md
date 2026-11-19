@@ -7,6 +7,7 @@ Deterministic offline data so the whole system runs with **no API keys and no ne
 | `instruments.json` | `FixtureProvider` symbol resolution |
 | `quotes.json` | `FixtureProvider` prices and FX rates |
 | `demo-portfolio.csv` / `.json` | import wizard demo, importer tests |
+| `filings.json` | `FixtureFilingsProvider`: EDGAR search rows and submissions for the upcoming-IPO run (Anthropic's real 2026 filings, three invented registrants) |
 
 `MARKET_DATA_PROVIDERS=fixture,yfinance` means fixture symbols answer instantly and
 anything else falls through to Yahoo Finance. Set `MARKET_DATA_PROVIDERS=fixture` for a

@@ -95,6 +95,7 @@ set_key "$ENV_FILE" ENABLE_SCHEDULED_SCANS true
 set_key "$ENV_FILE" MARKET_DATA_PROVIDERS yfinance
 set_key "$ENV_FILE" NEWS_PROVIDERS gdelt
 set_key "$ENV_FILE" AGENT_NEWS_PROVIDER yahoo
+set_key "$ENV_FILE" FILINGS_PROVIDER edgar
 set_key "$ENV_FILE" EMBEDDINGS_PROVIDER openrouter
 
 cat > "$OWNER_FILE" << EOF

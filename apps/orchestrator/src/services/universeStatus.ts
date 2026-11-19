@@ -51,6 +51,7 @@ export function universeStatus(
     onDemand: counts.on_demand,
     listed: counts.listed,
     dropped: counts.dropped,
+    upcomingIpos: counts.upcoming_ipos,
   };
   if (!load) return { lastLoad: null, database, reconciliation: [] };
 

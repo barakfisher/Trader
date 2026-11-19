@@ -171,6 +171,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/filings/upcoming-ipos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upcoming Ipos */
+        post: operations["upcoming_ipos_filings_upcoming_ipos_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -2145,6 +2162,49 @@ export interface components {
             query: string;
         };
         /**
+         * UpcomingIposResponse
+         * @description What one run of the daily upcoming-IPO tracker found (migration 0089).
+         *
+         *     `done`: the searches ran. `tracked` names the registrants seen for the first
+         *     time and followed; `excluded` counts the others by reason; `advanced` lists
+         *     tracked companies whose stage or dates changed ("NAME: stage"); `listed`
+         *     the tickers that became universe members. `failed` holds CIKs whose history
+         *     could not be fetched, asked again by the next run; `deferred` counts those
+         *     left for it by the cap. `unavailable`: `filings_provider` is `off`. A search
+         *     that failed is not an answer here: the endpoint fails, and the run is retried.
+         */
+        UpcomingIposResponse: {
+            /** Advanced */
+            advanced?: string[];
+            /**
+             * Deferred
+             * @default 0
+             */
+            deferred: number;
+            /** Excluded */
+            excluded?: {
+                [key: string]: number;
+            };
+            /** Failed */
+            failed?: string[];
+            /** Listed */
+            listed?: string[];
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Searched
+             * @default 0
+             */
+            searched: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "done" | "unavailable";
+            /** Tracked */
+            tracked?: string[];
+        };
+        /**
          * UserLlmModelsResponse
          * @description A user's models, resolved against OpenRouter's list (D244, D284).
          */
@@ -2474,6 +2534,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConceptDocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upcoming_ipos_filings_upcoming_ipos_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpcomingIposResponse"];
                 };
             };
             /** @description Validation Error */

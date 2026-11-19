@@ -674,6 +674,23 @@ export type _AssertNewListingsResponse = Expect<
   Equal<z.infer<typeof newListingsResponseSchema>, Schemas['NewListingsResponse']>
 >;
 
+export const upcomingIposResponseSchema = z.object({
+  // `done`: the searches ran. `unavailable`: FILINGS_PROVIDER is off (`reason`).
+  status: z.enum(['done', 'unavailable']),
+  reason: z.string().nullable().optional(),
+  searched: z.number().int(),
+  tracked: z.array(z.string()).optional(),
+  excluded: z.record(z.string(), z.number().int()).optional(),
+  advanced: z.array(z.string()).optional(),
+  listed: z.array(z.string()).optional(),
+  failed: z.array(z.string()).optional(),
+  deferred: z.number().int(),
+});
+
+export type _AssertUpcomingIposResponse = Expect<
+  Equal<z.infer<typeof upcomingIposResponseSchema>, Schemas['UpcomingIposResponse']>
+>;
+
 export type _AssertRescreenResponse = Expect<
   Equal<z.infer<typeof rescreenResponseSchema>, Schemas['RescreenResponse']>
 >;

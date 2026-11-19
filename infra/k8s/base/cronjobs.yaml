@@ -455,6 +455,47 @@ spec:
                 requests: { cpu: 10m, memory: 16Mi }
                 limits: { memory: 64Mi }
 ---
+# The daily upcoming-IPO run (migration 0089), asked hourly against a daily key
+# like the new-listings screen and a minute after it: the first ask of the day
+# reads EDGAR, a failed search is retried at the next ask, and every other ask
+# answers "already claimed" without a request to SEC. The orchestrator waits for
+# the answer - two searches and at most a run's cap of company histories, about
+# 45 s on a first run - which fits inside the curl's limit.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: run-upcoming-ipos
+spec:
+  schedule: '15 * * * *'
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 420
+      template:
+        metadata:
+          labels:
+            app: run-trigger
+            run-kind: upcoming_ipos
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: trigger
+              image: curlimages/curl:8.22.0
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"${RUN_FOR:+,\"for\":\"$RUN_FOR\"}}"']
+              env:
+                - name: RUN_KIND
+                  value: upcoming_ipos
+                - name: INTERNAL_API_KEY
+                  valueFrom:
+                    secretKeyRef: { name: traders-secrets, key: INTERNAL_API_KEY }
+              resources:
+                requests: { cpu: 10m, memory: 16Mi }
+                limits: { memory: 64Mi }
+---
 # Last: it reports on what the scans and the sweep just did.
 apiVersion: batch/v1
 kind: CronJob

@@ -33,6 +33,7 @@ const COUNTS = {
   etf_holdings: 16363,
   on_demand: 0,
   listed: 0,
+  upcoming_ipos: 9,
   dropped: 0,
 };
 
@@ -92,6 +93,7 @@ describe('the universe status', () => {
   it('counts on-demand profiles apart, so they leave the reconciliation alone', () => {
     const status = universeStatus(LOAD, { ...COUNTS, on_demand: 2 });
     expect(status.database.onDemand).toBe(2);
+    expect(status.database.upcomingIpos).toBe(COUNTS.upcoming_ipos);
     expect(status.reconciliation[0]!.unexplained).toBe(0);
   });
 
