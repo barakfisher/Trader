@@ -15,6 +15,7 @@ from sqlalchemy import text
 from app.core.logging import get_logger
 from app.db import get_engine
 from app.models import Instrument, InstrumentUniverse
+from app.universe.profiles import MEMBERS_SQL
 from app.universe.snapshot import screen_exclusion
 
 log = get_logger("universe.membership")
@@ -28,7 +29,7 @@ class UniverseMembership(Protocol):
 
 
 class DatabaseMembership:
-    """Membership as the database holds it: a *screened* profile for the symbol.
+    """Membership as the database holds it: a member's profile for the symbol (`MEMBERS`).
 
     An on-demand profile does not make a member. It describes the listing, but
     no topic will ever be answered from it, so the gap it was fetched for is
@@ -45,7 +46,7 @@ class DatabaseMembership:
                 text(
                     "SELECT EXISTS (SELECT 1 FROM instrument_profiles p "
                     "JOIN instruments i ON i.id = p.instrument_id "
-                    "WHERE i.symbol = :symbol AND p.membership = 'screened') AS member, "
+                    f"WHERE i.symbol = :symbol AND p.membership IN {MEMBERS_SQL}) AS member, "
                     "EXISTS (SELECT 1 FROM instrument_profiles WHERE membership = 'screened') "
                     "AS loaded"
                 ),

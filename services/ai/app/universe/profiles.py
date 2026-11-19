@@ -17,10 +17,12 @@ a different table for the reason migration 0014 gives:
 - **The model is stored beside the vector**, and search filters on it, because
   vectors from two models are the same width and mean nothing to each other.
 
-**Only `membership = 'screened'` answers a topic.** Every read below that a
-topic reaches - the search, the held-by-an-ETF path and the holdings matcher -
-filters on it, so a profile fetched for one user's small
-holding (`on_demand`, migration 0030) never changes what a topic resolves to.
+**Only a member answers a topic**: `screened` (a snapshot put it here) or
+`listed` (the daily new-listings screen admitted it since, migration 0088) -
+`MEMBERS`. Every read below that a topic reaches - the search, the
+held-by-an-ETF path and the holdings matcher - filters on it, so a profile
+fetched for one user's small holding (`on_demand`, migration 0030) never
+changes what a topic resolves to.
 
 Existing `instruments` rows are never overwritten: a holding's instrument may
 already carry a name or asset class the user's own data established, and the
@@ -53,6 +55,13 @@ DESCRIPTION_LICENSE = (
     "Yahoo Finance business summary. Fetched per installation for matching only; "
     "not redistributed and not committed."
 )
+
+#: The memberships that make a member of the universe: what a topic is answered
+#: from and an agent may trade. `listed` came through the daily screen since the
+#: last snapshot (migration 0088); a snapshot that holds it makes it `screened`.
+MEMBERS = ("screened", "listed")
+#: `MEMBERS` as a SQL list, for `membership IN ...`.
+MEMBERS_SQL = "(" + ", ".join(f"'{value}'" for value in MEMBERS) + ")"
 
 #: Descriptions per embedding request. Bounded so one failed call loses a
 #: batch, not the universe, and so a request stays well inside provider limits.
@@ -174,11 +183,11 @@ def load_universe(
             text("SELECT instrument_id, content_hash FROM instrument_profiles")
         )
     }
-    screened_symbols = set(
+    member_symbols = set(
         connection.execute(
             text(
                 "SELECT i.symbol FROM instrument_profiles p JOIN instruments i "
-                "ON i.id = p.instrument_id WHERE p.membership = 'screened'"
+                f"ON i.id = p.instrument_id WHERE p.membership IN {MEMBERS_SQL}"
             )
         ).scalars()
     )
@@ -188,7 +197,7 @@ def load_universe(
 
     for member in snapshot.instruments:
         # Skipped, but not dropped: a member's earlier profile stays.
-        kept = member.symbol in screened_symbols
+        kept = member.symbol in member_symbols
         if member.description is None:
             undescribed += 1
             undescribed_kept += kept
@@ -294,13 +303,16 @@ def load_universe(
     )
 
 
-def mark_dropped(connection: Connection, members: set[str]) -> int:
-    """Mark every screened profile the snapshot does not hold as `dropped`. How many.
+def mark_dropped(connection: Connection, members: set[str], *, as_of: datetime) -> int:
+    """Mark every member the snapshot of `as_of` does not hold as `dropped`. How many.
 
     Kept, not deleted: holdings and observations reference instruments, and a listing
     that fell below the floor this quarter may be back the next - `load_universe`
-    promotes it again then. Only screened profiles: an on-demand one was never
-    the snapshot's to drop.
+    promotes it again then. An on-demand profile was never the snapshot's to drop.
+
+    A `listed` profile is dropped only by a snapshot taken after it was listed:
+    the startup loader reloads the newest snapshot on every deploy, and one
+    older than the listing says nothing about it (migration 0088).
     """
     result = connection.execute(
         text(
@@ -309,11 +321,12 @@ def mark_dropped(connection: Connection, members: set[str]) -> int:
                SET membership = 'dropped', updated_at = now()
               FROM instruments i
              WHERE i.id = p.instrument_id
-               AND p.membership = 'screened'
+               AND (p.membership = 'screened'
+                    OR (p.membership = 'listed' AND p.size_as_of < :as_of))
                AND NOT (i.symbol = ANY(:members))
             """
         ),
-        {"members": sorted(members)},
+        {"members": sorted(members), "as_of": as_of},
     )
     return int(result.rowcount or 0)
 
@@ -368,6 +381,107 @@ def insert_on_demand(
         },
     ).scalar_one_or_none()
     return None if inserted is None else str(inserted)
+
+
+def admit_listed(
+    connection: Connection,
+    member: UniverseInstrument,
+    *,
+    source: str,
+    license: str,  # noqa: A002 - the column's name
+    as_of: datetime,
+) -> str | None:
+    """Write one listing the daily screen admitted as `listed`; its id, or None if a member.
+
+    A profile that is not a member - fetched on demand, or dropped by an earlier
+    snapshot - is the same listing now passing the screen, so it is rewritten
+    as `listed` with today's facts. A member (`screened` or `listed`) is never
+    touched: the screen found nothing new about it. `as_of` is when the facts
+    were fetched, and is what lets a later snapshot judge the listing
+    (`mark_dropped`). The caller has checked the description and currency.
+    """
+    instrument_id = _upsert_instrument(connection, member)
+    embedded_text = matching_text(member.name, member.asset_class, member.description or "")
+    admitted = connection.execute(
+        text(
+            f"""
+            INSERT INTO instrument_profiles (
+                instrument_id, description, matching_text, source, license, content_hash,
+                sector, industry, category,
+                market_cap_minor, net_assets_minor, size_currency, size_as_of, membership
+            ) VALUES (
+                :instrument_id, :description, :matching_text, :source, :license, :hash,
+                :sector, :industry, :category,
+                :market_cap_minor, :net_assets_minor, :currency, :as_of, 'listed'
+            )
+            ON CONFLICT (instrument_id) DO UPDATE
+               SET description      = EXCLUDED.description,
+                   membership       = 'listed',
+                   matching_text    = EXCLUDED.matching_text,
+                   source           = EXCLUDED.source,
+                   license          = EXCLUDED.license,
+                   sector           = EXCLUDED.sector,
+                   industry         = EXCLUDED.industry,
+                   category         = EXCLUDED.category,
+                   market_cap_minor = EXCLUDED.market_cap_minor,
+                   net_assets_minor = EXCLUDED.net_assets_minor,
+                   size_currency    = EXCLUDED.size_currency,
+                   size_as_of       = EXCLUDED.size_as_of,
+                   -- The vector survives only if the text it describes did.
+                   embedding        = CASE
+                       WHEN instrument_profiles.content_hash = EXCLUDED.content_hash
+                       THEN instrument_profiles.embedding END,
+                   embedding_model  = CASE
+                       WHEN instrument_profiles.content_hash = EXCLUDED.content_hash
+                       THEN instrument_profiles.embedding_model END,
+                   content_hash     = EXCLUDED.content_hash,
+                   updated_at       = now()
+             WHERE instrument_profiles.membership NOT IN {MEMBERS_SQL}
+            RETURNING instrument_id
+            """
+        ),
+        {
+            "instrument_id": instrument_id,
+            "description": member.description,
+            "matching_text": embedded_text,
+            "source": source,
+            "license": license,
+            "hash": content_hash(embedded_text),
+            "sector": member.sector,
+            "industry": member.industry,
+            "category": member.category,
+            "market_cap_minor": member.market_cap_minor,
+            "net_assets_minor": member.net_assets_minor,
+            "currency": member.currency,
+            "as_of": as_of,
+        },
+    ).scalar_one_or_none()
+    return None if admitted is None else str(admitted)
+
+
+def member_symbols(connection: Connection) -> set[str]:
+    """Every symbol that is a member of the universe now (`MEMBERS`)."""
+    return set(
+        connection.execute(
+            text(
+                "SELECT i.symbol FROM instrument_profiles p JOIN instruments i "
+                f"ON i.id = p.instrument_id WHERE p.membership IN {MEMBERS_SQL}"
+            )
+        ).scalars()
+    )
+
+
+def member_names(connection: Connection) -> set[str]:
+    """Every member's company name as the screen wrote it: the key `select` keeps one listing by."""
+    return set(
+        connection.execute(
+            text(
+                "SELECT i.name FROM instrument_profiles p JOIN instruments i "
+                f"ON i.id = p.instrument_id WHERE p.membership IN {MEMBERS_SQL} "
+                "AND i.name IS NOT NULL"
+            )
+        ).scalars()
+    )
 
 
 def profile_exists(connection: Connection, symbol: str) -> bool:
@@ -486,7 +600,7 @@ def search_profiles(
     connection.execute(text(f"SET LOCAL hnsw.ef_search = {max(int(limit), 40)}"))
     rows = connection.execute(
         text(
-            """
+            f"""
             SELECT p.instrument_id, i.symbol, i.name, i.asset_class,
                    p.sector, p.industry, p.category, p.description,
                    COALESCE(p.market_cap_minor, p.net_assets_minor) AS size_minor,
@@ -496,7 +610,7 @@ def search_profiles(
               FROM instrument_profiles p
               JOIN instruments i ON i.id = p.instrument_id
              WHERE p.embedding_model = :model
-               AND p.membership = 'screened'
+               AND p.membership IN {MEMBERS_SQL}
              ORDER BY p.embedding <=> CAST(:embedding AS vector)
              LIMIT :limit
             """
@@ -633,11 +747,11 @@ def load_holdings(
             Member(id=str(row.id), symbol=row.symbol, name=row.name)
             for row in connection.execute(
                 text(
-                    """
+                    f"""
                     SELECT i.id, i.symbol, i.name
                       FROM instrument_profiles p
                       JOIN instruments i ON i.id = p.instrument_id
-                     WHERE p.membership = 'screened'
+                     WHERE p.membership IN {MEMBERS_SQL}
                     """
                 )
             )
@@ -790,7 +904,7 @@ def profiles_by_id(
         return []
     rows = connection.execute(
         text(
-            """
+            f"""
             SELECT p.instrument_id, i.symbol, i.name, i.asset_class,
                    p.sector, p.industry, p.category, p.description,
                    COALESCE(p.market_cap_minor, p.net_assets_minor) AS size_minor,
@@ -801,7 +915,7 @@ def profiles_by_id(
               JOIN instruments i ON i.id = p.instrument_id
              WHERE p.instrument_id = ANY(CAST(:ids AS uuid[]))
                AND p.embedding_model = :model
-               AND p.membership = 'screened'
+               AND p.membership IN {MEMBERS_SQL}
             """
         ),
         {"embedding": to_pgvector(embedding), "model": model, "ids": ids},

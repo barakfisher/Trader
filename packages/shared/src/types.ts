@@ -1329,9 +1329,10 @@ export interface UniverseGap {
   /**
    * The listing's profile now, for a missing ticker: `on_demand` once it has
    * been described for the user who named it, `screened` once a rescreen has
-   * admitted it (the gap is closed). Null when it has none.
+   * admitted it, `listed` once the daily new-listings screen has (either closes
+   * the gap). Null when it has none.
    */
-  profile: 'screened' | 'on_demand' | 'dropped' | null;
+  profile: 'screened' | 'listed' | 'on_demand' | 'dropped' | null;
 }
 
 export interface UniverseGapsResponse {
@@ -1375,6 +1376,11 @@ export interface UniverseStatusResponse {
     etfHoldings: number;
     /** Profiles fetched for listings users named; not members, never compared with the snapshot. */
     onDemand: number;
+    /**
+     * Members the daily new-listings screen admitted since the snapshot (migration 0088):
+     * searched and tradable like `profiles`, never compared with the snapshot.
+     */
+    listed: number;
     /** Former members a later snapshot no longer holds; kept, never searched. */
     dropped: number;
   };

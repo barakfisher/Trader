@@ -122,7 +122,11 @@ def load_into_database(
     """Load one snapshot in the caller's transaction and record the load."""
     snapshot = load_snapshot(directory, descriptions or directory / DESCRIPTIONS_FILE)
     report = load_universe(connection, snapshot, source=source, license=license)
-    dropped = mark_dropped(connection, {member.symbol for member in snapshot.instruments})
+    dropped = mark_dropped(
+        connection,
+        {member.symbol for member in snapshot.instruments},
+        as_of=datetime.fromisoformat(snapshot.as_of.replace("Z", "+00:00")),
+    )
     # After the drops, so a former member's industry is not offered to an agent.
     taxonomy = rebuild_taxonomy(connection)
     # After the profiles, because a holding can only match a profiled instrument.

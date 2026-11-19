@@ -412,3 +412,5 @@ while this file is out of date.
 | 399 | A transient refusal at the open retries every minute until the proposal expires |
 | 400 | A newer proposal for the same agent and symbol replaces a waiting approval |
 | 401 | The open's fills run on a one-minute tick, `open_approvals`, which writes a run row only when something is due |
+| 402 | A listing that passes the screen between rescreens is admitted daily as `listed`, a member the startup loader cannot drop |
+| 403 | The daily screen only adds, at most 60 profiles a run within 180 s, largest first, and remembers nothing between runs |

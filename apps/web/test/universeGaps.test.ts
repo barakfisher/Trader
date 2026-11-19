@@ -58,6 +58,11 @@ describe('a universe gap, in words', () => {
     expect(gapProfile(admitted)).toBe('now in the universe');
     expect(isRealGap(admitted)).toBe(false);
 
+    // The daily new-listings screen closes it the same way (migration 0088).
+    const listed = gap('universe_gap_missing_ticker', detail, 'listed');
+    expect(gapProfile(listed)).toBe('now in the universe, added by the daily new-listings screen');
+    expect(isRealGap(listed)).toBe(false);
+
     expect(gapProfile(gap('universe_gap_missing_ticker', detail))).toBeNull();
   });
 });

@@ -53,6 +53,9 @@ export const INTERVALS_MS: Record<string, number> = {
   // last loaded is RESCREEN_DUE_DAYS old, and a not-due ask writes nothing. A
   // quarterly timer would be the once-per-period trigger a restart swallows.
   universe_rescreen: 60 * 60 * 1000,
+  // Hourly against a daily bucket, like backfill: a failed screen is retried
+  // within the hour, and a claimed day answers without a request.
+  new_listings: 60 * 60 * 1000,
   // Every 15 minutes against a 15-minute bucket (D69): a slot's window is hours
   // long, so a missed ask is caught up by the next; the plan enqueues nothing
   // most of the time, and nothing at all where scheduled scans are off (D71).
@@ -84,6 +87,8 @@ const FIRST_RUN_DELAY_MS: Record<string, number> = {
   instrument_metadata: 30_000,
   // After the scans, before the digest; most asks are "not due".
   universe_rescreen: 65_000,
+  // Beside the rescreen, which writes the same table; nothing waits on either.
+  new_listings: 67_000,
   // After backfill and the snapshot, before the portfolio scan: a scan reads prices.
   agent_scans: 25_000,
 };

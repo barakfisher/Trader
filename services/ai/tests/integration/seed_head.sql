@@ -157,6 +157,10 @@ VALUES ('10000000-0000-0000-0000-000000000002', 'A fund.', 'a fund', 'fixture', 
 INSERT INTO instrument_profiles (instrument_id, description, matching_text, source, license, content_hash, size_as_of, membership) VALUES
   ('10000000-0000-0000-0000-000000000001', 'A company.', 'a company', 'fixture', 'fixture', 'seed-on-demand', '2026-09-01T00:00:00Z', 'on_demand'),
   ('10000000-0000-0000-0000-000000000006', 'Gone.', 'gone', 'fixture', 'fixture', 'seed-dropped', '2026-09-01T00:00:00Z', 'dropped');
+-- A member the daily new-listings screen admitted after the snapshot (0088).
+INSERT INTO instruments (id, symbol, asset_class) VALUES ('10000000-0000-0000-0000-000000000007', 'NEWL', 'equity');
+INSERT INTO instrument_profiles (instrument_id, description, matching_text, source, license, content_hash, size_as_of, membership)
+VALUES ('10000000-0000-0000-0000-000000000007', 'Listed.', 'listed', 'fixture', 'fixture', 'seed-listed', '2026-11-19T00:00:00Z', 'listed');
 INSERT INTO etf_holdings (etf_instrument_id, position, symbol, weight, as_of, holding_instrument_id, matched_by) VALUES
   ('10000000-0000-0000-0000-000000000002', 1, 'EQTY', '0.5', '2026-09-01T00:00:00Z', '10000000-0000-0000-0000-000000000001', 'symbol'),
   ('10000000-0000-0000-0000-000000000002', 2, 'MYST', '0.2', '2026-09-01T00:00:00Z', '10000000-0000-0000-0000-000000000006', 'name'),
@@ -449,3 +453,5 @@ INSERT INTO notifications (user_id, agent_id, channel, ref_kind, ref_id, route, 
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'telegram', 'open_approval', '50000000-0000-0000-0000-000000000043', 'push', 'above_floor', 'sent', now(), 'seed-n-open-approval');
 INSERT INTO runs (id, kind, run_key, status) VALUES
   ('20000000-0000-0000-0000-0000000000ab', 'open_approvals', 'open_approvals:installation:2026-11-18:0990', 'ok');
+INSERT INTO runs (id, kind, run_key, status) VALUES
+  ('20000000-0000-0000-0000-0000000000ac', 'new_listings', 'new_listings:installation:2026-11-19', 'ok');

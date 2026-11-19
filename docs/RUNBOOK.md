@@ -121,7 +121,7 @@ curl -s -X POST http://127.0.0.1:8089/internal/runs \
 ```
 
 Kinds: `backfill`, `instrument_metadata`, `snapshot`, `news_collect`, `portfolio_scan`,
-`proposal_sweep`, `daily_digest`, `universe_rescreen`. The answer carries the run's
+`proposal_sweep`, `daily_digest`, `universe_rescreen`, `new_listings`. The answer carries the run's
 status and its result. Replaying is safe for every kind: each writes idempotently (observations
 and notifications carry a `dedupe_key`; the backfill rewrites only its own rows). The one kind to
 think twice about is **`daily_digest`**: a second digest the same day splits the day's deferred
@@ -138,6 +138,13 @@ any trigger and resumes from its fetch cache. One whose process died (no heartbe
 is closed as `failed` by the next claim of any day - the hourly CronJob's or the button's - with
 `stats.supersededBy` naming the run that took over, which resumes from the same cache; no row
 needs editing by hand.
+
+**`new_listings`** (D402, D403) is the daily screen for listings that pass the universe's rule
+between rescreens. It belongs to no account and waits for the AI service's answer (about 20 s plus
+a second or so per new listing, at most 60 a run). `stats.admitted` names what it added as
+`listed`; `noDescription` and `noCurrency` are listings Yahoo has not finished describing - they
+are asked about again tomorrow, not failures. A failed run is retried by the next hourly ask.
+Re-running is safe: it only adds, and a member is never rewritten.
 
 On the cluster, `kubectl create job --from=cronjob/run-<kind> <name>` triggers the same request as
 the schedule - with the default key, so it is `skipped` if the bucket already ran.

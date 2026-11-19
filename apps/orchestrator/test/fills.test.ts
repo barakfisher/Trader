@@ -46,6 +46,7 @@ const INSTRUMENTS: Record<string, Record<string, unknown>> = {
   BTC: { id: 'i-btc', symbol: 'BTC-USD', name: 'Bitcoin', asset_class: 'crypto', exchange: 'CCC', currency: 'USD', membership: null },
   SAP: { id: 'i-sap', symbol: 'SAP.DE', name: 'SAP', asset_class: 'equity', exchange: 'XETRA', currency: 'EUR', membership: 'screened' },
   GONE: { id: 'i-gone', symbol: 'GONE', name: 'Delisted', asset_class: 'equity', exchange: 'NYQ', currency: 'USD', membership: 'dropped' },
+  NEWL: { id: 'i-newl', symbol: 'NEWL', name: 'Newly listed', asset_class: 'equity', exchange: 'NMS', currency: 'USD', membership: 'listed' },
 };
 
 interface Ledger {
@@ -313,6 +314,10 @@ describe('who and what may be traded', () => {
       status: 404,
     });
     expect(queries.insertFill).not.toHaveBeenCalled();
+  });
+
+  it('trades a listing the daily new-listings screen admitted, like a screened one (0088)', async () => {
+    expect((await fills.resolveTradable('NEWL')).membership).toBe('listed');
   });
 });
 

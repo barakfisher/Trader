@@ -15,13 +15,20 @@ names the symbol it is asked for again: the fetch is idempotent
 orchestrator claimed. Answered at once; the run row is finished by
 `app/universe/rescreen.py`, which heartbeats while it works so that only a dead
 process's run is ever reclaimed.
+
+**New listings** (migration 0088): the daily screen, answered when done. Unlike
+the rescreen it is short - the screen alone and at most
+`MAX_ADMITTED_PER_RUN` profiles - so the orchestrator's run waits for it and
+records the answer.
 """
 
 from __future__ import annotations
 
+import asyncio
+from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
@@ -30,15 +37,18 @@ from app.corpus.embeddings import BaseEmbedder
 from app.db import get_engine
 from app.deps import SettingsDep, get_embedder, get_profile_source, require_internal_key
 from app.models import (
+    NewListingsResponse,
     ProfileRequest,
     ProfileRequestResponse,
     RescreenRequest,
     RescreenResponse,
 )
+from app.universe.new_listings import admit_new_listings
 from app.universe.on_demand import profile_on_demand
 from app.universe.profile_source import InstrumentProfileSource
 from app.universe.profiles import profile_exists
 from app.universe.rescreen import run_rescreen
+from app.universe.screener import screen_market
 
 router = APIRouter(
     prefix="/universe", tags=["universe"], dependencies=[Depends(require_internal_key)]
@@ -135,3 +145,40 @@ async def rescreen(
     volume = Path(str(settings.universe_snapshot_dir))
     background.add_task(_rescreen, run_id, volume, engine, embedder)
     return RescreenResponse(run_id=run_id, status="started")
+
+
+@router.post("/new-listings", response_model=NewListingsResponse)
+async def new_listings(
+    engine: Engine = Depends(get_engine),
+    embedder: BaseEmbedder = Depends(get_embedder),
+    source: InstrumentProfileSource | None = Depends(get_profile_source),
+) -> NewListingsResponse:
+    if source is None:
+        return NewListingsResponse(
+            status="unavailable",
+            reason="the market-data chain does not use Yahoo, which the screen is built from",
+        )
+    try:
+        quotes = await asyncio.to_thread(screen_market)
+    except Exception as error:  # noqa: BLE001 - yfinance raises whatever requests does
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, f"the screen could not be fetched: {error}"
+        ) from error
+    report = await admit_new_listings(
+        engine=engine, embedder=embedder, source=source, quotes=quotes, now=datetime.now(UTC)
+    )
+    return NewListingsResponse(
+        status="done",
+        screened=report.screened,
+        kept=report.kept,
+        candidates=report.candidates,
+        same_company=report.same_company,
+        deferred=report.deferred,
+        admitted=report.admitted,
+        no_listing=report.no_listing,
+        outside_screen=report.outside_screen,
+        no_description=report.no_description,
+        no_currency=report.no_currency,
+        failed=report.failed,
+        unembedded=report.unembedded,
+    )

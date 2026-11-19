@@ -275,6 +275,36 @@ class ProfileRequestResponse(BaseModel):
     status: Literal["queued", "already_profiled", "in_progress", "unavailable"]
 
 
+class NewListingsResponse(BaseModel):
+    """What one run of the daily new-listings screen found and admitted (migration 0088).
+
+    `done`: the screen ran, and the lists say what became of each candidate.
+    `unavailable`: the installation has no profile source (a fixture-only
+    market-data chain) - a configuration, and `reason` names it. A screen that
+    could not be fetched is not an answer here: the endpoint fails, and the run
+    is retried.
+
+    A listing in `no_description`, `no_currency` or `failed` is asked about again
+    by the next run; `deferred` counts the candidates left for it by the cap.
+    """
+
+    status: Literal["done", "unavailable"]
+    reason: str | None = None
+    screened: int = 0
+    kept: int = 0
+    candidates: int = 0
+    #: Left out because their company is a member under another symbol.
+    same_company: int = 0
+    deferred: int = 0
+    admitted: list[str] = Field(default_factory=list)
+    no_listing: list[str] = Field(default_factory=list)
+    outside_screen: list[str] = Field(default_factory=list)
+    no_description: list[str] = Field(default_factory=list)
+    no_currency: list[str] = Field(default_factory=list)
+    failed: list[str] = Field(default_factory=list)
+    unembedded: list[str] = Field(default_factory=list)
+
+
 class RescreenRequest(BaseModel):
     """A `universe_rescreen` run the orchestrator has claimed, to be carried out here."""
 

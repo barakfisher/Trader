@@ -38,6 +38,7 @@ import { backfillInstrumentNames } from '../../services/instrumentMetadata.js';
 import { AUTH_TOKEN_RETENTION_DAYS, UNVERIFIED_SIGNUP_DAYS } from '../linkTokens.js';
 import { runPortfolioScan } from '../../services/portfolioScan.js';
 import { sendDigest } from '../../services/notifications.js';
+import { NEW_LISTINGS_KIND, runNewListings } from '../../services/newListings.js';
 import { RESCREEN_KIND, startRescreen } from '../../services/universeRescreen.js';
 import { EVERY_ACTIVE_USER, INSTALLATION_KINDS } from '../../runKinds.js';
 import { MARKET_BENCHMARK_SYMBOLS } from '../../services/marketBenchmarks.js';
@@ -95,6 +96,9 @@ const RUN_BUCKET_MINUTES: Record<string, number> = {
   // and every examined row costs an upstream request. Once a day is enough to
   // heal rows created while the provider could not name them.
   instrument_metadata: 24 * 60,
+  // A listing passes the screen once Yahoo reports its size, which changes once
+  // a trading day; a second screen the same day would find what the first did.
+  [NEW_LISTINGS_KIND]: 24 * 60,
   // The ask for agents' scheduled scans (D69): every quarter hour is enough to
   // start a slot within minutes of its time, and a slot's window is hours long.
   agent_scans: 15,
@@ -109,10 +113,13 @@ const RUN_BUCKET_MINUTES: Record<string, number> = {
  * daily, so without a retry one failure - the AI service answering 500 for a
  * minute after the Mac wakes - leaves the day's closes, the benchmarks' among
  * them, missing until tomorrow, while every other kind recovers within the
- * hour. A day-long outage costs at most one attempt an hour. Not the other
- * daily kinds: a failed digest may have sent part of its message.
+ * hour. A day-long outage costs at most one attempt an hour. The new-listings
+ * screen for the same reason: a screen Yahoo refused for a minute would
+ * otherwise leave a listing out until tomorrow, and a retry writes only what
+ * the failed run did not. Not the other daily kinds: a failed digest may have
+ * sent part of its message.
  */
-export const RETRY_FAILED_KINDS: ReadonlySet<string> = new Set(['backfill']);
+export const RETRY_FAILED_KINDS: ReadonlySet<string> = new Set(['backfill', NEW_LISTINGS_KIND]);
 
 /** The bucket a moment falls into, as a readable suffix for the run key. */
 export function runBucket(kind: string, localDate: string, now: Date = new Date()): string {
@@ -145,6 +152,7 @@ const runSchema = z.object({
     'daily_digest',
     'instrument_metadata',
     'universe_rescreen',
+    'new_listings',
     'agent_scans',
     'open_approvals',
   ]),
@@ -266,6 +274,11 @@ async function runForInstallation(context: Context, request: RunRequest): Promis
       // null name is a legitimate answer that the UI already renders - so only
       // a resolution that errored degrades the run.
       return done(runId, result.failed.length > 0 ? 'degraded' : 'ok', result);
+    }
+
+    if (kind === NEW_LISTINGS_KIND) {
+      const outcome = await runNewListings(context.get('ai'), context.get('requestId'));
+      return done(runId, outcome.status, outcome.result);
     }
 
     if (kind === 'proposal_sweep') {
