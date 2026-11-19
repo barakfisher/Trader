@@ -21,7 +21,7 @@ Updated: 2026-11-19 - **The daily new-listings screen (D402-D403, VERSION 0.0.7)
   not be called: agents made 1 `search_universe` call of 80). PR 4, a briefing built from each agent's mandate (D15's
   "followed topics" part was never built; the plan's section 7 item 2). EDGAR measured 2026-11-19: ANT's public S-1
   on 10-26, 24 days before listing; Yahoo's IPO calendar listed it about two weeks ahead with no price range.
-- **Decisions reach 403** (next: **404**).
+- **Decisions reach 403** (next: **404**). This PR is #394.
 
 Earlier: 2026-11-18 - **Approve at the open (D398-D401, VERSION 0.0.6).** Not deployed.
 - **What changed:** a trade raised while its market is closed carries *Approve at the open* instead of Approve, in
@@ -6971,7 +6971,7 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
       waiting approvals.
 
 402. **A listing that passes the screen between rescreens is admitted daily as `listed`, a member the startup loader
-    cannot drop** (the user, 2026-11-19, the day Anthropic listed as ANT). Measured first on production: the universe
+    cannot drop** (#394, the user, 2026-11-19, the day Anthropic listed as ANT). Measured first on production: the universe
     was the 2026-09-24 snapshot, the next rescreen was due 12-24, and ANT was in no table; the screen alone took 18 s
     and found 189 listings since the snapshot that pass its rule (77 equities, 112 ETFs - about three a day). A daily
     run, `new_listings` (migration 0088), screens, keeps one listing per company (`select`), and profiles every
@@ -6987,7 +6987,7 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
     - **Consequence:** being in the universe makes a listing findable, not known: scans start from the briefing. The
       plan's next steps (EDGAR IPO filings, a briefing section, a mandate-built briefing) are in the handoff above.
 403. **The daily screen only adds, at most 60 profiles a run within 180 s, largest first, and remembers nothing between
-    runs** (the user, 2026-11-19). Dropping stays the rescreen's. A listing Yahoo has not described yet, or with no
+    runs** (#394, the user, 2026-11-19). Dropping stays the rescreen's. A listing Yahoo has not described yet, or with no
     currency, is skipped and asked about the next day; a source failure is `failed` and degrades the run; a screen that
     cannot be fetched fails the run, which is a `RETRY_FAILED_KINDS` kind, so the next hourly ask retries it. Found by
     the QA review before merge, and fixed:
