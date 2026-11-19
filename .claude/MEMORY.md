@@ -23,7 +23,7 @@ none deployed.
   user types topics for each agent after deploy.
 - **Next:** deploy #394-#397 on the user's word (compose first), then the user writes topics; after a week, read
   whether theses cite `followed_topics`, `new_in_universe` or `upcoming_ipos`.
-- **Decisions reach 414** (next: **415**). This PR is #PRNUM.
+- **Decisions reach 414** (next: **415**). This PR is #397.
 
 Earlier: 2026-11-19, evening - **The agents' briefing lists new listings and IPOs about to trade (D409-D411, VERSION
 0.0.9).** Merged (#396), not deployed. PR 3 of the new-listings plan.
@@ -7172,7 +7172,7 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
       unsourced figures appear in theses, the fix is a validator rule for name fields, not dropping the names.
     - **Consequence:** every agent's prompt changed, like D394; no real model has run it yet, and a paid run is the
       user's to approve. Research views and re-checks do not see the sections.
-412. **Each agent follows up to five topics, and its briefing offers only what its mandate lets it buy** (#PRNUM, the
+412. **Each agent follows up to five topics, and its briefing offers only what its mandate lets it buy** (#397, the
     user, 2026-11-19, PR 4 of the new-listings plan). `agents.topics` (migration `0090`), edited under "Topics to
     follow" on the new-agent drawer and the agent's settings. Each scan resolves every topic the way
     `search_universe` does and lists the candidates under `followed_topics`; the movers, `new_in_universe` and
@@ -7201,7 +7201,7 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
     - **Accepted, from the same review:** the database checks only the count (length and blanks are the
       orchestrator's, the only writer); and the embedding calls run while a connection is open, as `search_universe`
       already does - up to five a scan now. If scans start holding connections long, resolve before connecting.
-413. **Five topics per agent, five candidates per topic** (#PRNUM, the user, 2026-11-19). Each at most 80 characters;
+413. **Five topics per agent, five candidates per topic** (#397, the user, 2026-11-19). Each at most 80 characters;
     trimmed, a repeat in another case dropped. Candidates are the topic's resolution order (largest first),
     skipping what the agent holds, what an earlier topic showed, what is not tradable and what the mandate refuses.
     `MAX_TOPICS`/`MAX_TOPIC_LENGTH` in `packages/shared`, the migration's CHECK and `briefing.py`, held equal by
@@ -7209,7 +7209,7 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
     - *Rejected:* 3 topics: too few for a macro agent's themes.
     - *Rejected:* 10 topics with 3 candidates each: three candidates a topic is too shallow to choose from.
     - **Consequence:** at most 25 rows, fewer after the de-duplication; as many per topic as a movers list.
-414. **An agent with no topics has no topics section; nothing is filled in for it** (#PRNUM, the user, 2026-11-19). The
+414. **An agent with no topics has no topics section; nothing is filled in for it** (#397, the user, 2026-11-19). The
     field's hint says that without topics the agent starts from the day's movers. Both of the user's agents have none
     until the user types them, after deploy.
     - *Rejected:* the largest members of the mandate's sectors as a fallback: neither real agent selects a sector, so
