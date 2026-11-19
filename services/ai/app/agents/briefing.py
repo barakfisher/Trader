@@ -19,7 +19,7 @@ stored closes.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import timedelta
+from datetime import UTC, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -142,7 +142,7 @@ def new_listings_section(context: ToolContext) -> list[dict[str, Any]]:
                     if row.asset_class == "equity"
                     else {"category": row.category}
                 ),
-                "added_on": row.size_as_of.date().isoformat(),
+                "added_on": row.size_as_of.astimezone(UTC).date().isoformat(),
             }
             for row in rows
         ]
@@ -163,10 +163,16 @@ def upcoming_ipos_section(context: ToolContext) -> list[dict[str, Any]]:
             limit=MAX_UPCOMING_IPOS,
             stages=BRIEFING_IPO_STAGES,
         )
+        # The read model has already left out a ticker this company trades under; a
+        # member under the same ticker now is another, older company (D408). Its
+        # quote would say "tradable", so the ticker is not shown with this company.
+        taken = _tradable_symbols(
+            context, sorted({listing.ticker for listing in listings if listing.ticker})
+        )
     return [
         {
             "company": listing.company_name,
-            "ticker": listing.ticker,
+            "ticker": None if listing.ticker in taken else listing.ticker,
             "stage": listing.stage,
             **{
                 key: value.isoformat()

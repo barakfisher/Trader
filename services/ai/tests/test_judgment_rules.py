@@ -45,3 +45,4 @@ def test_research_is_not_told_the_briefing_sections() -> None:
     # A research view has no scan briefing; naming its sections would invite a search.
     prompt = research_instructions(AGENT, held=False)
     assert UPCOMING_IPOS_KEY not in prompt
+    assert NEW_IN_UNIVERSE_KEY not in prompt

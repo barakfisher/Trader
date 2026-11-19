@@ -657,7 +657,10 @@ def new_listings(loaded: Engine) -> Iterator[Engine]:
     _listed(loaded, "NLGBP", cap=10**18, days_ago=1, currency="GBP")
     yield loaded
     with loaded.begin() as connection:
-        connection.execute(text("DELETE FROM instruments WHERE symbol LIKE 'NL%'"))
+        connection.execute(
+            text("DELETE FROM instruments WHERE symbol = ANY(:symbols)"),
+            {"symbols": [*symbols, "NLOLD", "NLGBP"]},
+        )
 
 
 async def test_the_briefing_lists_the_largest_recent_tradable_listings(
@@ -725,6 +728,30 @@ async def test_the_briefing_lists_registered_and_priced_ipos_only(
     finally:
         with loaded.begin() as connection:
             connection.execute(text("DELETE FROM upcoming_listings WHERE cik LIKE '00000077%'"))
+
+
+async def test_an_ipo_does_not_borrow_an_older_companys_ticker(
+    loaded: Engine, owner: tuple[str, str, str]
+) -> None:
+    # CCJ is a screened member of the fixture universe, sized before this filing.
+    with loaded.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO upcoming_listings (cik, company_name, ticker, stage, stage_on,
+                                               registered_on)
+                VALUES ('0000007711', 'New Cameco Co', 'CCJ', 'registered', :d, :d)
+                """
+            ),
+            {"d": NOW.date() - timedelta(days=1)},
+        )
+    try:
+        briefing = await build_briefing(_context(loaded, owner, ScriptedMarket()), [])
+        [ipo] = briefing[UPCOMING_IPOS_KEY]
+        assert (ipo["company"], ipo["ticker"]) == ("New Cameco Co", None)
+    finally:
+        with loaded.begin() as connection:
+            connection.execute(text("DELETE FROM upcoming_listings WHERE cik = '0000007711'"))
 
 
 async def test_the_briefing_leaves_out_empty_sections(
