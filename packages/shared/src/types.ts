@@ -125,6 +125,12 @@ export interface AgentView {
   /** The template creator's settings (0057); null for the primary, which has none (D1). */
   mandate: AgentMandate | null;
   /**
+   * What the agent follows (0090, D412): each scan's briefing lists what the universe
+   * holds on each topic. A direction, not a limit: no buy is refused for being
+   * off-topic. Empty is no topics section (D414); null for the primary.
+   */
+  topics: string[] | null;
+  /**
    * Where the instructions contradict the settings (D176-D178): the last check's
    * conflicts, while the instructions and settings it judged are unchanged and the
    * user has not dismissed it. Null otherwise, and when it found none.
@@ -229,6 +235,13 @@ export interface ScanSchedule {
   preOpen: boolean;
   postClose: boolean;
 }
+
+/**
+ * An agent's topics (D413): at most this many, each at most this long. Migration
+ * 0090's CHECK and the briefing hold the same numbers (`test_agent_topics.py`).
+ */
+export const MAX_TOPICS = 5;
+export const MAX_TOPIC_LENGTH = 80;
 
 /** Trades one scan may decide (D197, migration 0061's CHECK). Each is a proposal the user approves. */
 export const MIN_DECISIONS_PER_SCAN = 1;
@@ -769,6 +782,8 @@ export interface AgentInput {
   persona?: string | null;
   /** Fields left out take their no-limit default. */
   mandate?: Partial<AgentMandate>;
+  /** What it follows (D412); left out, none. */
+  topics?: string[];
   /** When left out, the horizon's schedule (D166), else pre-open. */
   scanSchedule?: ScanSchedule;
   /** When left out, the horizon's (D197), else 1. */
@@ -788,6 +803,8 @@ export interface AgentPatchInput {
   maxDecisions?: number;
   /** Fields given replace the stored ones; fields left out stay as they are. */
   mandate?: Partial<AgentMandate>;
+  /** Replaces the stored list; left out, it stays. */
+  topics?: string[];
 }
 
 export interface PortfolioResponse {

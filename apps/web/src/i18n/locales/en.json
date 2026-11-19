@@ -1939,6 +1939,12 @@
         "noEtfs": "You buy individual companies, not ETFs."
       }
     },
+    "topics": {
+      "label": "Topics to follow",
+      "hint": "Up to {{max}}, one per line. Each scan lists what the universe holds on them. With none, the agent starts from the day's movers.",
+      "placeholder": "AI chips\nregional banks",
+      "invalid": "At most {{max}} topics, each up to {{length}} characters."
+    },
     "check": {
       "title": "Your instructions may contradict the settings",
       "conflict": "Your instructions say <quote>{{quote}}</quote>, which conflicts with {{setting}}.",

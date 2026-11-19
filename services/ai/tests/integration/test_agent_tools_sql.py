@@ -16,21 +16,28 @@ import json
 from collections.abc import Iterator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+import app.agents.briefing as briefing_module
 from app.agents.briefing import (
+    CANDIDATES_PER_TOPIC,
+    FOLLOWED_TOPICS_KEY,
     MAX_NEW_LISTINGS,
+    MOVERS_PER_LIST,
     NEW_IN_UNIVERSE_KEY,
     NEW_LISTING_DAYS,
     UPCOMING_IPO_DAYS,
     UPCOMING_IPOS_KEY,
     build_briefing,
+    followed_topics_section,
     movers_section,
 )
+from app.agents.mandate import Mandate
 from app.agents.tools import (
     MAX_HISTORY_DAYS,
     MAX_HISTORY_POINTS,
@@ -49,11 +56,14 @@ from app.agents.tools import (
     search_universe,
 )
 from app.analysis.thresholds import AnalysisThresholds
+from app.corpus.embeddings import EmbeddingError
 from app.corpus.hashed_embedder import HashedEmbedder
+from app.corpus.relevance import Relevance
 from app.corpus.vector_store import PgVectorStore
 from app.models import DailyClose, Mover, Quote
 from app.news.on_demand import MemoryFetchMarks, NewsOnDemand
 from app.news.yahoo import YahooNewsProvider
+from app.topics.resolution import TopicCandidate
 from tests.integration.conftest import REPO_ROOT, run_script
 
 FIXTURE_EMBEDDER = {"EMBEDDINGS_PROVIDER": "fixture"}
@@ -624,15 +634,22 @@ async def test_the_briefing_says_when_there_are_no_movers(
 
 
 def _listed(
-    engine: Engine, symbol: str, *, cap: int | None, days_ago: int, currency: str = "USD"
+    engine: Engine,
+    symbol: str,
+    *,
+    cap: int | None,
+    days_ago: int,
+    currency: str = "USD",
+    asset_class: str = "equity",
+    sector: str = "Technology",
 ) -> None:
     with engine.begin() as connection:
         instrument_id = connection.execute(
             text(
                 "INSERT INTO instruments (symbol, name, asset_class, currency) "
-                "VALUES (:s, :s || ' Inc.', 'equity', :c) RETURNING id"
+                "VALUES (:s, :s || ' Inc.', :k, :c) RETURNING id"
             ),
-            {"s": symbol, "c": currency},
+            {"s": symbol, "c": currency, "k": asset_class},
         ).scalar_one()
         connection.execute(
             text(
@@ -640,11 +657,17 @@ def _listed(
                 INSERT INTO instrument_profiles (instrument_id, description, matching_text, source,
                     license, content_hash, sector, industry, market_cap_minor, size_currency,
                     size_as_of, membership)
-                VALUES (:id, 'x', 'x', 'test', 'test', :s, 'Technology', 'Software', :cap, 'USD',
+                VALUES (:id, 'x', 'x', 'test', 'test', :s, :sector, 'Software', :cap, 'USD',
                         :as_of, 'listed')
                 """
             ),
-            {"id": instrument_id, "s": symbol, "cap": cap, "as_of": NOW - timedelta(days=days_ago)},
+            {
+                "id": instrument_id,
+                "s": symbol,
+                "sector": sector,
+                "cap": cap,
+                "as_of": NOW - timedelta(days=days_ago),
+            },
         )
 
 
@@ -760,3 +783,158 @@ async def test_the_briefing_leaves_out_empty_sections(
     briefing = await build_briefing(_context(loaded, owner, ScriptedMarket()), [])
     assert NEW_IN_UNIVERSE_KEY not in briefing
     assert UPCOMING_IPOS_KEY not in briefing
+    # D414: an agent that follows no topic has no topics section.
+    assert FOLLOWED_TOPICS_KEY not in briefing
+
+
+# -- what the mandate allows, and followed topics (D412-D414) -----------------------
+
+#: Six software companies, largest first, an ETF and an energy company: enough that a
+#: list cut before the mandate would come up short.
+SOFTWARE = [f"MQ{n:02d}" for n in range(1, CANDIDATES_PER_TOPIC + 2)]
+#: Funds larger than every software company, enough to fill `new_in_universe` alone:
+#: a list cut before the mandate would hold only these, and the mandate would empty it.
+BIG_FUNDS = [f"MQF{n:02d}" for n in range(MAX_NEW_LISTINGS)]
+NO_ETFS_SOFTWARE_ONLY = Mandate(allow_etfs=False, sectors=("Technology",))
+
+
+@pytest.fixture
+def mandated(loaded: Engine) -> Iterator[Engine]:
+    for n, symbol in enumerate(SOFTWARE):
+        _listed(loaded, symbol, cap=(100 - n) * 1_000_000_000_00, days_ago=1)
+    _listed(loaded, "MQETF", cap=10**18, days_ago=1, asset_class="etf")
+    _listed(loaded, "MQENR", cap=10**18, days_ago=1, sector="Energy")
+    for symbol in BIG_FUNDS:
+        _listed(loaded, symbol, cap=10**18, days_ago=1, asset_class="etf")
+    yield loaded
+    with loaded.begin() as connection:
+        connection.execute(
+            text("DELETE FROM instruments WHERE symbol = ANY(:symbols)"),
+            {"symbols": [*SOFTWARE, "MQETF", "MQENR", *BIG_FUNDS]},
+        )
+        connection.execute(text("DELETE FROM upcoming_listings WHERE cik = '0000007721'"))
+
+
+async def test_the_briefing_offers_only_what_the_mandate_lets_the_agent_buy(
+    mandated: Engine, owner: tuple[str, str, str]
+) -> None:
+    movers = [
+        _mover("MQETF", "gainers", 20.0),
+        _mover("MQENR", "gainers", 15.0),
+        *(_mover(symbol, "gainers", 10.0 - n) for n, symbol in enumerate(SOFTWARE)),
+    ]
+    context = _context(mandated, owner, ScriptedMarket())
+    unlimited = await build_briefing(context, movers)
+    assert [m["symbol"] for m in unlimited["movers"]["gainers"]][:2] == ["MQETF", "MQENR"]
+
+    briefing = await build_briefing(context, movers, mandate=NO_ETFS_SOFTWARE_ONLY)
+    # Filtered before the cut: the agent still sees a full list it may buy.
+    gainers = [m["symbol"] for m in briefing["movers"]["gainers"]]
+    assert gainers == SOFTWARE[:MOVERS_PER_LIST]
+    # Every software company, though ten larger funds came first in the window.
+    assert [row["symbol"] for row in briefing[NEW_IN_UNIVERSE_KEY]] == SOFTWARE
+
+
+async def test_an_ipo_whose_ticker_the_agent_blocked_is_left_out(
+    mandated: Engine, owner: tuple[str, str, str]
+) -> None:
+    with mandated.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO upcoming_listings (cik, company_name, ticker, stage, stage_on,
+                                               registered_on)
+                VALUES ('0000007721', 'Blocked Co', 'MQIPO', 'registered', :d, :d)
+                """
+            ),
+            {"d": NOW.date() - timedelta(days=1)},
+        )
+    context = _context(mandated, owner, ScriptedMarket())
+    assert (await build_briefing(context, []))[UPCOMING_IPOS_KEY]
+    blocked = await build_briefing(context, [], mandate=Mandate(blocked_symbols=("MQIPO",)))
+    assert UPCOMING_IPOS_KEY not in blocked
+
+
+def _candidate(symbol: str) -> TopicCandidate:
+    return TopicCandidate(
+        instrument_id="unused",
+        symbol=symbol,
+        name=f"{symbol} Inc.",
+        asset_class="etf" if symbol.endswith("ETF") else "equity",
+        sector=None,
+        industry="Software",
+        similarity=0.5,
+        size_minor=None,
+        size_currency=None,
+        confidence=Relevance.CONFIDENT,
+        rationale="unused",
+    )
+
+
+#: What `resolve_topic` answers in these tests: the embedder is not what they test.
+RESOLVED = {
+    "software": [*SOFTWARE[:2], "MQETF", "NOTAMEMBER", *SOFTWARE[2:]],
+    "energy software": [SOFTWARE[1], "MQENR"],
+    "held only": [SOFTWARE[0]],
+    "hiking": [],
+}
+
+
+@pytest.fixture
+def scripted_topics(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def resolve(_connection: Any, _embedder: Any, topic: str) -> Any:
+        if topic == "broken":
+            raise EmbeddingError("the embeddings provider is down")
+        candidates = [_candidate(symbol) for symbol in RESOLVED[topic]]
+        return SimpleNamespace(interpretations=[SimpleNamespace(candidates=candidates)])
+
+    monkeypatch.setattr(briefing_module, "resolve_topic", resolve)
+
+
+@pytest.mark.usefixtures("scripted_topics")
+async def test_each_followed_topic_offers_what_the_agent_may_buy_and_does_not_hold(
+    mandated: Engine, owner: tuple[str, str, str]
+) -> None:
+    section = await followed_topics_section(
+        _context(mandated, owner, ScriptedMarket()),
+        ("software", "energy software", "hiking", "broken"),
+        Mandate(allow_etfs=False),
+        held={SOFTWARE[0]},
+    )
+    software, energy, hiking, broken = section
+    # Not the held one, not the ETF the mandate bans, not a non-member; five at most.
+    assert software["topic"] == "software"
+    assert [m["symbol"] for m in software["matches"]] == SOFTWARE[1 : CANDIDATES_PER_TOPIC + 1]
+    assert software["matches"][0] == {
+        "symbol": SOFTWARE[1],
+        "name": f"{SOFTWARE[1]} Inc.",
+        "kind": "equity",
+        "industry": "Software",
+        "confidence": Relevance.CONFIDENT,
+    }
+    # A symbol an earlier topic showed is not shown again.
+    assert [m["symbol"] for m in energy["matches"]] == ["MQENR"]
+    assert "nothing in the universe" in hiking["note"] and "matches" not in hiking
+    assert "could not be searched" in broken["note"]
+
+
+@pytest.mark.usefixtures("scripted_topics")
+async def test_a_topic_whose_every_match_is_taken_says_so(
+    mandated: Engine, owner: tuple[str, str, str]
+) -> None:
+    [held] = await followed_topics_section(
+        _context(mandated, owner, ScriptedMarket()), ("held only",), Mandate(), held={SOFTWARE[0]}
+    )
+    assert "held" in held["note"] and "matches" not in held
+
+
+@pytest.mark.usefixtures("scripted_topics")
+async def test_the_briefing_carries_the_agents_topics(
+    mandated: Engine, owner: tuple[str, str, str]
+) -> None:
+    briefing = await build_briefing(
+        _context(mandated, owner, ScriptedMarket()), [], topics=("software",)
+    )
+    [topic] = briefing[FOLLOWED_TOPICS_KEY]
+    assert topic["topic"] == "software" and len(topic["matches"]) == CANDIDATES_PER_TOPIC
+    json.dumps(briefing)

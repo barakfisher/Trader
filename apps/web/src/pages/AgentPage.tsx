@@ -14,6 +14,7 @@ import { AgentField } from '../components/AgentField.tsx';
 import { InstructionsCheckStatus, InstructionsConflicts } from '../components/InstructionsCheck.tsx';
 import { InstructionsField } from '../components/InstructionsField.tsx';
 import { MandateFields } from '../components/MandateFields.tsx';
+import { TopicsField } from '../components/TopicsField.tsx';
 import { CollapsingCards } from '../components/CollapsingCards.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { Button, Card, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
@@ -31,6 +32,7 @@ import {
   withMandate,
   type MandateDraft,
 } from '../lib/agentMandate.ts';
+import { parseTopics, topicsText, topicsValid } from '../lib/agentTopics.ts';
 import {
   BUDGET_INPUT,
   agentErrorMessage,
@@ -266,11 +268,20 @@ interface SettingsDraft {
   /** The instructions last written from the settings (D174). */
   generated: string;
   mandate: MandateDraft;
+  /** One per line, as typed (D412). */
+  topics: string;
 }
 
 function storedDraft(agent: AgentView, storedBudget: string): SettingsDraft {
   const mandate = draftFromMandate(agent.mandate);
-  return { name: agent.name, budget: storedBudget, persona: agent.persona ?? '', generated: describeMandate(mandate), mandate };
+  return {
+    name: agent.name,
+    budget: storedBudget,
+    persona: agent.persona ?? '',
+    generated: describeMandate(mandate),
+    mandate,
+    topics: topicsText(agent.topics),
+  };
 }
 
 function SettingsForm({ agent }: { agent: AgentView }) {
@@ -279,6 +290,7 @@ function SettingsForm({ agent }: { agent: AgentView }) {
   const check = useCheckInstructions();
   const storedBudget = agent.budgetMinor === null ? '' : minorToDecimalString(agent.budgetMinor, agent.currency);
   const storedMandate = JSON.stringify(mandateInput(draftFromMandate(agent.mandate)));
+  const storedTopics = JSON.stringify(agent.topics ?? []);
   const [draft, setDraft] = useState(() => storedDraft(agent, storedBudget));
   const narrow = useNarrowViewport();
   const formId = useId();
@@ -286,11 +298,18 @@ function SettingsForm({ agent }: { agent: AgentView }) {
   useEffect(() => {
     setDraft(storedDraft(agent, storedBudget));
     // `storedMandate` stands for `agent.mandate`, whose identity changes on every read.
-  }, [agent.name, storedBudget, agent.persona, storedMandate]);
+  }, [agent.name, storedBudget, agent.persona, storedMandate, storedTopics]);
 
-  const { name, budget, persona, generated, mandate } = draft;
+  const { name, budget, persona, generated, mandate, topics } = draft;
   const mandateChanged = JSON.stringify(mandateInput(mandate)) !== storedMandate;
-  const dirty = name !== agent.name || budget !== storedBudget || persona !== (agent.persona ?? '') || mandateChanged;
+  // Topics are not the mandate: a change to them never asks for the instructions check (D176).
+  const topicsChanged = JSON.stringify(parseTopics(topics)) !== storedTopics;
+  const dirty =
+    name !== agent.name ||
+    budget !== storedBudget ||
+    persona !== (agent.persona ?? '') ||
+    mandateChanged ||
+    topicsChanged;
   const budgetValid = BUDGET_INPUT.test(budget.trim());
   const mandateValid = mandateProblems(mandate).length === 0;
 
@@ -305,6 +324,7 @@ function SettingsForm({ agent }: { agent: AgentView }) {
         budget: budget.trim(),
         persona: persona.trim() || null,
         ...(mandateChanged ? { mandate: mandateInput(mandate) } : {}),
+        ...(topicsChanged ? { topics: parseTopics(topics) } : {}),
       },
       { onSuccess: () => (needsCheck ? check.mutate(agent.id) : check.reset()) },
     );
@@ -320,7 +340,7 @@ function SettingsForm({ agent }: { agent: AgentView }) {
       <Button
         type="submit"
         form={formId}
-        disabled={!dirty || update.isPending || !name.trim() || !budgetValid || !mandateValid}
+        disabled={!dirty || update.isPending || !name.trim() || !budgetValid || !mandateValid || !topicsValid(topics)}
       >
         <span className="flex items-center gap-1">
           <Save className="size-4" aria-hidden />
@@ -357,6 +377,7 @@ function SettingsForm({ agent }: { agent: AgentView }) {
           </AgentField>
           <MandateFields draft={mandate} onChange={(next) => setDraft(withMandate(draft, next))} />
           <OverLimits agent={agent} />
+          <TopicsField value={topics} onChange={(value) => setDraft({ ...draft, topics: value })} />
           <InstructionsField
             value={persona}
             generated={generated}

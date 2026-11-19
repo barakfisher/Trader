@@ -60,6 +60,7 @@ import {
   mandateSchema,
   toMandateColumns,
   toMandateView,
+  topicsSchema,
 } from '../agentMandate.js';
 import { currentUserId, type AppEnv } from '../app.js';
 import { badRequest, conflict, notFound, unprocessable } from '../errors.js';
@@ -111,6 +112,7 @@ const createSchema = z
     budget,
     persona: persona.optional(),
     mandate: mandateSchema.optional(),
+    topics: topicsSchema.optional(),
     scanSchedule: scanSchedule.optional(),
     maxDecisions: maxDecisions.optional(),
     // D200: at the limit the page creates it paused, which is never refused.
@@ -127,6 +129,7 @@ const patchSchema = z
     scanSchedule: scanSchedule.optional(),
     maxDecisions: maxDecisions.optional(),
     mandate: mandateSchema.optional(),
+    topics: topicsSchema.optional(),
   })
   .strict();
 
@@ -181,6 +184,7 @@ export function toAgentView(row: AgentRow): AgentView {
     scanCost: row.is_primary ? null : scanCostOf(row),
     waitingForBrief: !row.is_primary && row.state === 'active' && !readyToScan(row),
     mandate: toMandateView(row),
+    topics: row.is_primary ? null : row.topics,
     instructionsConflicts: row.is_primary ? null : currentConflicts(row),
   };
 }
@@ -248,7 +252,7 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
   app.post('/agents', async (context) => {
     const parsed = createSchema.safeParse(await context.req.json().catch(() => null));
     if (!parsed.success) {
-      throw badRequest('invalid_body', 'expected { name, budget, persona?, mandate?, scanSchedule?, maxDecisions?, state? }', parsed.error.issues);
+      throw badRequest('invalid_body', 'expected { name, budget, persona?, mandate?, topics?, scanSchedule?, maxDecisions?, state? }', parsed.error.issues);
     }
     const input = parsed.data;
     const budgetMinor = budgetToMinor(input.budget);
@@ -276,6 +280,7 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
           input.maxDecisions ??
           (input.mandate?.horizon ? HORIZON_MAX_DECISIONS[input.mandate.horizon] : MIN_DECISIONS_PER_SCAN),
         mandate,
+        topics: input.topics ?? [],
         state,
       });
       return context.json(toAgentView(row), 201);
@@ -289,7 +294,7 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
     const userId = currentUserId(context);
     const parsed = patchSchema.safeParse(await context.req.json().catch(() => null));
     if (!parsed.success) {
-      throw badRequest('invalid_body', 'expected { name?, budget?, persona?, state?, llmBudget?, scanSchedule?, maxDecisions?, mandate? }', parsed.error.issues);
+      throw badRequest('invalid_body', 'expected { name?, budget?, persona?, state?, llmBudget?, scanSchedule?, maxDecisions?, mandate?, topics? }', parsed.error.issues);
     }
     const agentId = agentIdFrom(context.req.param('id'));
     const existing = await getAgent(userId, agentId);
@@ -331,6 +336,7 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
         scanSchedule: patch.scanSchedule,
         maxDecisions: patch.maxDecisions,
         mandate,
+        topics: patch.topics,
       });
       if (!row) throw notFound('agent not found');
       return context.json(toAgentView(row));

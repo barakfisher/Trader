@@ -13,7 +13,9 @@ from dataclasses import replace
 import pytest
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import IntegrityError
 
+from app.agents.briefing import MAX_TOPICS
 from app.agents.mandate import Mandate
 from app.agents.scan import FIGURES_RETRY_PREFIX, RETRY_PREFIX, instructions
 from app.agents.scan_log import ScanAgent, find_agent
@@ -50,9 +52,10 @@ def agent(loaded: Engine) -> Iterator[ScanAgent]:
         agent_id = connection.execute(
             text(
                 "INSERT INTO agents (user_id, slug, name, persona, budget_minor, "
-                "max_position_bps, allow_etfs, sectors, risk_level, horizon, thesis_style) "
+                "max_position_bps, allow_etfs, sectors, risk_level, horizon, thesis_style, topics) "
                 "VALUES (CAST(:u AS uuid), 'mandated', 'Mandated', 'A patient value investor.', "
-                "100000, 1000, false, ARRAY['Energy'], 3, 'long', 'academic') RETURNING id::text"
+                "100000, 1000, false, ARRAY['Energy'], 3, 'long', 'academic', "
+                "ARRAY['uranium miners']) RETURNING id::text"
             ),
             {"u": user},
         ).scalar_one()
@@ -85,6 +88,28 @@ def test_the_agent_carries_its_mandate(agent: ScanAgent) -> None:
         allow_etfs=False,
         sectors=("Energy",),
     )
+    # Beside the mandate, not in it: topics alone never make an agent ready (D412).
+    assert agent.topics == ("uranium miners",)
+    assert replace(agent, mandate=Mandate(), persona=None).ready is False
+
+
+def test_an_agent_holds_at_most_five_topics_and_the_primary_none(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    too_many = [f"topic {n}" for n in range(MAX_TOPICS + 1)]
+    with pytest.raises(IntegrityError), loaded.begin() as connection:
+        connection.execute(
+            text("UPDATE agents SET topics = :t WHERE id = CAST(:a AS uuid)"),
+            {"t": too_many, "a": agent.agent_id},
+        )
+    with pytest.raises(IntegrityError), loaded.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO agents (user_id, slug, name, budget_minor, is_primary, topics) "
+                "VALUES (CAST(:u AS uuid), 'main-topics', 'Main', 0, true, ARRAY['banks'])"
+            ),
+            {"u": agent.user_id},
+        )
 
 
 def test_the_prompt_ranks_the_mandate_above_the_users_words(agent: ScanAgent) -> None:

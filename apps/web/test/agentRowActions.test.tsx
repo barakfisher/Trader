@@ -43,6 +43,7 @@ const PRIMARY: AgentView = {
   scanCost: null,
   waitingForBrief: false,
   mandate: null,
+  topics: null,
   instructionsConflicts: null,
 };
 const TECH: AgentView = {

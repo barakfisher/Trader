@@ -70,6 +70,8 @@ export interface AgentRow {
   industries: string[];
   etf_categories: string[];
   blocked_symbols: string[];
+  /** What it follows (0090, D412). Not a mandate column: it limits nothing. */
+  topics: string[];
   /** The last contradiction check (0059, D178); null before the first. */
   instructions_check: StoredInstructionsCheck | null;
 }
@@ -147,7 +149,7 @@ const AGENT_COLUMNS = `a.id, a.slug, a.name, a.persona, a.is_primary, a.budget_m
            WHERE s.user_id = a.user_id AND s.finished_at IS NOT NULL
            ORDER BY s.started_at DESC LIMIT ${SCAN_COST_WINDOW}) r
        ) AS installation_scan_cost_micro_usd,
-       ${MANDATE_COLUMNS.map((column) => `a.${column}`).join(', ')}, a.instructions_check`;
+       ${MANDATE_COLUMNS.map((column) => `a.${column}`).join(', ')}, a.topics, a.instructions_check`;
 
 /** The user's agents: the primary first, then the rest oldest first. */
 export function listAgents(userId: string): Promise<AgentRow[]> {
@@ -203,6 +205,7 @@ export interface AgentToCreate {
   scanSchedule: ScanSchedule;
   maxDecisions: number;
   mandate: MandateColumns;
+  topics: string[];
   /** D200: an agent may start paused, which the limit never refuses. */
   state: 'active' | 'paused';
 }
@@ -222,12 +225,13 @@ export async function createAgent(agent: AgentToCreate): Promise<AgentRow> {
     postClose,
     agent.maxDecisions,
     agent.state,
+    agent.topics,
   ];
   const params = [...fixed, ...MANDATE_COLUMNS.map((column) => agent.mandate[column])];
   const row = await queryOne<{ id: string }>(
     `INSERT INTO agents (user_id, slug, name, persona, budget_minor, currency,
                          scan_every_hours, scan_pre_open, scan_post_close, max_decisions, state,
-                         ${MANDATE_COLUMNS.join(', ')})
+                         topics, ${MANDATE_COLUMNS.join(', ')})
      VALUES (${params.map((_, index) => `$${index + 1}`).join(', ')})
      RETURNING id`,
     params,
@@ -244,6 +248,7 @@ export interface AgentPatch {
   scanSchedule?: ScanSchedule;
   maxDecisions?: number;
   mandate?: Partial<MandateColumns>;
+  topics?: string[];
 }
 
 /**
@@ -276,6 +281,7 @@ export async function updateAgent(
     push('scan_post_close', patch.scanSchedule.postClose);
   }
   if (patch.maxDecisions !== undefined) push('max_decisions', patch.maxDecisions);
+  if (patch.topics !== undefined) push('topics', patch.topics);
   for (const column of MANDATE_COLUMNS) {
     const value = patch.mandate?.[column];
     if (value !== undefined) push(column, value);

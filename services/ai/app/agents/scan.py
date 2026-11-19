@@ -40,7 +40,12 @@ from app.agents.answer import (
     parse_answer,
     thesis_problems,
 )
-from app.agents.briefing import NEW_IN_UNIVERSE_KEY, UPCOMING_IPOS_KEY, build_briefing
+from app.agents.briefing import (
+    FOLLOWED_TOPICS_KEY,
+    NEW_IN_UNIVERSE_KEY,
+    UPCOMING_IPOS_KEY,
+    build_briefing,
+)
 from app.agents.mandate import Mandate, cash_above_buffer, mandate_brief, risk_band
 from app.agents.pending_trades import pending_trades
 from app.agents.scan_budget import agent_budget
@@ -112,8 +117,10 @@ PRICE_MOVE_RULE = (
     "- A price move alone is not a reason to trade: say what it means for the business"
     " or your position."
 )
-#: D411: the two briefing sections of PR 3, named in step 1 of "How to work".
-NEW_LISTINGS_LINE = (
+#: D411, D412: the briefing's sections that only some scans have, named in step 1
+#: of "How to work".
+BRIEFING_SECTIONS_LINE = (
+    f'\n   "{FOLLOWED_TOPICS_KEY}" (what the universe holds on the topics you follow),'
     f'\n   "{NEW_IN_UNIVERSE_KEY}" (listings added lately, tradable) and'
     f' "{UPCOMING_IPOS_KEY}"\n   (companies about to list)'
 )
@@ -184,7 +191,7 @@ do not write one yourself.
 {mandate_block}{persona_block}
 How to work:
 1. Start from the briefing: your cash, your holdings and what the rules found in
-   them, today's movers you may trade, and, when it has them,{NEW_LISTINGS_LINE}.
+   them, today's movers you may trade, and, when it has them,{BRIEFING_SECTIONS_LINE}.
 2. Use the tools to look into what matters to your mandate. Check the news and
    the price history before acting on a move. You have at most {step_limit} tool
    calls; most scans need far fewer.
@@ -272,7 +279,7 @@ async def run_scan(
 ) -> ScanResult:
     """Run one scan of `agent` and store it. The agent is the caller's to have checked:
     simulated, active, with a persona (`routers/agents.py`)."""
-    briefing = await build_briefing(context, movers)
+    briefing = await build_briefing(context, movers, mandate=agent.mandate, topics=agent.topics)
     return await run_briefed(
         engine=engine, llm=llm, context=context, agent=agent, trigger=trigger, briefing=briefing
     )

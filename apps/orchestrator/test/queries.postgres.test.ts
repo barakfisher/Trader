@@ -1299,6 +1299,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         scanSchedule: { everyHours: 2, preOpen: true, postClose: false },
         maxDecisions: 3,
         mandate: { ...EMPTY_MANDATE, max_position_bps: 1000, sectors: ['Energy'], blocked_symbols: ['XOM'] },
+        topics: ['uranium miners'],
         state: 'active',
       });
       expect(agent).toMatchObject({ is_primary: false, budget_minor: '100050', state: 'active', holdings_count: 0 });
@@ -1315,9 +1316,18 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         sectors: ['Energy'],
         market_caps: [],
         blocked_symbols: ['XOM'],
+        topics: ['uranium miners'],
       });
       const edited = await queries.updateAgent(USER, agent.id, { mandate: { market_caps: ['large', 'mega'], sectors: [] } });
       expect(edited).toMatchObject({ market_caps: ['large', 'mega'], sectors: [], max_position_bps: 1000 });
+      // Topics (0090) are written on their own, and a mandate edit leaves them alone.
+      expect(edited).toMatchObject({ topics: ['uranium miners'] });
+      const retopiced = await queries.updateAgent(USER, agent.id, { topics: ['AI chips', 'regional banks'] });
+      expect(retopiced).toMatchObject({ topics: ['AI chips', 'regional banks'], sectors: [] });
+      // The primary follows none, whatever a writer asks (agents_primary_has_no_topics).
+      await expect(
+        getPool().query("UPDATE agents SET topics = ARRAY['banks'] WHERE id = $1", [AGENT]),
+      ).rejects.toMatchObject({ code: '23514' });
       // The primary has no mandate, whatever a writer asks (agents_primary_has_no_mandate).
       await expect(
         getPool().query('UPDATE agents SET max_holdings = 3 WHERE id = $1', [AGENT]),
@@ -1343,6 +1353,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           scanSchedule: { everyHours: null, preOpen: true, postClose: false },
           maxDecisions: 1,
           mandate: EMPTY_MANDATE,
+          topics: [],
           state: 'active',
         })
         .catch((error: { code?: string; constraint?: string }) => error);

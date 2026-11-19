@@ -65,6 +65,7 @@ const SIMULATED = {
   scanCost: { microUsd: 36_000, basis: 'measured' },
   waitingForBrief: false,
   mandate: null,
+  topics: [],
   instructionsConflicts: null,
   scheduling: { enabled: true, nextAt: '2026-10-08T13:00:00Z' },
 } as AgentView;
