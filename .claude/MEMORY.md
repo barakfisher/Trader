@@ -15,7 +15,7 @@ Updated: 2026-11-19, evening - **The agents' briefing lists new listings and IPO
   `upcoming_ipos` have run. After deploy: read a scan's stored `briefing` for the two keys, and whether a thesis
   mentions one.
 - **Next:** PR 4, a briefing built from each agent's mandate (D15's "followed topics" part, never built).
-- **Decisions reach 411** (next: **412**). This PR is #PRNUM.
+- **Decisions reach 411** (next: **412**). This PR is #396.
 
 Earlier: 2026-11-19, later - **Upcoming IPOs from SEC EDGAR (D404-D408, VERSION 0.0.8).** Merged (#395), not deployed.
 - **Why:** PR 2 of the new-listings plan (below). Anthropic's public S-1 was on EDGAR 24 days before it listed; the
@@ -7115,7 +7115,7 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
       late in practice is not measured (all 9 registered/priced on 2026-11-19 had one).
 
 409. **The briefing's `new_in_universe` lists the daily screen's admissions of the last 14 days, at most 10, largest
-    first** (#PRNUM, the user, 2026-11-19, PR 3 of the new-listings plan). Tradable only (USD, the movers' rule);
+    first** (#396, the user, 2026-11-19, PR 3 of the new-listings plan). Tradable only (USD, the movers' rule);
     symbol, name, sector and industry (or an ETF's category), and the day it was added. Left out when empty.
     - *Rejected:* 7 days: a listing leaves the briefing within a week, and agents barely search (1
       `search_universe` call in 80 tool calls), so after that it is found only by luck.
@@ -7126,14 +7126,14 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
     - **Consequence:** at ~3 a day the window holds ~40, so a small listing may never be shown; it is still a member,
       found by a theme search and tradable.
 410. **The briefing's `upcoming_ipos` lists only companies registered on an exchange or priced, in the last 30 days,
-    at most 10** (#PRNUM, the user, 2026-11-19). Company, ticker, stage and the dates of filing, registration and
+    at most 10** (#396, the user, 2026-11-19). Company, ticker, stage and the dates of filing, registration and
     pricing (D405: no figures). Left out when empty.
     - *Rejected:* every stage, ranked, top 10: three weeks more warning (ANT filed 10-26, registered 11-17), but 52 of
       the 61 tracked companies on 2026-11-19 were filed or amended, mostly companies that never reach an exchange,
       read by every agent in every scan.
     - **Consequence:** an IPO reaches the briefing about a week before it trades, not a month.
 411. **Every agent's instructions name the two sections and say a company about to list cannot be bought until it
-    does** (#PRNUM, the user, 2026-11-19). Two lines: in step 1 of "How to work", and beside "Only USD-listed
+    does** (#396, the user, 2026-11-19). Two lines: in step 1 of "How to work", and beside "Only USD-listed
     instruments in the universe" (`NEW_LISTINGS_LINE`, `UPCOMING_IPO_RULE` in `scan.py`). A section, not a tool:
     agents hardly call tools beyond the briefing (D402).
     - *Rejected:* the briefing alone, the prompt unchanged: a model may skip an unnamed key, or try to buy ANT the day
