@@ -419,3 +419,6 @@ while this file is out of date.
 | 406 | `upcoming_listings` has no `user_id` |
 | 407 | A registrant is excluded at first sight, and for good, when it is a blank check, a fund or a public company |
 | 408 | A tracked company is `listed` when its ticker is a member admitted after its latest filing |
+| 409 | The briefing's `new_in_universe` lists the daily screen's admissions of the last 14 days, at most 10, largest first |
+| 410 | The briefing's `upcoming_ipos` lists only companies registered on an exchange or priced, in the last 30 days, at most 10 |
+| 411 | Every agent's instructions name the two sections and say a company about to list cannot be bought until it does |

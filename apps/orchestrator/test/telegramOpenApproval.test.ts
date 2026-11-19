@@ -8,7 +8,7 @@
  * `openApproval.test.ts`. What is tested is what the chat shows.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const USER = '00000000-0000-0000-0000-000000000001';
 const PROPOSAL = '11111111-2222-3333-4444-555555555555';
@@ -17,6 +17,11 @@ const WEBHOOK_SECRET = 'a-webhook-secret-long-enough';
 const SIGNING_SECRET = 'a-signing-secret-long-enough';
 /** 16:30 in Jerusalem, the US open in winter. */
 const OPENS_AT = '2026-11-19T14:30:00.000Z';
+/**
+ * The chat's clock, an hour before that open. The keyboard reads the clock, so
+ * a test on the real one passed until 14:30 UTC that day and failed after it.
+ */
+const NOW = new Date(Date.parse(OPENS_AT) - 3_600_000);
 
 let language = 'en';
 let openApproval: string | null = null;
@@ -133,12 +138,18 @@ const keyboardOf = (call: { body: Record<string, unknown> }) =>
 const labels = (call: { body: Record<string, unknown> }) => keyboardOf(call).map((button) => button.text);
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(NOW);
   vi.clearAllMocks();
   language = 'en';
   openApproval = null;
   vi.mocked(service.approveForOpen).mockResolvedValue({ outcome: 'queued', opensAt: OPENS_AT });
   vi.mocked(service.cancelForOpen).mockResolvedValue({ outcome: 'cancelled' });
   app = buildApp();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('the announcement of a trade raised while the market is closed', () => {

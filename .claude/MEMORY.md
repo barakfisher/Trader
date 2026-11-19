@@ -4,7 +4,20 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-19, later - **Upcoming IPOs from SEC EDGAR (D404-D408, VERSION 0.0.8).** Not merged, not deployed.
+Updated: 2026-11-19, evening - **The agents' briefing lists new listings and IPOs about to trade (D409-D411, VERSION
+0.0.9).** Not merged, not deployed. PR 3 of the new-listings plan; #394 and #395 are merged, none of the three deployed.
+- **What changed:** `build_briefing` adds `new_in_universe` (the daily screen's admissions of the last 14 days, at most
+  10, largest first, tradable) and `upcoming_ipos` (registered or priced in the last 30 days, at most 10, dates and
+  stages only), each left out when empty. Every agent's instructions name both and say an IPO is not tradable until it
+  lists. The three choices are the user's, asked one at a time (D409-D411).
+- **Not verified:** no real model has read the new briefing or prompt (a paid run needs the user's word). Nothing to
+  read on production until #394 and #395 are deployed: the sections are empty until `new_listings` and
+  `upcoming_ipos` have run. After deploy: read a scan's stored `briefing` for the two keys, and whether a thesis
+  mentions one.
+- **Next:** PR 4, a briefing built from each agent's mandate (D15's "followed topics" part, never built).
+- **Decisions reach 411** (next: **412**). This PR is #396.
+
+Earlier: 2026-11-19, later - **Upcoming IPOs from SEC EDGAR (D404-D408, VERSION 0.0.8).** Merged (#395), not deployed.
 - **Why:** PR 2 of the new-listings plan (below). Anthropic's public S-1 was on EDGAR 24 days before it listed; the
   daily screen (D402) only sees a listing once it trades.
 - **What changed:** a daily run, `upcoming_ipos` (migration `0089`), reads EDGAR through a `FilingsProvider`
@@ -31,7 +44,7 @@ Updated: 2026-11-19, later - **Upcoming IPOs from SEC EDGAR (D404-D408, VERSION 
   stats, then `SELECT stage, count(*) FROM upcoming_listings WHERE excluded IS NULL GROUP BY 1`.
 - **Debt - an outage longer than the 30-day lookback loses the filings made in it**; an excluded registrant is never
   looked at again unless its row is deleted (RUNBOOK).
-- **Decisions reach 408** (next: **409**). This PR is #395.
+- **Decisions reach 408** (next: **409**). That PR is #395.
 
 Earlier: 2026-11-19 - **The daily new-listings screen (D402-D403, VERSION 0.0.7).** Merged (#394), not deployed.
 - **Why:** Anthropic listed (ANT, Nasdaq) on 2026-11-19 and was in no table: the universe is a quarterly snapshot
@@ -7100,6 +7113,41 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
       inside the lookback until one appears.
     - **Consequence:** the read model shows a company without a ticker until it is marked; whether SEC adds tickers
       late in practice is not measured (all 9 registered/priced on 2026-11-19 had one).
+
+409. **The briefing's `new_in_universe` lists the daily screen's admissions of the last 14 days, at most 10, largest
+    first** (#396, the user, 2026-11-19, PR 3 of the new-listings plan). Tradable only (USD, the movers' rule);
+    symbol, name, sector and industry (or an ETF's category), and the day it was added. Left out when empty.
+    - *Rejected:* 7 days: a listing leaves the briefing within a week, and agents barely search (1
+      `search_universe` call in 80 tool calls), so after that it is found only by luck.
+    - *Rejected:* no window, largest first: the ten largest of the ~190 admissions since the snapshot would hold the
+      section for good, and nothing newer would be shown.
+    - *Rejected:* no window, newest first: at ~3 admissions a day the list turns over in about three days, so a large
+      listing like ANT would leave sooner than with a window.
+    - **Consequence:** at ~3 a day the window holds ~40, so a small listing may never be shown; it is still a member,
+      found by a theme search and tradable.
+410. **The briefing's `upcoming_ipos` lists only companies registered on an exchange or priced, in the last 30 days,
+    at most 10** (#396, the user, 2026-11-19). Company, ticker, stage and the dates of filing, registration and
+    pricing (D405: no figures). Left out when empty.
+    - *Rejected:* every stage, ranked, top 10: three weeks more warning (ANT filed 10-26, registered 11-17), but 52 of
+      the 61 tracked companies on 2026-11-19 were filed or amended, mostly companies that never reach an exchange,
+      read by every agent in every scan.
+    - **Consequence:** an IPO reaches the briefing about a week before it trades, not a month.
+411. **Every agent's instructions name the two sections and say a company about to list cannot be bought until it
+    does** (#396, the user, 2026-11-19). Two lines: in step 1 of "How to work", and beside "Only USD-listed
+    instruments in the universe" (`NEW_LISTINGS_LINE`, `UPCOMING_IPO_RULE` in `scan.py`). A section, not a tool:
+    agents hardly call tools beyond the briefing (D402).
+    - *Rejected:* the briefing alone, the prompt unchanged: a model may skip an unnamed key, or try to buy ANT the day
+      before it trades and be refused, a round trip for nothing.
+    - **Found by the QA review, and fixed:** an IPO whose ticker an older screened company still trades under was
+      shown with that ticker, whose quote says "tradable" - the agent could buy the old company. The ticker is now
+      left out of the section when a member holds it (D408 already keeps that member from marking it listed).
+    - **Accepted asymmetry, found by the QA review - names source the digits in them.** The figure check mines every
+      number from every evidence string, so a name like "iShares 0-5 Year TIPS ETF" or "Acme 360 Inc." in either
+      section sources 0, 5 and 360 in every scan. Headlines from `get_news` already do the same. Kept, because
+      dropping names from the check would refuse a thesis that writes "tracks the S&P 500" from a fund's name. If
+      unsourced figures appear in theses, the fix is a validator rule for name fields, not dropping the names.
+    - **Consequence:** every agent's prompt changed, like D394; no real model has run it yet, and a paid run is the
+      user's to approve. Research views and re-checks do not see the sections.
 
 ## Bugs that cost real time, and the lesson from each
 
