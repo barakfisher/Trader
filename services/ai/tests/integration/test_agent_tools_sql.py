@@ -22,7 +22,15 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from app.agents.briefing import build_briefing, movers_section
+from app.agents.briefing import (
+    MAX_NEW_LISTINGS,
+    NEW_IN_UNIVERSE_KEY,
+    NEW_LISTING_DAYS,
+    UPCOMING_IPO_DAYS,
+    UPCOMING_IPOS_KEY,
+    build_briefing,
+    movers_section,
+)
 from app.agents.tools import (
     MAX_HISTORY_DAYS,
     MAX_HISTORY_POINTS,
@@ -610,3 +618,118 @@ async def test_the_briefing_says_when_there_are_no_movers(
     assert "note" in movers_section(context, [])
     outside = movers_section(context, [_mover("TSLA", "gainers", 12.0)])
     assert outside["gainers"] == [] and "universe" in outside["note"]
+
+
+# -- new listings and upcoming IPOs (D409-D411) -------------------------------------
+
+
+def _listed(
+    engine: Engine, symbol: str, *, cap: int | None, days_ago: int, currency: str = "USD"
+) -> None:
+    with engine.begin() as connection:
+        instrument_id = connection.execute(
+            text(
+                "INSERT INTO instruments (symbol, name, asset_class, currency) "
+                "VALUES (:s, :s || ' Inc.', 'equity', :c) RETURNING id"
+            ),
+            {"s": symbol, "c": currency},
+        ).scalar_one()
+        connection.execute(
+            text(
+                """
+                INSERT INTO instrument_profiles (instrument_id, description, matching_text, source,
+                    license, content_hash, sector, industry, market_cap_minor, size_currency,
+                    size_as_of, membership)
+                VALUES (:id, 'x', 'x', 'test', 'test', :s, 'Technology', 'Software', :cap, 'USD',
+                        :as_of, 'listed')
+                """
+            ),
+            {"id": instrument_id, "s": symbol, "cap": cap, "as_of": NOW - timedelta(days=days_ago)},
+        )
+
+
+@pytest.fixture
+def new_listings(loaded: Engine) -> Iterator[Engine]:
+    symbols = [f"NL{n:02d}" for n in range(MAX_NEW_LISTINGS + 1)]
+    for n, symbol in enumerate(symbols):
+        _listed(loaded, symbol, cap=(n + 1) * 1_000_000_000_00, days_ago=1)
+    _listed(loaded, "NLOLD", cap=10**18, days_ago=NEW_LISTING_DAYS + 1)
+    _listed(loaded, "NLGBP", cap=10**18, days_ago=1, currency="GBP")
+    yield loaded
+    with loaded.begin() as connection:
+        connection.execute(text("DELETE FROM instruments WHERE symbol LIKE 'NL%'"))
+
+
+async def test_the_briefing_lists_the_largest_recent_tradable_listings(
+    new_listings: Engine, owner: tuple[str, str, str]
+) -> None:
+    briefing = await build_briefing(_context(new_listings, owner, ScriptedMarket()), [])
+    section = briefing[NEW_IN_UNIVERSE_KEY]
+    assert len(section) == MAX_NEW_LISTINGS
+    # Largest first; one older than the window and one not in USD are left out.
+    assert section[0]["symbol"] == f"NL{MAX_NEW_LISTINGS:02d}"
+    assert {row["symbol"] for row in section}.isdisjoint({"NLOLD", "NLGBP", "NL00"})
+    assert section[0] == {
+        "symbol": f"NL{MAX_NEW_LISTINGS:02d}",
+        "name": f"NL{MAX_NEW_LISTINGS:02d} Inc.",
+        "asset_class": "equity",
+        "sector": "Technology",
+        "industry": "Software",
+        "added_on": (NOW - timedelta(days=1)).date().isoformat(),
+    }
+    json.dumps(briefing)
+
+
+async def test_the_briefing_lists_registered_and_priced_ipos_only(
+    loaded: Engine, owner: tuple[str, str, str]
+) -> None:
+    today = NOW.date()
+    with loaded.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO upcoming_listings (cik, company_name, ticker, stage, stage_on,
+                                               filed_on, registered_on, priced_on) VALUES
+                  ('0000007701', 'Priced Co', 'PRCD', 'priced', :d1, :d9, :d2, :d1),
+                  ('0000007702', 'Registered Co', NULL, 'registered', :d2, :d9, :d2, NULL),
+                  ('0000007703', 'Filed Co', NULL, 'filed', :d1, :d1, NULL, NULL),
+                  ('0000007704', 'Stale Co', NULL, 'registered', :old, :old, :old, NULL)
+                """
+            ),
+            {
+                "d1": today - timedelta(days=1),
+                "d2": today - timedelta(days=2),
+                "d9": today - timedelta(days=9),
+                "old": today - timedelta(days=UPCOMING_IPO_DAYS + 1),
+            },
+        )
+    try:
+        briefing = await build_briefing(_context(loaded, owner, ScriptedMarket()), [])
+        assert briefing[UPCOMING_IPOS_KEY] == [
+            {
+                "company": "Priced Co",
+                "ticker": "PRCD",
+                "stage": "priced",
+                "filed_on": (today - timedelta(days=9)).isoformat(),
+                "registered_on": (today - timedelta(days=2)).isoformat(),
+                "priced_on": (today - timedelta(days=1)).isoformat(),
+            },
+            {
+                "company": "Registered Co",
+                "ticker": None,
+                "stage": "registered",
+                "filed_on": (today - timedelta(days=9)).isoformat(),
+                "registered_on": (today - timedelta(days=2)).isoformat(),
+            },
+        ]
+    finally:
+        with loaded.begin() as connection:
+            connection.execute(text("DELETE FROM upcoming_listings WHERE cik LIKE '00000077%'"))
+
+
+async def test_the_briefing_leaves_out_empty_sections(
+    loaded: Engine, owner: tuple[str, str, str]
+) -> None:
+    briefing = await build_briefing(_context(loaded, owner, ScriptedMarket()), [])
+    assert NEW_IN_UNIVERSE_KEY not in briefing
+    assert UPCOMING_IPOS_KEY not in briefing

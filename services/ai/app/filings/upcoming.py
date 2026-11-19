@@ -503,8 +503,9 @@ def recent_upcoming_listings(
     today: date,
     days: int = RECENT_DAYS,
     limit: int = MAX_RECENT,
+    stages: Sequence[str] = PENDING_STAGES,
 ) -> list[UpcomingListing]:
-    """Companies at a pending stage reached in the last `days`, newest first, at most `limit`.
+    """Companies at one of `stages` reached in the last `days`, newest first, at most `limit`.
 
     A ticker already trading as a member is left out even before the next run
     marks it `listed`: the new-listings screen may admit it in between.
@@ -526,6 +527,6 @@ def recent_upcoming_listings(
              LIMIT :limit
             """
         ),
-        {"stages": list(PENDING_STAGES), "since": today - timedelta(days=days), "limit": limit},
+        {"stages": list(stages), "since": today - timedelta(days=days), "limit": limit},
     )
     return [UpcomingListing(**row._mapping) for row in rows]

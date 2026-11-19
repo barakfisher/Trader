@@ -40,7 +40,7 @@ from app.agents.answer import (
     parse_answer,
     thesis_problems,
 )
-from app.agents.briefing import build_briefing
+from app.agents.briefing import NEW_IN_UNIVERSE_KEY, UPCOMING_IPOS_KEY, build_briefing
 from app.agents.mandate import Mandate, cash_above_buffer, mandate_brief, risk_band
 from app.agents.pending_trades import pending_trades
 from app.agents.scan_budget import agent_budget
@@ -112,6 +112,16 @@ PRICE_MOVE_RULE = (
     "- A price move alone is not a reason to trade: say what it means for the business"
     " or your position."
 )
+#: D411: the two briefing sections of PR 3, named in step 1 of "How to work".
+NEW_LISTINGS_LINE = (
+    f'\n   "{NEW_IN_UNIVERSE_KEY}" (listings added lately, tradable) and'
+    f' "{UPCOMING_IPOS_KEY}"\n   (companies about to list)'
+)
+#: D411: a company about to list is not tradable; the server refuses it anyway.
+UPCOMING_IPO_RULE = (
+    f'A company in "{UPCOMING_IPOS_KEY}" cannot be bought until it lists: it becomes'
+    f'\n  tradable when it appears in "{NEW_IN_UNIVERSE_KEY}" or a quote says so.'
+)
 #: D234: the user's own words, shown when the briefing has cash above the buffer.
 IDLE_CASH_RULE = (
     "Uninvested cash above your set buffer carries an opportunity cost. Holding idle"
@@ -174,7 +184,7 @@ do not write one yourself.
 {mandate_block}{persona_block}
 How to work:
 1. Start from the briefing: your cash, your holdings and what the rules found in
-   them, and today's movers you may trade.
+   them, today's movers you may trade, and, when it has them,{NEW_LISTINGS_LINE}.
 2. Use the tools to look into what matters to your mandate. Check the news and
    the price history before acting on a move. You have at most {step_limit} tool
    calls; most scans need far fewer.
@@ -195,6 +205,7 @@ What a trade costs (the broker's published rate, charged by the ledger):
 
 Rules the server enforces after you answer:
 - Only USD-listed instruments in the universe (a quote says "tradable").
+  {UPCOMING_IPO_RULE}
 - Whole shares, more than zero. You cannot sell more than you hold.
 - At most {_trades(agent.max_decisions)} an answer, one per symbol. Sells are
   checked first, so a buy may be paid for by a sell in the same answer.
