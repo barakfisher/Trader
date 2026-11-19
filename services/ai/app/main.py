@@ -38,6 +38,7 @@ from app.routers import (
     analysis,
     assistant,
     concepts,
+    filings,
     health,
     installation_keys,
     llm,
@@ -155,6 +156,7 @@ app.include_router(narration.router)
 app.include_router(concepts.router)
 app.include_router(news.router)
 app.include_router(universe.router)
+app.include_router(filings.router)
 app.include_router(llm.router)
 app.include_router(own_keys.router)
 app.include_router(installation_keys.router)

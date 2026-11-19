@@ -5,6 +5,7 @@
  */
 
 import { NEW_LISTINGS_KIND } from './services/newListings.js';
+import { UPCOMING_IPOS_KIND } from './services/upcomingIpos.js';
 import { RESCREEN_KIND } from './services/universeRescreen.js';
 
 /**
@@ -35,6 +36,8 @@ export const INSTALLATION_KINDS: ReadonlySet<string> = new Set([
   RESCREEN_KIND,
   // Members admitted between rescreens (migration 0088): the installation's universe.
   NEW_LISTINGS_KIND,
+  // Companies on their way to an IPO, from SEC filings (migration 0089): public market facts.
+  UPCOMING_IPOS_KIND,
 ]);
 
 /** A user's work: one run per active user, each under its own run key. */

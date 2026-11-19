@@ -4,7 +4,36 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-19 - **The daily new-listings screen (D402-D403, VERSION 0.0.7).** Not merged, not deployed.
+Updated: 2026-11-19, later - **Upcoming IPOs from SEC EDGAR (D404-D408, VERSION 0.0.8).** Not merged, not deployed.
+- **Why:** PR 2 of the new-listings plan (below). Anthropic's public S-1 was on EDGAR 24 days before it listed; the
+  daily screen (D402) only sees a listing once it trades.
+- **What changed:** a daily run, `upcoming_ipos` (migration `0089`), reads EDGAR through a `FilingsProvider`
+  (`app/filings/`: `edgar`, `fixture`, `off` by `FILINGS_PROVIDER`) into `upcoming_listings` (one row per registrant,
+  tracked with its stage dates or excluded with a reason) and `upcoming_listing_filings` (accession, form, date, URL).
+  Dates and stages only, no model. `recent_upcoming_listings()` in `app/filings/upcoming.py` is the read model PR 3's
+  briefing section reads: filed/amended/registered/priced in the last 30 days, newest first, at most 25, a ticker
+  already trading left out. The admin page counts them beside `admin.listed`.
+- **Measured live, read-only, 2026-11-19:** a month held 154 registrants: 61 tracked, 69 public companies, 17 blank
+  checks, 7 funds; 9 tracked reached registered/priced, all real IPOs. 45 s for the whole first run.
+- **For PR 3 - the list is noisy below `registered`.** 52 of the 61 are filed/amended, many small self-underwritten
+  companies that never reach an exchange. Rank by stage (priced, registered first) or show `filed` only with a ticker.
+- **Lesson - measure a classifier on the live feed, not on its fixture.** "A report before its first registration"
+  passed every unit test and tracked 116 of 154 live, because a company public since 2021 has its old IPO S-1 first
+  in its history. The live run caught it (reAlpha, AIRE); the rule is now "before the earliest filing seen" (D407).
+- **Lesson - `www.sec.gov` and `data.sec.gov` treat a generic User-Agent differently.** The Archives (daily index,
+  filing documents) answered 403 "Undeclared Automated Tool"; full-text search and submissions answered 200. The run
+  stores Archives URLs for people to open and never fetches them.
+- **News by a pre-IPO name (measured, not built):** Yahoo's search, the `YahooNewsProvider` call, found headlines naming
+  Agility Robotics (8 of 10), Nscale (10/10), Yesway (10/10), Wella (4/4), Aspen Neuroscience (4/9); "Anthropic" alone
+  returned nothing and "Anthropic IPO" 10/10. Usable with the headline matching `entities.py` already does; a follow-up.
+- **Not verified:** a run through the endpoint against real EDGAR (the provider and the classifier ran live by hand;
+  the run itself only on the fixture and a throwaway Postgres). After deploy: read the first `upcoming_ipos` run's
+  stats, then `SELECT stage, count(*) FROM upcoming_listings WHERE excluded IS NULL GROUP BY 1`.
+- **Debt - an outage longer than the 30-day lookback loses the filings made in it**; an excluded registrant is never
+  looked at again unless its row is deleted (RUNBOOK).
+- **Decisions reach 408** (next: **409**). This PR is #PRNUM.
+
+Earlier: 2026-11-19 - **The daily new-listings screen (D402-D403, VERSION 0.0.7).** Merged (#394), not deployed.
 - **Why:** Anthropic listed (ANT, Nasdaq) on 2026-11-19 and was in no table: the universe is a quarterly snapshot
   (2026-09-24), next due 12-24. Measured on production that day: 189 listings since the snapshot pass the screen.
 - **What changed:** a daily run, `new_listings` (migration `0088`), screens Yahoo (~18 s) and admits each new member as
@@ -21,7 +50,7 @@ Updated: 2026-11-19 - **The daily new-listings screen (D402-D403, VERSION 0.0.7)
   not be called: agents made 1 `search_universe` call of 80). PR 4, a briefing built from each agent's mandate (D15's
   "followed topics" part was never built; the plan's section 7 item 2). EDGAR measured 2026-11-19: ANT's public S-1
   on 10-26, 24 days before listing; Yahoo's IPO calendar listed it about two weeks ahead with no price range.
-- **Decisions reach 403** (next: **404**). This PR is #394.
+- **Decisions reach 403** (next: **404**). That PR is #394.
 
 Earlier: 2026-11-18 - **Approve at the open (D398-D401, VERSION 0.0.6).** Not deployed.
 - **What changed:** a trade raised while its market is closed carries *Approve at the open* instead of Approve, in
@@ -7005,6 +7034,60 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
     - **Consequence:** the first runs take about four days to catch up. A new ETF has no holdings until the next
       rescreen, and the sector/industry taxonomy (D164) stays built from `screened` profiles only, so a listing in an
       industry the snapshot lacks is not offered in a mandate's picker until then.
+
+404. **Upcoming IPOs are found by EDGAR's full-text search and confirmed by each company's submissions, behind a
+    `FilingsProvider`** (#PRNUM, 2026-11-19, PR 2 of the new-listings plan). Measured that day, read-only:
+    `efts.sec.gov/LATEST/search-index` by form and date (no query text; `forms=S-1` matches S-1/A) and
+    `data.sec.gov/submissions` both answered a generic User-Agent; a month held 202 S-1/F-1/DRS filings from 154
+    registrants and 198 8-A12B/424B4/RW. A daily run, `upcoming_ipos` (migration 0089), searches the last 30 days
+    twice - registration forms find new registrants, later forms only move tracked ones - and fetches a history
+    only for a registrant it has not seen or a tracked one with a filing it has not stored, at most 120 a run, at 8
+    requests a second (SEC allows 10). The live run took 45 s for 154 histories. `FILINGS_PROVIDER` is `edgar`
+    (default, keyless), `fixture` (CI, `.env.example`, kind) or `off`; `EDGAR_USER_AGENT` is
+    `TradersResearch/0.1 research-tool` by default and never carries a person's name or address.
+    - *Rejected:* the daily form index under `www.sec.gov/Archives`: HTTP 403 "Undeclared Automated Tool" for every
+      generic User-Agent tried; it wants a contact address, which this service does not send.
+    - *Rejected:* submissions alone: they answer one known CIK, and the run's question is who it does not know yet.
+    - *Rejected:* a retry loop in the client: EDGAR's search answered 500 to 2 of ~25 requests and then 30 of 30;
+      a failed search fails the run, and `RETRY_FAILED_KINDS` asks again within the hour. No package was added.
+    - **Consequence:** an outage longer than 30 days loses filings made in it. If SEC starts refusing the default
+      User-Agent the run fails with a 403 that names the setting.
+405. **Dates and stages only: confidential, filed, amended, registered, priced, withdrawn, listed** (#PRNUM,
+    2026-11-19). The plan's list plus `priced` (the 424B4 final prospectus, the day before trading), which costs
+    nothing: the run reads that form's date like the others. No price range, share count or proceeds, and no model.
+    - *Rejected:* a price range or deal size from the prospectus: they sit in prose, and a figure read out of prose is
+      the unsourced number guideline 7 bars.
+    - *Rejected:* `EFFECT` as a stage: it falls between registered and priced, and adds nothing an agent would act on.
+    - **Consequence:** a `confidential` stage is rare as a current stage: SEC releases a DRS only shortly before the
+      public S-1 (Anthropic's DRS of 06-01 appeared with its S-1 on 10-26), so it is mostly a date in the history.
+406. **`upcoming_listings` has no `user_id`** (#PRNUM, 2026-11-19). The rows are public filings about the market, the
+    installation's like `instruments` and `articles`; no account owns or changes them, and guideline 5 is for
+    user-owned tables.
+    - *Rejected:* a `user_id` filled with the admin's id: a market fact would look owned, and erasing that account
+      (D264) would delete the installation's data.
+407. **A registrant is excluded at first sight, and for good, when it is a blank check, a fund or a public company**
+    (#PRNUM, 2026-11-19). `blank_check`: SIC 6770 or "Acquisition Corp" in the name (17 of 154 that month). `fund`:
+    SIC 6221 or "ETF"/"Fund" in the name (7). `reporting_company`: a 10-K/10-Q/20-F/40-F before the earliest filing of
+    it the searches found, or more history than one page (69). Left: 61, about 15 a week, many of them small
+    self-underwritten companies that will never trade on an exchange; 9 reached registered or priced, all real IPOs
+    (Anthropic, Aspen Neuroscience, Lycia, vVARDIS, Windward Bio, ...). The stage is the signal, and the read model
+    returns it for the reader to rank.
+    - *Rejected:* "a report before its first registration statement": found by the live run before merge - a company
+      public since 2021 files an S-1 for a follow-on, its 2021 S-1 comes first in its history, and it was tracked
+      (reAlpha, AIRE, priced). That rule tracked 116; the earliest-seen rule tracks 61.
+    - *Rejected:* excluding a registrant with no industry code: most are shells, but the exclusion is permanent, and a
+      real IPO whose code SEC has not assigned yet would never be seen again.
+    - *Rejected:* tracking only exchange registrations (8-A12B): Anthropic's came 22 days after its public S-1.
+    - **Consequence:** an excluded registrant is never re-fetched, so a misjudged one stays out; delete its row to
+      have the next run look again.
+408. **A tracked company is `listed` when its ticker is a member admitted after its latest filing** (#PRNUM,
+    2026-11-19): `listed` by the daily screen (D402), or `screened` by a snapshot sized on or after `stage_on`. The
+    read model leaves such a ticker out at once, before the run marks it. A withdrawn company is never marked.
+    - *Rejected:* "sized after its first filing": found by the integration test - a snapshot of 09-24 sits between
+      Anthropic's DRS (06-01) and its pricing, so an older company under the same ticker would have counted.
+    - *Rejected:* matching by name: SEC's and Yahoo's names differ in punctuation and suffix.
+    - **Consequence:** a ticker SEC lists late (some registrants have none until near pricing) is marked only when it
+      appears; the read model shows the company meanwhile.
 
 ## Bugs that cost real time, and the lesson from each
 

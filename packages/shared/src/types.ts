@@ -1383,6 +1383,11 @@ export interface UniverseStatusResponse {
     listed: number;
     /** Former members a later snapshot no longer holds; kept, never searched. */
     dropped: number;
+    /**
+     * Companies on their way to an IPO, from SEC filings (migration 0089): filed,
+     * amended, registered or priced in the last 30 days. Not members.
+     */
+    upcomingIpos: number;
   };
   reconciliation: UniverseReconciliation[];
 }

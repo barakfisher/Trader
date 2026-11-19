@@ -1279,6 +1279,7 @@
     "universeFailed": "Could not load the universe status.",
     "profiled": "{{profiles}} profiled ({{equities}} equities, {{etfs}} ETFs), {{embedded}} embedded, {{holdings}} ETF holdings.",
     "dropped": "{{value}} dropped by a later snapshot: kept, because holdings refer to them, but no longer members.",
+    "upcomingIpos": "{{value}} companies are on their way to an IPO, by their SEC filings in the last 30 days (filed, amended, registered on an exchange or priced). They are not members until they trade.",
     "listed": "Also {{value}} added since the snapshot by the daily new-listings screen. They are members - found by agents' searches by theme and tradable - but not compared with the snapshot; the next rescreen keeps or drops them.",
     "onDemand": "Also {{value}} profiled on demand for listings users named. They are described but not members: agents' searches by theme skip them, and they are not compared with the snapshot.",
     "lastLoad": "Snapshot of {{snapshot}}, last loaded {{age}}.",

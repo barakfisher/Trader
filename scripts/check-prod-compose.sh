@@ -61,7 +61,7 @@ for name, service in services.items():
             problems.append(f"{name} does not run with APP_ENV=production")
         if name != "migrate" and not str(env.get("ALLOWED_ORIGINS", "")).startswith("https://"):
             problems.append(f"{name}'s first ALLOWED_ORIGINS entry is not https")
-        for key in ("MARKET_DATA_PROVIDERS", "NEWS_PROVIDERS", "AGENT_NEWS_PROVIDER", "EMBEDDINGS_PROVIDER"):
+        for key in ("MARKET_DATA_PROVIDERS", "NEWS_PROVIDERS", "AGENT_NEWS_PROVIDER", "FILINGS_PROVIDER", "EMBEDDINGS_PROVIDER"):
             if "fixture" in str(env.get(key, "")).split(","):
                 problems.append(f"{name} uses a fixture provider in {key}")
 

@@ -43,6 +43,7 @@ import {
   profileRequestResponseSchema,
   rescreenResponseSchema,
   newListingsResponseSchema,
+  upcomingIposResponseSchema,
   newsCollectResponseSchema,
   quoteResponseSchema,
 } from './schemas.js';
@@ -90,6 +91,7 @@ export type ConceptSearchMatch = components['schemas']['ConceptSearchMatch'];
 export type ProfileRequestResponse = components['schemas']['ProfileRequestResponse'];
 export type RescreenResponse = components['schemas']['RescreenResponse'];
 export type NewListingsResponse = components['schemas']['NewListingsResponse'];
+export type UpcomingIposResponse = components['schemas']['UpcomingIposResponse'];
 
 /**
  * A scan loads history for every holding and may call a model once per finding,
@@ -273,6 +275,19 @@ export class AiClient {
    */
   newListings(requestId?: string): Promise<NewListingsResponse> {
     return this.request('/universe/new-listings', newListingsResponseSchema, {
+      method: 'POST',
+      requestId,
+      timeoutMs: SCAN_TIMEOUT_MS,
+    });
+  }
+
+  /**
+   * The daily upcoming-IPO run (migration 0089): two EDGAR searches and at
+   * most a run's cap of company histories at SEC's pace - about 45 s on a
+   * first run, seconds after - answered when done, on the scan's timeout.
+   */
+  upcomingIpos(requestId?: string): Promise<UpcomingIposResponse> {
+    return this.request('/filings/upcoming-ipos', upcomingIposResponseSchema, {
       method: 'POST',
       requestId,
       timeoutMs: SCAN_TIMEOUT_MS,

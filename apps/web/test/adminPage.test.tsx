@@ -192,6 +192,7 @@ describe('the admin page', () => {
                 onDemand: 2,
                 listed: 3,
                 dropped: 0,
+                upcomingIpos: 9,
               },
               reconciliation: [
                 {
@@ -382,6 +383,7 @@ describe('the admin page', () => {
     renderAt('/admin?tab=operations', ADMIN);
     expect(await screen.findByText(/Also 2 profiled on demand for listings users named/)).toBeTruthy();
     expect(screen.getByText(/Also 3 added since the snapshot by the daily new-listings screen/)).toBeTruthy();
+    expect(screen.getByText(/9 companies are on their way to an IPO, by their SEC filings/)).toBeTruthy();
   });
 
   it('shows what administrators have done, and from where', async () => {

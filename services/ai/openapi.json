@@ -2974,6 +2974,80 @@
         "title": "SymbolSearchResponse",
         "type": "object"
       },
+      "UpcomingIposResponse": {
+        "description": "What one run of the daily upcoming-IPO tracker found (migration 0089).\n\n`done`: the searches ran. `tracked` names the registrants seen for the first\ntime and followed; `excluded` counts the others by reason; `advanced` lists\ntracked companies whose stage or dates changed (\"NAME: stage\"); `listed`\nthe tickers that became universe members. `failed` holds CIKs whose history\ncould not be fetched, asked again by the next run; `deferred` counts those\nleft for it by the cap. `unavailable`: `filings_provider` is `off`. A search\nthat failed is not an answer here: the endpoint fails, and the run is retried.",
+        "properties": {
+          "advanced": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Advanced",
+            "type": "array"
+          },
+          "deferred": {
+            "default": 0,
+            "title": "Deferred",
+            "type": "integer"
+          },
+          "excluded": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Excluded",
+            "type": "object"
+          },
+          "failed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Failed",
+            "type": "array"
+          },
+          "listed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Listed",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "searched": {
+            "default": 0,
+            "title": "Searched",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "done",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tracked": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tracked",
+            "type": "array"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "UpcomingIposResponse",
+        "type": "object"
+      },
       "UserLlmModelsResponse": {
         "description": "A user's models, resolved against OpenRouter's list (D244, D284).",
         "properties": {
@@ -3623,6 +3697,55 @@
         "summary": "Get Concept",
         "tags": [
           "concepts"
+        ]
+      }
+    },
+    "/filings/upcoming-ipos": {
+      "post": {
+        "operationId": "upcoming_ipos_filings_upcoming_ipos_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpcomingIposResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upcoming Ipos",
+        "tags": [
+          "filings"
         ]
       }
     },

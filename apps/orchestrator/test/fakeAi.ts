@@ -82,6 +82,20 @@ export function createFakeAi(options: FakeAiOptions = {}): AiClient {
         agents: [],
       };
     },
+    /** The daily upcoming-IPO run: one company tracked, a SPAC excluded, one history left for tomorrow. */
+    async upcomingIpos() {
+      return {
+        status: 'done' as const,
+        reason: null,
+        searched: 400,
+        tracked: ['Anthropic, PBC'],
+        excluded: { blank_check: 1 },
+        advanced: ['Anthropic, PBC: priced'],
+        listed: [],
+        failed: [],
+        deferred: 2,
+      };
+    },
     /** The daily new-listings screen: one listing admitted, one Yahoo has not described yet. */
     async newListings() {
       return {

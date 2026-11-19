@@ -10,6 +10,8 @@ from fastapi import Depends, Header, HTTPException, Request, status
 from app.config import Settings, get_settings
 from app.corpus.embeddings import BaseEmbedder
 from app.corpus.vector_store import VectorStore
+from app.filings.base import FilingsProvider
+from app.filings.registry import build_filings_provider
 from app.llm.payer import PayerRefusal
 from app.providers.registry import MarketDataService
 from app.universe.membership import DatabaseMembership, UniverseMembership
@@ -90,3 +92,8 @@ def payer_refusal(request: Request, user_id: str) -> PayerRefusal | None:
     if gate is None or llm is None:
         return None
     return gate.refusal(user_id, metered=llm.charges_per_token)
+
+
+def get_filings_provider(settings: SettingsDep) -> FilingsProvider | None:
+    """None when `filings_provider` is `off` (D404)."""
+    return build_filings_provider(settings)

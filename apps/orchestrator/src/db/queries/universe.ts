@@ -31,7 +31,15 @@ export interface UniverseCountsRow {
   listed: number;
   /** Former members a newer snapshot no longer holds (decision 90); kept, never searched. */
   dropped: number;
+  /**
+   * Companies on their way to an IPO (migration 0089): a pending stage reached in
+   * the last `UPCOMING_IPO_DAYS`. Not universe members - the briefing's list.
+   */
+  upcoming_ipos: number;
 }
+
+/** `services/ai/app/filings/upcoming.py` `RECENT_DAYS`: the window the agents' briefing reads. */
+export const UPCOMING_IPO_DAYS = 30;
 
 /** What the database holds now - compared against what the last load wrote. */
 export async function countUniverse(): Promise<UniverseCountsRow> {
@@ -44,12 +52,17 @@ export async function countUniverse(): Promise<UniverseCountsRow> {
             (SELECT count(*)::int FROM etf_holdings) AS etf_holdings,
             count(*) FILTER (WHERE p.membership = 'on_demand')::int AS on_demand,
             count(*) FILTER (WHERE p.membership = 'listed')::int AS listed,
-            count(*) FILTER (WHERE p.membership = 'dropped')::int AS dropped
+            count(*) FILTER (WHERE p.membership = 'dropped')::int AS dropped,
+            (SELECT count(*)::int FROM upcoming_listings u
+              WHERE u.excluded IS NULL
+                AND u.stage IN ('filed', 'amended', 'registered', 'priced')
+                AND u.stage_on >= current_date - $1::int) AS upcoming_ipos
        FROM instrument_profiles p
        JOIN instruments i ON i.id = p.instrument_id`,
+    [UPCOMING_IPO_DAYS],
   );
   return (
-    row ?? { profiles: 0, equities: 0, etfs: 0, embedded: 0, etf_holdings: 0, on_demand: 0, listed: 0, dropped: 0 }
+    row ?? { profiles: 0, equities: 0, etfs: 0, embedded: 0, etf_holdings: 0, on_demand: 0, listed: 0, dropped: 0, upcoming_ipos: 0 }
   );
 }
 
