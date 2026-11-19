@@ -32,6 +32,14 @@ export interface ProposalRow {
   scan_tool_calls: unknown[] | null;
   /** An `assistant` proposal: whether its conversation still exists (D393); null otherwise. */
   assistant_conversation_exists: boolean | null;
+  /** A trade raised while its market was closed: the open it waits for (0087, D398); null otherwise. */
+  opens_at: Date | null;
+  /** What became of an approval for the open (`OPEN_APPROVAL_STATES`); null when none was given. */
+  open_approval: string | null;
+  open_approval_surface: 'web' | 'telegram' | null;
+  open_approval_at: Date | null;
+  /** The refusal's code when the open refused it. */
+  open_approval_reason: string | null;
 }
 
 /**
@@ -98,6 +106,7 @@ export async function createProposals(proposals: ProposalToCreate[]): Promise<st
 /** The columns every proposal read returns, joined to the finding behind it. */
 const PROPOSAL_COLUMNS = `p.id, p.user_id, p.observation_id, p.kind, p.payload, p.state,
        p.expires_at, p.snoozed_until, p.decided_at, p.decided_via, p.created_at,
+       p.opens_at, p.open_approval, p.open_approval_surface, p.open_approval_at, p.open_approval_reason,
        o.severity, o.subject_ref, o.headline, o.explanation, o.localized, o.evidence,
        a.id AS agent_id, a.name AS agent_name, a.is_primary AS agent_is_primary, p.scan_id,
        ${SCAN_TOOL_CALLS} AS scan_tool_calls,

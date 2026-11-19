@@ -48,6 +48,8 @@ vi.mock('../src/db/queries.js', () => ({
     expires_at: new Date(Date.now() + expiresInMs),
     snoozed_until: null,
     decided_at: null,
+    opens_at: null,
+    open_approval: null,
   })),
   getUser: vi.fn(async () => ({ id: USER, email: null, base_currency: 'USD', timezone: 'Asia/Jerusalem' })),
   getOrCreateUserSettings: vi.fn(async () => ({ notify_severity: 'high', language })),

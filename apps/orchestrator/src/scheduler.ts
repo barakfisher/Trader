@@ -57,6 +57,9 @@ export const INTERVALS_MS: Record<string, number> = {
   // long, so a missed ask is caught up by the next; the plan enqueues nothing
   // most of the time, and nothing at all where scheduled scans are off (D71).
   agent_scans: 15 * 60 * 1000,
+  // Every minute against a one-minute bucket (D401): a trade approved for the
+  // open fills within a minute of it. Nothing due answers without a run row.
+  open_approvals: 60 * 1000,
 };
 
 /** Stagger the first run of each kind so a restart does not fire both at once. */

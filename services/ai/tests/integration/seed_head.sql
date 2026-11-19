@@ -423,3 +423,29 @@ INSERT INTO agent_suggestions (user_id, agent_id, rule, dedupe_key, evidence, ch
    '{"scans": 10, "tradeScans": 1}', NULL, 'superseded', now()),
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'fee_drag', 'seed-0:fee_drag',
    '{"scans": 10, "feesMinor": 1500}', '{"setting": "scan_every_hours", "from": 1, "to": 2}', 'stale', now());
+-- Approvals for the open (0087, D398-D401): a trade raised while the market was
+-- closed in each approval state, from each surface; the refused one with its
+-- code; the message the open sent; and the tick's run.
+INSERT INTO observations (id, user_id, agent_id, kind, severity, subject_ref, headline, dedupe_key, narration_source)
+SELECT ('30000000-0000-0000-0000-00000000004' || n)::uuid, '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1',
+       'agent_trade', 'notable', 'instrument:OPN' || n, 'Paused agent proposes to buy 1 OPN' || n, 'agent_scan:seed-open-' || n, 'llm'
+  FROM generate_series(1, 6) AS n;
+-- One scan each: 0061's downgrade refuses a scan with two proposals.
+INSERT INTO agent_scans (id, user_id, agent_id, trigger, started_at, finished_at, outcome, steps, cost_micro_usd, model, briefing, transcript, answer)
+SELECT ('70000000-0000-0000-0000-00000000004' || n)::uuid, '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1',
+       'schedule', now() - interval '1 hour', now() - interval '1 hour', 'trade', 2, 20000, 'm', '{}', '[]',
+       jsonb_build_object('decision', 'buy', 'symbol', 'OPN' || n, 'quantity', '1', 'thesis', 't')
+  FROM generate_series(1, 6) AS n;
+INSERT INTO proposals (id, user_id, agent_id, observation_id, kind, payload, state, expires_at, scan_id,
+                       opens_at, open_approval, open_approval_surface, open_approval_at, open_approval_reason)
+SELECT ('50000000-0000-0000-0000-00000000004' || n)::uuid, '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1',
+       ('30000000-0000-0000-0000-00000000004' || n)::uuid, 'buy',
+       jsonb_build_object('symbol', 'OPN' || n, 'quantity', '1', 'priceMinor', 1100, 'currency', 'USD'),
+       'pending', now() + interval '2 hours', ('70000000-0000-0000-0000-00000000004' || n)::uuid,
+       now() + interval '1 hour', state, CASE WHEN n IN (2, 4, 6) THEN 'web' ELSE 'telegram' END, now(),
+       CASE WHEN state = 'refused' THEN 'price_far_from_agent' END
+  FROM (VALUES (1, 'queued'), (2, 'filled'), (3, 'refused'), (4, 'cancelled'), (5, 'expired'), (6, 'superseded')) AS t(n, state);
+INSERT INTO notifications (user_id, agent_id, channel, ref_kind, ref_id, route, reason, status, sent_at, dedupe_key) VALUES
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'telegram', 'open_approval', '50000000-0000-0000-0000-000000000043', 'push', 'above_floor', 'sent', now(), 'seed-n-open-approval');
+INSERT INTO runs (id, kind, run_key, status) VALUES
+  ('20000000-0000-0000-0000-0000000000ab', 'open_approvals', 'open_approvals:installation:2026-11-18:0990', 'ok');

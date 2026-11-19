@@ -2141,6 +2141,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         });
         const propose = (symbol: string) =>
           queries.createTradeProposal({
+            opensAt: null,
             userId: SEED_ADMIN,
             agentId: agent,
             scanId: newer,
@@ -2344,6 +2345,140 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe('approvals for the open (0087, D398-D401)', () => {
+    // Its own account: agent_scans does not cascade from users, and `traders_app`
+    // may not delete them row by row; the account's erase removes them (D264).
+    const OWNER = randomUUID();
+    let simulated = '';
+    const SYMBOL = `ZZOP${randomUUID().slice(0, 4).toUpperCase()}`;
+    const now = new Date();
+    const opensAt = new Date(now.getTime() + 3_600_000);
+
+    async function propose(open: Date | null, symbol = SYMBOL): Promise<string> {
+      const scan = (
+        await getPool().query(
+          `INSERT INTO agent_scans (user_id, agent_id, trigger, finished_at, outcome, briefing)
+           VALUES ($1, $2, 'manual', now(), 'trade', '{}') RETURNING id`,
+          [OWNER, simulated],
+        )
+      ).rows[0].id as string;
+      const created = await queries.createTradeProposal({
+        userId: OWNER,
+        agentId: simulated,
+        scanId: scan,
+        kind: 'buy',
+        payload: { symbol, quantity: '1', priceMinor: 10_000, priceAsOf: null, currency: 'USD' },
+        expiresAt: new Date(now.getTime() + 2 * 3_600_000),
+        opensAt: open,
+        headline: 'h',
+        thesis: 't',
+        localized: {},
+        evidence: {},
+      });
+      return created.proposalId;
+    }
+
+    beforeAll(async () => {
+      await getPool().query("INSERT INTO users (id, status, llm_cap_micro_usd) VALUES ($1, 'active', 0)", [OWNER]);
+      simulated = (
+        await getPool().query(
+          `INSERT INTO agents (user_id, slug, name, persona, budget_minor)
+           VALUES ($1, 'open-approval-test', 'Open test', 'Patient.', 100000) RETURNING id`,
+          [OWNER],
+        )
+      ).rows[0].id as string;
+    });
+
+    afterAll(async () => {
+      await getPool().query("UPDATE users SET status = 'rejected' WHERE id = $1", [OWNER]);
+      await getPool().query('SELECT erase_account($1)', [OWNER]);
+    });
+
+    it('queues once, before the open only, and reads back where and when', async () => {
+      const id = await propose(opensAt);
+      expect(await queries.queueOpenApproval(OWNER, id, 'telegram', now)).toBe(true);
+      expect(await queries.queueOpenApproval(OWNER, id, 'web', now)).toBe(false);
+      const row = await queries.findProposal(OWNER, id);
+      expect(row).toMatchObject({ open_approval: 'queued', open_approval_surface: 'telegram', open_approval_reason: null });
+      expect(row!.opens_at).toEqual(opensAt);
+      // Another user cannot queue it.
+      expect(await queries.queueOpenApproval(USER, id, 'web', now)).toBe(false);
+      // After the open, nothing queues: that is Approve at the live price.
+      const late = await propose(opensAt, `${SYMBOL}L`);
+      expect(await queries.queueOpenApproval(OWNER, late, 'web', new Date(opensAt.getTime() + 1))).toBe(false);
+      // A trade raised while the market was open has no open to wait for.
+      const open = await propose(null, `${SYMBOL}N`);
+      expect(await queries.queueOpenApproval(OWNER, open, 'web', now)).toBe(false);
+    });
+
+    it('is due once its open has come, and a cancel may be taken back and given again', async () => {
+      const id = await propose(opensAt, `${SYMBOL}C`);
+      await queries.queueOpenApproval(OWNER, id, 'web', now);
+      expect((await queries.listDueOpenApprovals(now)).map((due) => due.id)).not.toContain(id);
+      expect((await queries.listDueOpenApprovals(opensAt)).map((due) => due.id)).toContain(id);
+      expect(await queries.hasDueOpenApprovals(opensAt)).toBe(true);
+      expect(await queries.cancelOpenApproval(OWNER, id)).toBe(true);
+      expect(await queries.cancelOpenApproval(OWNER, id)).toBe(false);
+      expect((await queries.listDueOpenApprovals(opensAt)).map((due) => due.id)).not.toContain(id);
+      expect(await queries.queueOpenApproval(OWNER, id, 'telegram', now)).toBe(true);
+    });
+
+    it('lets a cancel that landed first win the race with the fill', async () => {
+      const id = await propose(opensAt, `${SYMBOL}R`);
+      await queries.queueOpenApproval(OWNER, id, 'web', now);
+      await queries.cancelOpenApproval(OWNER, id);
+      const client = await getPool().connect();
+      try {
+        expect(await queries.markOpenApprovalFilledIn(client, OWNER, id)).toBe(false);
+      } finally {
+        client.release();
+      }
+      await queries.queueOpenApproval(OWNER, id, 'web', now);
+      const second = await getPool().connect();
+      try {
+        expect(await queries.markOpenApprovalFilledIn(second, OWNER, id)).toBe(true);
+      } finally {
+        second.release();
+      }
+      expect(await queries.cancelOpenApproval(OWNER, id)).toBe(false);
+      expect((await queries.findProposal(OWNER, id))!.open_approval).toBe('filled');
+    });
+
+    it('records a refusal with its code, once', async () => {
+      const id = await propose(opensAt, `${SYMBOL}F`);
+      await queries.queueOpenApproval(OWNER, id, 'web', now);
+      expect(await queries.settleOpenApproval(OWNER, id, 'refused', 'price_far_from_agent')).toBe(true);
+      expect(await queries.settleOpenApproval(OWNER, id, 'expired')).toBe(false);
+      expect(await queries.findProposal(OWNER, id)).toMatchObject({
+        open_approval: 'refused',
+        open_approval_reason: 'price_far_from_agent',
+      });
+    });
+
+    it("supersedes the agent's waiting approval on the same symbol, and no other (D400)", async () => {
+      const older = await propose(opensAt, `${SYMBOL}S`);
+      const elsewhere = await propose(opensAt, `${SYMBOL}T`);
+      await queries.queueOpenApproval(OWNER, older, 'web', now);
+      await queries.queueOpenApproval(OWNER, elsewhere, 'web', now);
+      const newer = await propose(opensAt, `${SYMBOL}S`);
+      const superseded = await queries.supersedeOpenApprovals(OWNER, simulated, `${SYMBOL}S`, newer);
+      expect(superseded.map((row) => row.id)).toEqual([older]);
+      expect((await queries.findProposal(OWNER, older))!.open_approval).toBe('superseded');
+      expect((await queries.findProposal(OWNER, elsewhere))!.open_approval).toBe('queued');
+    });
+
+    it('refuses an approval for the open on a proposal with no open, in the database too', async () => {
+      const id = await propose(null, `${SYMBOL}D`);
+      await expect(
+        getPool().query(
+          `UPDATE proposals SET open_approval = 'queued', open_approval_surface = 'web', open_approval_at = now()
+            WHERE id = $1`,
+          [id],
+        ),
+      ).rejects.toThrow(/proposals_open_approval_is_a_trades/);
+    });
+  });
+
   describe('trade proposals (0044), rolled back', () => {
     // agent_scans does not cascade from users, so everything here is rolled back.
     it('writes the observation and the proposal once per scan, and holds the constraints', async () => {
@@ -2371,6 +2506,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           kind: 'buy' as const,
           payload: { symbol: 'INTC', quantity: '3', priceMinor: 11_250, priceAsOf: null, currency: 'USD' as const },
           expiresAt: new Date(Date.now() + 3_600_000),
+          opensAt: null,
           headline: 'Trade test proposes to buy 3 INTC at 112.50',
           thesis: 'INTC fell 3.18% to 112.50.',
           localized: { he: { headline: 'h', explanation: 'INTC fell 3.18% to 112.50.' } },
@@ -2468,6 +2604,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       const proposeFrom = async (scanId: string) =>
         (
           await queries.createTradeProposal({
+            opensAt: null,
             userId: SEED_ADMIN,
             agentId: simulated,
             scanId,

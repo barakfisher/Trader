@@ -20,12 +20,13 @@ import en from '../src/i18n/locales/en.json';
 const get = vi.fn();
 const post = vi.fn();
 const patch = vi.fn();
+const del = vi.fn();
 
 vi.mock('../src/api/client.ts', async () => {
   const actual = await vi.importActual<typeof import('../src/api/client.ts')>(
     '../src/api/client.ts',
   );
-  return { ...actual, api: { get, post, patch, put: vi.fn(), delete: vi.fn(), postForm: vi.fn() } };
+  return { ...actual, api: { get, post, patch, put: vi.fn(), delete: del, postForm: vi.fn() } };
 });
 
 const { ApiRequestError } = await import('../src/api/client.ts');
@@ -68,6 +69,8 @@ function proposal(overrides: Partial<Proposal> = {}): Proposal {
     assistantConversationExists: null,
     scanId: null,
     evidenceChecked: null,
+    opensAt: null,
+    openApproval: null,
     createdAt: '2026-09-30T05:20:00.000Z',
     ...overrides,
   };
@@ -398,6 +401,50 @@ describe("an agent's trade proposal", () => {
       expect(post).toHaveBeenCalledWith('/proposals/p-trade/confirm', { shownPriceMinor: 11_385 }),
     );
     expect(await screen.findByText('Bought 3 INTC at $113.85, fee $1.50.')).toBeTruthy();
+  });
+
+  describe('raised while the market is closed (D398)', () => {
+    const OPENS_AT = new Date(Date.now() + 2 * 3_600_000).toISOString();
+    const CLOSED = { ...TRADE, opensAt: OPENS_AT };
+
+    it('offers Approve at the open instead of Approve, and says when the market opens', async () => {
+      serveTrade(CLOSED);
+      post.mockResolvedValue({ outcome: 'queued', opensAt: OPENS_AT });
+      renderAt('/proposals/p-trade');
+      fireEvent.click(await screen.findByRole('button', { name: en.proposal.trade.openApproval.approve }));
+      expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
+      expect(screen.getByText(/The market is closed\. It opens/)).toBeTruthy();
+      await waitFor(() => expect(post).toHaveBeenCalledWith('/proposals/p-trade/open-approval', {}));
+      expect(post).not.toHaveBeenCalledWith('/proposals/p-trade/preview', {});
+    });
+
+    it('says an approval is waiting for the open, and cancels it', async () => {
+      serveTrade({ ...CLOSED, openApproval: { state: 'queued', surface: 'telegram', at: TRADE.createdAt, reason: null } });
+      del.mockResolvedValue({ outcome: 'cancelled' });
+      renderAt('/proposals/p-trade');
+      expect(await screen.findByText(/Approved for the open: it fills/)).toBeTruthy();
+      expect(screen.queryByRole('button', { name: en.proposal.trade.openApproval.approve })).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: en.proposal.trade.openApproval.cancel }));
+      await waitFor(() => expect(del).toHaveBeenCalledWith('/proposals/p-trade/open-approval'));
+    });
+
+    it('says why the open did not fill it, and offers Approve again once open', async () => {
+      serveTrade({
+        ...TRADE,
+        opensAt: new Date(Date.now() - 60_000).toISOString(),
+        openApproval: { state: 'refused', surface: 'web', at: TRADE.createdAt, reason: 'price_far_from_agent' },
+      });
+      renderAt('/proposals/p-trade');
+      expect(
+        await screen.findByText(
+          en.proposal.trade.openApproval.refused.replace(
+            '{{reason}}',
+            en.proposal.trade.openApproval.reasons.priceFarFromAgent,
+          ),
+        ),
+      ).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+    });
   });
 
   it("warns of the agent's limits a buy breaks, offers the setting, and still confirms (D299)", async () => {

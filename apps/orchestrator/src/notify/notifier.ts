@@ -29,6 +29,8 @@ export interface OutboundNotification {
   proposalId?: string;
   /** The proposal is a buy or sell: Approve and Reject only (D48), and Approve previews. */
   trade?: boolean;
+  /** That trade was raised while its market is closed: Approve at the open instead (D398). */
+  atOpen?: boolean;
   severity: string;
   /**
    * The user's interface language. The title and body arrive already in it; a

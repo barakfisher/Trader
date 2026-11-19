@@ -28,7 +28,7 @@
 import { formatMoney, type MandateBreach } from '@traders/shared';
 import type { AiClient } from '@traders/shared/ai';
 
-import { getUser } from '../db/queries.js';
+import { findProposal, getUser, type ProposalRow } from '../db/queries.js';
 import { ApiProblem } from '../http/errors.js';
 import { logger } from '../logger.js';
 import {
@@ -38,6 +38,8 @@ import {
   type TradeRefusalCode,
 } from '../notify/messages.js';
 import { DEFAULT_RANGE_BPS } from '../services/fills.js';
+import { factsOf } from '../services/proposals.js';
+import { effectiveState } from '../services/proposalState.js';
 import { confirmTradeApproval, previewTradeApproval } from '../services/tradeApproval.js';
 import type { CallbackPayload } from './callbackToken.js';
 import { confirmable, type Keyboard, type TelegramNotifier } from './client.js';
@@ -132,7 +134,7 @@ export function breachFigures(breach: MandateBreach, symbol: string, messages: M
   }
 }
 
-function stamp(now: Date, timezone: string, messages: Messages): string {
+export function stamp(now: Date, timezone: string, messages: Messages): string {
   return new Intl.DateTimeFormat(messages.locale, {
     timeZone: timezone,
     hour: '2-digit',
@@ -172,7 +174,7 @@ export function refusalReason(error: ApiProblem, messages: Messages, timezone: s
   return messages.trade.reasons[REFUSAL_CODES.has(error.code) ? (error.code as TradeRefusalCode) : 'other'];
 }
 
-function appendBlock(text: string, block: string): string {
+export function appendBlock(text: string, block: string): string {
   return text === '' ? block : `${text}\n\n${block}`;
 }
 
@@ -192,6 +194,29 @@ export function withRefusal(text: string, refusal: string, messages: Messages): 
   const last = split === -1 ? text : text.slice(split + 2);
   if (split === -1 || !last.replace(ISOLATES, '').startsWith(opening)) return appendBlock(text, refusal);
   return appendBlock(text.slice(0, split), refusal);
+}
+
+/**
+ * A trade proposal's buttons from its row: Approve at the open while its market
+ * has yet to open, Cancel approval once approved for it, Approve after the open,
+ * and none once decided.
+ */
+export function tradeKeyboard(
+  row: Pick<ProposalRow, 'opens_at' | 'open_approval'>,
+  state: string,
+  now: Date,
+): Keyboard {
+  if (state !== 'pending') return 'none';
+  if (row.open_approval === 'queued') return 'openQueued';
+  if (row.opens_at && row.opens_at.getTime() > now.getTime()) return 'tradeAtOpen';
+  return 'trade';
+}
+
+/** The keyboard the proposal's current row calls for. */
+export async function currentKeyboard(userId: string, proposalId: string, now: Date): Promise<Keyboard> {
+  const row = await findProposal(userId, proposalId);
+  if (row === null) return 'none';
+  return tradeKeyboard(row, effectiveState(factsOf(row), now), now);
 }
 
 export async function handleTradeCallback(input: TradeCallback): Promise<void> {
@@ -291,7 +316,8 @@ export async function handleTradeCallback(input: TradeCallback): Promise<void> {
       toast = reason;
       block = messages.trade.refused(reason, stamp(now, timezone, messages));
       refused = true;
-      keyboard = 'trade';
+      // Still pending (D49): Approve again, or Approve at the open while it is closed (D398).
+      keyboard = await currentKeyboard(userId, payload.proposalId, now);
       tapResult = 'refused';
       refusalCode = error.code;
     }

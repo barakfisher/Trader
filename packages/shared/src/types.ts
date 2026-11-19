@@ -2020,6 +2020,38 @@ export interface Proposal {
   scanId: string | null;
   /** What that scan looked at before proposing, read from its transcript; null without a scan. */
   evidenceChecked: EvidenceChecked | null;
+  /**
+   * A trade raised while its market was closed: when the market opens (D398).
+   * Until then the proposal is approved for the open rather than now. Null when
+   * it was raised while the market was open, and for every other kind.
+   */
+  opensAt: string | null;
+  /** The approval for the open, when the user gave one (D398-D400); null otherwise. */
+  openApproval: OpenApproval | null;
+}
+
+/**
+ * What became of an approval for the open (migration 0087): `queued` until the
+ * open, then filled, refused (with the refusal's code), cancelled by the user,
+ * expired while still waiting, or superseded by a newer proposal for the same
+ * agent and symbol (D400).
+ */
+export const OPEN_APPROVAL_STATES = ['queued', 'filled', 'refused', 'cancelled', 'expired', 'superseded'] as const;
+export type OpenApprovalState = (typeof OPEN_APPROVAL_STATES)[number];
+
+export interface OpenApproval {
+  state: OpenApprovalState;
+  surface: 'web' | 'telegram';
+  /** When the user approved it for the open. */
+  at: string;
+  /** A refusal's code (`price_far_from_agent`, `insufficient_cash`, ...); null unless refused. */
+  reason: string | null;
+}
+
+/** `POST /proposals/:id/open-approval`: queued now, or already queued; and when it fills. */
+export interface OpenApprovalResult {
+  outcome: 'queued' | 'unchanged';
+  opensAt: string;
 }
 
 /**

@@ -58,7 +58,7 @@ export interface NotifiableFinding {
    * transition (`narrationWatch.ts`), a model fallback, or the run of a
    * scheduled scan that gave up (D298).
    */
-  refKind: 'observation' | 'proposal' | 'narration' | 'model_fallback' | 'run';
+  refKind: 'observation' | 'proposal' | 'narration' | 'model_fallback' | 'run' | 'open_approval';
   refId: string;
   severity: string;
   headline: string;
@@ -88,6 +88,8 @@ export interface NotifiableFinding {
    * saying so, since Approve is refused until then.
    */
   marketOpensAt?: string;
+  /** D400: the approval for the open this newer trade proposal replaced. */
+  replacesOpenApproval?: { side: 'buy' | 'sell'; quantity: string; symbol: string };
   /**
    * The observation's rule, subject and evidence. Present for scan findings, so
    * a move and a drawdown on one holding can be sent as one message (decision
@@ -195,10 +197,14 @@ function toOutbound(
   // A research view ends with what approving does and the not-advice line (D392).
   // A trade raised while its market is closed starts with when it opens: Approve
   // is refused until then, and the message is the one place the user decides.
-  const explanation =
+  const opening =
     finding.trade === true && finding.marketOpensAt !== undefined
       ? appendLine(marketClosedLine(finding.marketOpensAt, now, settings.timezone, messages), text.explanation ?? '')
       : text.explanation;
+  const explanation =
+    finding.trade === true && finding.replacesOpenApproval !== undefined
+      ? appendLine(messages.openApproval.replaces(finding.replacesOpenApproval), opening ?? '')
+      : opening;
   const body =
     finding.trade === true
       ? appendLine(explanation, messages.tradeNotAdvice)
@@ -211,6 +217,7 @@ function toOutbound(
     body,
     proposalId: finding.proposalId,
     ...(finding.trade === true ? { trade: true } : {}),
+    ...(finding.trade === true && finding.marketOpensAt !== undefined ? { atOpen: true } : {}),
     severity: finding.severity,
     language,
   };
@@ -247,7 +254,9 @@ export async function fanOut(
     // about the fall as a whole or not at all, never about half of it.
     const lead = group.members[0]!;
     const decision = routeFinding(group.severity, settings, now, {
-      floor: lead.trade === true || lead.research === true ? 'ignored' : 'applies',
+      // What the open did with a trade the user approved for it (D398) answers
+      // their own act, so it ignores the floor as the proposal did.
+      floor: lead.trade === true || lead.research === true || lead.refKind === 'open_approval' ? 'ignored' : 'applies',
       quietHours: lead.urgent === true ? 'ignored' : 'apply',
     });
     const channel = channelFor(decision.route, notifier);
@@ -387,12 +396,16 @@ export async function sendDigest(user: UserRow, notifier: Notifier): Promise<Dig
   // user something moved in the market. It gets its own line, naming the state.
   // A model's fallback notice (D286) is not a finding either, for the same reason,
   // nor is a scheduled scan that gave up (D298).
-  const notices = new Set(['narration', 'model_fallback', 'run']);
+  // Nor is what the open did with an approval (D398): the message said it, and
+  // the digest only counts it.
+  const notices = new Set(['narration', 'model_fallback', 'run', 'open_approval']);
   const findings = pending.filter((entry) => !notices.has(entry.ref_kind));
   const modelFallbacks = pending.filter((entry) => entry.ref_kind === 'model_fallback').length;
   const fallbackLine = modelFallbacks > 0 ? messages.modelFallback.digestLine(modelFallbacks) : null;
   const scansGaveUp = pending.filter((entry) => entry.ref_kind === 'run').length;
   const gaveUpLine = scansGaveUp > 0 ? messages.scheduledScans.digestLine(scansGaveUp) : null;
+  const openApprovals = pending.filter((entry) => entry.ref_kind === 'open_approval').length;
+  const openApprovalLine = openApprovals > 0 ? messages.openApproval.digestLine(openApprovals) : null;
   const narrationLine = renderNarrationLine(
     await listNarrationTransitions(
       user.id,
@@ -416,7 +429,13 @@ export async function sendDigest(user: UserRow, notifier: Notifier): Promise<Dig
     : await notifier
         .send({
           userId: user.id,
-          title: messages.digest.title(findings.length, narrationLine !== null, modelFallbacks, scansGaveUp),
+          title: messages.digest.title(
+            findings.length,
+            narrationLine !== null,
+            modelFallbacks,
+            scansGaveUp,
+            openApprovals,
+          ),
           // The digest names how many findings and of what kind. It does not
           // restate their figures: those were evidence-validated when the
           // observation was written, and re-rendering them here would be a
@@ -426,6 +445,7 @@ export async function sendDigest(user: UserRow, notifier: Notifier): Promise<Dig
             narrationLine,
             fallbackLine,
             gaveUpLine,
+            openApprovalLine,
           ]
             .filter((part): part is string => part !== null)
             .join('\n\n'),

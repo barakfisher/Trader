@@ -119,6 +119,8 @@ const WRITE_BODIES: Record<string, unknown> = {
   'POST /observations/seen': { upTo: '2099-01-01T00:00:00Z' },
   'POST /proposals/:id/confirm': { shownPriceMinor: 10000 },
   'POST /proposals/:id/decision': { action: 'reject' },
+  'POST /proposals/:id/open-approval': null,
+  'DELETE /proposals/:id/open-approval': null,
   'POST /proposals/:id/preview': null,
   'POST /proposals/:id/recheck': null,
   'PUT /settings': {},

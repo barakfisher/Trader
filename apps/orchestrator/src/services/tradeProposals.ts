@@ -43,6 +43,7 @@ import type { Notifier } from '../notify/notifier.js';
 import { evidenceCheckedFrom } from './evidenceChecked.js';
 import { resolveTradable } from './fills.js';
 import { fanOut, settingsForNotification } from './notifications.js';
+import { supersedeOlderApprovals } from './openApproval.js';
 
 /** D4: P4's sixty minutes, counted from the next market open. */
 export const TRADE_PROPOSAL_TTL_MS = 60 * 60 * 1000;
@@ -140,12 +141,17 @@ async function proposeTrade(
     kind,
     payload,
     expiresAt: tradeProposalExpiry(now, calendar),
+    // D398: what a surface reads to offer Approve at the open instead of Approve.
+    opensAt: calendar.is_open ? null : new Date(calendar.next_open),
     headline: headlineIn('en'),
     thesis,
     localized,
     evidence: { scanId, ...payload, thesis },
   });
   logger().info({ proposalId, scanId, agentId: agent.id, kind }, 'proposal.trade_raised');
+  // D400: a newer proposal replaces an approval for the open still waiting on
+  // the same symbol, whichever side it is; the message says which it replaced.
+  const replaced = await supersedeOlderApprovals(userId, agent.id, instrument.symbol, proposalId);
 
   await announce(userId, agent, context.notifier, now, {
     observationId,
@@ -154,6 +160,7 @@ async function proposeTrade(
     // D70: a sell that can be approved right now does not wait for the morning.
     urgent: kind === 'sell' && calendar.is_open,
     marketOpensAt: calendar.is_open ? undefined : calendar.next_open,
+    replaced,
     headline: headlineIn('en'),
     thesis,
     localized,
@@ -183,6 +190,7 @@ async function announce(
     scanId: string;
     urgent: boolean;
     marketOpensAt: string | undefined;
+    replaced: { side: 'buy' | 'sell'; quantity: string; symbol: string } | null;
     headline: string;
     thesis: string;
     localized: LocalizedTexts;
@@ -209,6 +217,7 @@ async function announce(
           trade: true,
           urgent: proposal.urgent,
           ...(proposal.marketOpensAt !== undefined ? { marketOpensAt: proposal.marketOpensAt } : {}),
+          ...(proposal.replaced !== null ? { replacesOpenApproval: proposal.replaced } : {}),
           evidenceChecked: evidenceCheckedFrom(toolCalls),
         },
       ],

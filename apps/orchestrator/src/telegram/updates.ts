@@ -64,7 +64,8 @@ import { decodeMenuData, encodeMenuData, isMenuData, type MenuView } from './men
 import { handleSignupCallback } from './signupApproval.js';
 import { decodeSignupData } from './signupToken.js';
 import { recheckOffered, startRecheckCallback } from './proposalRecheck.js';
-import { handleTradeCallback } from './tradeApproval.js';
+import { handleOpenApprovalCallback } from './openApproval.js';
+import { currentKeyboard, handleTradeCallback } from './tradeApproval.js';
 
 /** What handling an update needs, whichever transport delivered it. */
 export interface UpdateDeps {
@@ -613,6 +614,24 @@ async function handleCallback(
       return;
     }
   }
+  if (payload.action === 'queue' || payload.action === 'unqueue') {
+    if (!trade) {
+      // Only a trade raised while its market was closed carries these (D398).
+      await telegram?.answerCallback(callback.id, messages.buttonUnusable);
+      return;
+    }
+    await handleOpenApprovalCallback({
+      telegram,
+      ai: deps.ai,
+      userId: binding.user_id,
+      language,
+      callbackId: callback.id,
+      chatId,
+      ...(message === undefined ? {} : { message }),
+      payload: { ...payload, action: payload.action },
+    });
+    return;
+  }
   if (payload.action === 'recheck') {
     if (!trade) {
       // Only an expired trade is ever rendered with Re-check.
@@ -705,7 +724,9 @@ async function handleCallback(
       payload.proposalId,
       trade && result.state === 'expired' && (await recheckOffered(binding.user_id, payload.proposalId))
         ? 'recheck'
-        : keyboardFor(
+        : trade
+          ? await currentKeyboard(binding.user_id, payload.proposalId, new Date())
+          : keyboardFor(
             result.state,
             result.state === 'approved' &&
               (await undoIsOpen(binding.user_id, payload.proposalId, new Date())),

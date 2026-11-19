@@ -684,6 +684,24 @@
         "sell": "Confirm: receive {{total}}"
       },
       "cancel": "Cancel",
+      "openApproval": {
+        "approve": "Approve at the open",
+        "inFlight": "Approving for the open…",
+        "closedNote": "The market is closed. It opens {{time}}: approve it now for the open, and it fills then if the price is within 3% of the agent's.",
+        "queued": "Approved for the open: it fills {{time}} if the price is within 3% of the agent's and the cash is there. You will get a message either way.",
+        "cancel": "Cancel approval",
+        "cancelInFlight": "Cancelling…",
+        "failed": "The approval for the open could not be saved. Try again.",
+        "cancelFailed": "The approval could not be cancelled. Try again.",
+        "marketOpen": "The market is open now: approve it at the live price.",
+        "refused": "At the open it was not filled: {{reason}} You can still approve or reject it.",
+        "reasons": {
+          "priceFarFromAgent": "the price was more than 3% from the agent's.",
+          "insufficientCash": "the agent did not have the cash for it and its fee.",
+          "insufficientHolding": "the agent no longer held enough shares.",
+          "other": "the trade was refused."
+        }
+      },
       "errors": {
         "priceFarFromAgent": "The price is {{live}}, {{distance}} from the agent's {{agent}} - more than 3%. The agent decided at a price that no longer holds: reject it, or try again later.",
         "expired": "This proposal has expired.",

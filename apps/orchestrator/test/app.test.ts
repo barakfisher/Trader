@@ -95,6 +95,8 @@ vi.mock('../src/db/queries.js', () => ({
   replaceTargetWeights: vi.fn(async () => 0),
   transaction: vi.fn(async (fn: (client: unknown) => Promise<unknown>) => fn({})),
   recordOpsEvent: vi.fn(async () => undefined),
+  hasDueOpenApprovals: vi.fn(async () => false),
+  listDueOpenApprovals: vi.fn(async () => []),
 }));
 
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');
@@ -591,6 +593,31 @@ describe('API', () => {
       expect.objectContaining({ userId: null, agentId: null, runKey: expect.stringMatching(/^news_collect:installation:/) }),
     );
     expect(queries.listActiveUsersAnalysedInstruments).toHaveBeenCalled();
+  });
+
+  it('answers a minute with no approval for the open due without writing a run (D401)', async () => {
+    vi.mocked(queries.hasDueOpenApprovals).mockResolvedValueOnce(false);
+    const response = await app.request('/internal/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
+      body: JSON.stringify({ kind: 'open_approvals', trigger: 'scheduler' }),
+    });
+    expect(await response.json()).toMatchObject({ status: 'skipped' });
+    expect(queries.claimRun).not.toHaveBeenCalled();
+  });
+
+  it("claims the installation's one-minute run when an approval for the open is due (D401)", async () => {
+    vi.mocked(queries.hasDueOpenApprovals).mockResolvedValueOnce(true);
+    const response = await app.request('/internal/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
+      body: JSON.stringify({ kind: 'open_approvals', trigger: 'scheduler' }),
+    });
+    expect(await response.json()).toMatchObject({ status: 'ok', result: { filled: 0, retrying: 0 } });
+    expect(queries.claimRun).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'open_approvals', userId: null, runKey: expect.stringMatching(/^open_approvals:installation:/) }),
+    );
+    expect(queries.listDueOpenApprovals).toHaveBeenCalled();
   });
 
   it('refuses a named user who is not active', async () => {

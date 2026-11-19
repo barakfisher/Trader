@@ -60,6 +60,7 @@ import { scanCostOf } from '../services/scanCost.js';
 import { toScanSummary } from '../services/scanSummary.js';
 import { valuePortfolio } from '../services/valuation.js';
 import type { InlineButton, InlineKeyboard, TelegramNotifier } from './client.js';
+import { tradeKeyboard } from './tradeApproval.js';
 import { encodeAgentActionData, type AgentActionPayload } from './agentActionToken.js';
 import { encodeMenuData, QUICK_MUTE_HOURS, type MenuTap, type MenuView } from './menuData.js';
 
@@ -328,7 +329,12 @@ async function proposalScreen(
   );
   return {
     text: lines.join('\n'),
-    keyboard: deps.telegram.proposalButtons(row.id, isTradeProposalKind(row.kind) ? 'trade' : 'decide', language),
+    keyboard: deps.telegram.proposalButtons(
+      row.id,
+      // A trade waiting for its market reads Approve at the open, or Cancel once approved for it (D398).
+      isTradeProposalKind(row.kind) ? tradeKeyboard(row, state, reader.now) : 'decide',
+      language,
+    ),
   };
 }
 

@@ -173,3 +173,17 @@ export function approvalErrorMessage(error: unknown, fallback: string, currency 
       return tradeErrorMessage(error, fallback, currency);
   }
 }
+
+/** Why the open did not fill a trade approved for it, from the refusal's code (D399). */
+export function openRefusalReason(code: string | null): string {
+  switch (code) {
+    case 'price_far_from_agent':
+      return t('proposal.trade.openApproval.reasons.priceFarFromAgent');
+    case 'insufficient_cash':
+      return t('proposal.trade.openApproval.reasons.insufficientCash');
+    case 'insufficient_holding':
+      return t('proposal.trade.openApproval.reasons.insufficientHolding');
+    default:
+      return t('proposal.trade.openApproval.reasons.other');
+  }
+}

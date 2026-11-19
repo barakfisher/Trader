@@ -47,7 +47,17 @@ const MAC_BYTES = 16;
 const NONCE_BYTES = 8;
 
 /** Wire spellings, one character each - the budget does not stretch to words. */
-const ACTION_CODES = { approve: 'a', reject: 'r', snooze: 's', undo: 'u', confirm: 'c', recheck: 'k' } as const;
+/** `queue` approves a trade for the open, `unqueue` takes that back (D398). */
+const ACTION_CODES = {
+  approve: 'a',
+  reject: 'r',
+  snooze: 's',
+  undo: 'u',
+  confirm: 'c',
+  recheck: 'k',
+  queue: 'q',
+  unqueue: 'x',
+} as const;
 
 /** base64url of `NONCE_BYTES`: fixed, so a price can follow the nonce with no separator. */
 const NONCE_CHARS = Math.ceil((NONCE_BYTES * 4) / 3);
