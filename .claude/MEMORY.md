@@ -7,7 +7,7 @@ the reasoning behind it is not, and that is what this file is for. Maintained pe
 Updated: 2026-11-20, later - **The agent plan has a new order, chosen by the user (D415): repairs first.** A review
 read the user's own account on production (SELECT only, `002a44a`, `0090`) and walked the local copy's screens; the
 numbers and the plan are in `docs/PROPOSAL-AGENT-PERFORMANCE.md` section 8, the main portfolio's advisor in 6.6.
-Documents only: no code, no deploy, `VERSION` unchanged.
+Documents only (#399): no code, no deploy, `VERSION` unchanged.
 - **Three things are broken on production today**, all measured: research's 800-token limit cuts Hebrew answers on
   Opus (71 of 118 calls; 8 of 9 runs out of allowance; 13 of 22 holdings unrated since 2026-11-09); the figure check
   refuses "ב-20 ימים" (8 of George's 18 scans, reproduced on stored evidence); and a trade proposal raised in the
@@ -7242,7 +7242,7 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
       what the user's agents look for.
     - **Consequence:** the feature does nothing on production until the user writes topics for each agent.
 415. **The agent plan's order is the updated one: repairs, the evaluation, what an agent is told, the main portfolio's
-    advisor, then statements, the watchlist and the DCF** (the user, 2026-11-20; PR number added when it opens).
+    advisor, then statements, the watchlist and the DCF** (#399, the user, 2026-11-20).
     `docs/PROPOSAL-AGENT-PERFORMANCE.md` section 8 holds the phases (A to G, and the user's flow beside them) and what
     was measured on production that day. The content of the plan of 2026-11-09 stays; the choice is the order and
     three additions it did not cover: what is broken now, the briefing and the other templates, and who advises on
