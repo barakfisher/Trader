@@ -4,9 +4,19 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-19, night - **Each agent follows topics, and its briefing offers only what its mandate allows
-(D412-D414, VERSION 0.0.10).** Not merged, not deployed. PR 4, the last of the new-listings plan; #394-#396 are merged,
-none deployed.
+Updated: 2026-11-20 - **The new-listings plan is deployed: #394-#397 on compose and production at `002a44a`, head
+`0090`.** Both databases backed up first; `0088`-`0090` rehearsed on a copy of production (about a second).
+- **First production runs, 2026-11-20 07:3x UTC, both `ok`:** `new_listings` admitted 58 listings, ANT among them
+  (`listed`); 188 more were deferred to later runs by the per-run cap. `upcoming_ipos` marked ANT, VVVV and WWB
+  listed; TRCX and RZRA are registered and not yet trading, so they are what `upcoming_ipos` shows agents now. The
+  startup universe load left all 5,223 screened members unchanged, 0 dropped.
+- **Production runs EDGAR with the default:** the server's `.env` sets neither `FILINGS_PROVIDER` nor
+  `EDGAR_USER_AGENT`, so it uses `edgar` and the generic default User-Agent.
+- **Owed:** the user types topics for Warren and George (empty until then, D414); after a week, read whether theses cite
+  `followed_topics`, `new_in_universe` or `upcoming_ipos`. No real model has read the new sections yet.
+
+Earlier: 2026-11-19, night - **Each agent follows topics, and its briefing offers only what its mandate allows
+(D412-D414, VERSION 0.0.10).** Merged (#397), deployed 2026-11-20. PR 4, the last of the new-listings plan.
 - **Why:** agents act on the briefing and hardly search (1 `search_universe` call in 80 tool calls), so it was the
   day's movers or nothing. Measured first on production: the user's two agents select no sector, industry or ETF
   category, and their instructions name a style, not topics - a briefing "from the mandate" would have shown them
@@ -21,12 +31,10 @@ none deployed.
 - **Not verified:** no real model has read a topics section (a paid run is the user's word); topic resolution was not
   measured on real topics or in Hebrew (the universe's descriptions are English); the feature does nothing until the
   user types topics for each agent after deploy.
-- **Next:** deploy #394-#397 on the user's word (compose first), then the user writes topics; after a week, read
-  whether theses cite `followed_topics`, `new_in_universe` or `upcoming_ipos`.
-- **Decisions reach 414** (next: **415**). This PR is #397.
+- **Decisions reach 414** (next: **415**).
 
 Earlier: 2026-11-19, evening - **The agents' briefing lists new listings and IPOs about to trade (D409-D411, VERSION
-0.0.9).** Merged (#396), not deployed. PR 3 of the new-listings plan.
+0.0.9).** Merged (#396), deployed 2026-11-20. PR 3 of the new-listings plan.
 - **What changed:** `build_briefing` adds `new_in_universe` (the daily screen's admissions of the last 14 days, at most
   10, largest first, tradable) and `upcoming_ipos` (registered or priced in the last 30 days, at most 10, dates and
   stages only), each left out when empty. Every agent's instructions name both and say an IPO is not tradable until it
@@ -41,7 +49,7 @@ Earlier: 2026-11-19, evening - **The agents' briefing lists new listings and IPO
   today must also set the clock it is compared with.
 - **Then:** PR 4 (above).
 
-Earlier: 2026-11-19, later - **Upcoming IPOs from SEC EDGAR (D404-D408, VERSION 0.0.8).** Merged (#395), not deployed.
+Earlier: 2026-11-19, later - **Upcoming IPOs from SEC EDGAR (D404-D408, VERSION 0.0.8).** Merged (#395), deployed 2026-11-20.
 - **Why:** PR 2 of the new-listings plan (below). Anthropic's public S-1 was on EDGAR 24 days before it listed; the
   daily screen (D402) only sees a listing once it trades.
 - **What changed:** a daily run, `upcoming_ipos` (migration `0089`), reads EDGAR through a `FilingsProvider`
@@ -70,7 +78,7 @@ Earlier: 2026-11-19, later - **Upcoming IPOs from SEC EDGAR (D404-D408, VERSION 
   looked at again unless its row is deleted (RUNBOOK).
 - **Decisions reach 408** (next: **409**). That PR is #395.
 
-Earlier: 2026-11-19 - **The daily new-listings screen (D402-D403, VERSION 0.0.7).** Merged (#394), not deployed.
+Earlier: 2026-11-19 - **The daily new-listings screen (D402-D403, VERSION 0.0.7).** Merged (#394), deployed 2026-11-20.
 - **Why:** Anthropic listed (ANT, Nasdaq) on 2026-11-19 and was in no table: the universe is a quarterly snapshot
   (2026-09-24), next due 12-24. Measured on production that day: 189 listings since the snapshot pass the screen.
 - **What changed:** a daily run, `new_listings` (migration `0088`), screens Yahoo (~18 s) and admits each new member as
