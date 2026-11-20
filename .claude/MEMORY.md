@@ -4,7 +4,23 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-20 - **The new-listings plan is deployed: #394-#397 on compose and production at `002a44a`, head
+Updated: 2026-11-20, later - **The agent plan has a new order, chosen by the user (D415): repairs first.** A review
+read the user's own account on production (SELECT only, `002a44a`, `0090`) and walked the local copy's screens; the
+numbers and the plan are in `docs/PROPOSAL-AGENT-PERFORMANCE.md` section 8, the main portfolio's advisor in 6.6.
+Documents only (#399): no code, no deploy, `VERSION` unchanged.
+- **Three things are broken on production today**, all measured: research's 800-token limit cuts Hebrew answers on
+  Opus (71 of 118 calls; 8 of 9 runs out of allowance; 13 of 22 holdings unrated since 2026-11-09); the figure check
+  refuses "ב-20 ימים" (8 of George's 18 scans, reproduced on stored evidence); and a trade proposal raised in the
+  user's quiet hours (22:00-07:00) goes to the digest's counts, so all 3 post-close proposals expired unseen.
+- **Lesson - reproduce before explaining.** The first reproduction of the Hebrew refusal passed, because its made-up
+  evidence held a "-20.2" that sourced the "20" within the half-unit tolerance. The stored evidence of a real scan
+  showed the bug. A reading of the code is a hypothesis until real evidence fails it.
+- **Next, on the user's word:** phase A. Each repair has one question first (the research limit's size, whether
+  research keeps sharing its agent's allowance, what happens when quiet hours end), asked one at a time.
+- **Do not re-propose:** default topics per template (D414). The review's plan had them; they were dropped.
+- **Decisions reach 415** (next: **416**).
+
+Earlier: 2026-11-20 - **The new-listings plan is deployed: #394-#397 on compose and production at `002a44a`, head
 `0090`.** Both databases backed up first; `0088`-`0090` rehearsed on a copy of production (about a second).
 - **First production runs, 2026-11-20 07:3x UTC, both `ok`:** `new_listings` admitted 58 listings, ANT among them
   (`listed`); 188 more were deferred to later runs by the per-run cap. `upcoming_ipos` marked ANT, VVVV and WWB
@@ -7225,6 +7241,20 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
     - *Rejected:* default topics per template (value themes for Warren, macro for George): the app would be choosing
       what the user's agents look for.
     - **Consequence:** the feature does nothing on production until the user writes topics for each agent.
+415. **The agent plan's order is the updated one: repairs, the evaluation, what an agent is told, the main portfolio's
+    advisor, then statements, the watchlist and the DCF** (#399, the user, 2026-11-20).
+    `docs/PROPOSAL-AGENT-PERFORMANCE.md` section 8 holds the phases (A to G, and the user's flow beside them) and what
+    was measured on production that day. The content of the plan of 2026-11-09 stays; the choice is the order and
+    three additions it did not cover: what is broken now, the briefing and the other templates, and who advises on
+    the real holdings.
+    - *Rejected:* the plan of 2026-11-09 as ordered (the evaluation, then statements and the DCF). Research would have
+      kept spending about 60% of its allowance on answers cut at 800 tokens, four of George's scans in ten would have
+      kept being sent back for a true Hebrew sentence, and evening proposals would have kept expiring unseen - while
+      the work served one agent's style. Every later measurement reads those same scans.
+    - *Not decided by this:* anything inside a phase. The advisor (section 6.6) is a recommendation with its questions
+      still to ask; the research limit, the allowance and the quiet-hours behaviour are each the user's.
+    - **Consequence:** phase numbers 1 to 7 in older entries (D412's "phase 3", the handoffs of 2026-11-09) mean the old
+      plan; the document's table maps them to the letters.
 
 ## Bugs that cost real time, and the lesson from each
 

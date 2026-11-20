@@ -425,3 +425,4 @@ while this file is out of date.
 | 412 | Each agent follows up to five topics, and its briefing offers only what its mandate lets it buy |
 | 413 | Five topics per agent, five candidates per topic |
 | 414 | An agent with no topics has no topics section; nothing is filled in for it |
+| 415 | The agent plan's order is the updated one: repairs, the evaluation, what an agent is told, the main portfolio's advisor, then statements, the watchlist and the DCF |

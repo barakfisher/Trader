@@ -1,6 +1,7 @@
 # Proposal: improving the agents' performance
 
-Status: **proposed, 2026-11-09. Nothing here is accepted except where section 2 says so.** It records
+Status: **proposed, 2026-11-09; the work plan was replaced on 2026-11-20 by the updated plan the user
+chose (D415, section 8). Nothing else here is accepted except where section 2 says so.** It records
 a review of a Warren Buffett prompt for one agent, what that review found in the code, and the work
 plan that follows. The only code written so far is the four shared rules in section 5 (D394).
 
@@ -31,7 +32,11 @@ shared prompt.
 | Watchlist and scans triggered by it | Recommended after the DCF, not agreed | The user |
 | Base-agent fixes, section 7 | Recommended, not agreed | The user |
 | Baseline (phase 0) | **Measured 2026-11-09**, section 8; too small to judge results. Production's starts after D396 | Next step: the user |
-| Trends | **Deferred by the user**: "we will check later what to do and how" | Revisit in phase 7 |
+| Trends | **Deferred by the user**: "we will check later what to do and how" | Revisit in phase G |
+| The order of the work | **Chosen by the user, 2026-11-20: the updated plan** (D415, section 8), after a review measured on production | Each phase starts on the user's word |
+| Who advises on the main portfolio | Recommended (section 6.6), not agreed; its questions are asked one at a time before phase D | The user |
+| Limits for research: output, order, allowance | Recommended (phase A), not agreed | The user |
+| A trade proposal raised in quiet hours | Recommended (phase A), not agreed | The user |
 
 ## 3. What the review found
 
@@ -245,9 +250,52 @@ Why they were not recommended for the shared prompt:
   to profit from after costs. Timing barely matters to a long horizon, and there is no day-trading
   horizon (D166).
 
-Options to weigh in phase 7: an earnings calendar ("do not buy the day before results", needs a new data
+Options to weigh in phase G: an earnings calendar ("do not buy the day before results", needs a new data
 source); multi-week trends, where 5, 20 and 60-day returns already exist and an agent's own instructions
 can use them; a code-computed tool reporting sample size and costs, for short-horizon agents only.
+
+### 6.6 The main portfolio's advisor (recommended 2026-11-20, not agreed)
+
+**How it works today.** The main portfolio's agent row (`agents.is_primary`) is passive by a database
+constraint: no instructions, no mandate, no model, never a scan or a trade (D1). Four things speak
+about the real holdings instead: the rules that write observations, rebalance proposals from drift
+against targets, Ask, and the daily research run. Research borrows **one simulated agent** the user
+picks on the Research page (`user_settings.research_agent_id`, D289): that agent's instructions are
+the lens, its model answers, and its daily allowance pays, shared with its own scans.
+
+**Why that is the wrong owner, measured on production (section 8, 2026-11-20):**
+
+- **The lens is a trading style, not the investor.** The user's research agent is Warren. A Buffett
+  lens rated EOSE, HODL and CIFR "sell" day after day; the user rejected three of the four proposals
+  that followed and the fourth expired. Nothing asks what the investor wants from the portfolio.
+- **One holding at a time.** Each call sees one symbol's quote, 60 days of prices, findings,
+  headlines and the market's last 20 days. It does not see the holding's weight, its cost, its gain or loss, concentration, cash or
+  the other holdings, so "trim" and "buy more" carry no size and no reason from the portfolio.
+- **A shared allowance.** Eight of nine runs stopped at the agent's daily allowance, which its own
+  scans spend too.
+- **Nothing says so on the screen.** The Research page offers a picker with no word on what follows
+  from the choice, and the main portfolio's own agent page is a stub.
+- **No targets.** The user's account has no target weights, so rebalance proposals never fire.
+
+**Recommended:** a role of its own, "portfolio advisor", settled by questions asked one at a time
+before anything is built:
+
+1. **An investor profile** on the main portfolio (goal, horizon, risk, what never to sell), written
+   by the user, instead of a borrowed persona.
+2. **Portfolio facts in the evidence**, computed in code: weight, cost and gain per holding,
+   concentration by holding and sector, cash. Money stays integer minor units (guideline 3).
+3. **Its own model and its own daily allowance**, so a scan cannot starve it.
+4. **Re-rate on change, not by the alphabet**: a holding is rated again when its price, findings or
+   news moved, or when its rating is old; a quiet holding keeps its rating and its date.
+5. **A portfolio-level view** once a week: what is concentrated, what the cash is for.
+
+*Rejected:* letting the primary agent scan and trade like a simulated one. It would propose trades on
+real money from a paper trader's prompt; the primary is passive on purpose (D1).
+*Rejected:* keeping the borrowed agent and only raising its allowance. The lens and the missing
+portfolio facts stay wrong at any budget.
+
+This overlaps M13 (advice or observation mode): the advisor must pass through `isAdvisory()` like
+research does today. Guideline 2 holds: a real-portfolio proposal is only acknowledged.
 
 ## 7. Recommended fixes to the base agent
 
@@ -391,7 +439,7 @@ The Sonnet line is 15 calls on 2026-10-07 and 08, in `llm_calls` with no matchin
 half the scans with no tool call, and a cash check that a repeated sentence satisfies. **A scan on this model costs about $0.002**,
 so measuring is cheap and need not wait.
 
-**Superseded in part by the production reading below.** Next is phase 1's evaluation (section 7.4), on the budget the user approves, before D394 reaches production: fixed
+**Superseded in part by the production readings below.** Next was the evaluation (section 7.4; phase B since 2026-11-20), on the budget the user approves, before D394 reaches production: fixed
 briefings, before and after, on Flash Lite first, reading passes without tools and repeated reasons. Then deploy compose first, then
 production, and read production's scans in full once it has about 50. Do not tune to the results above.
 D228 stays deferred. The statements work does not depend on this and can run in parallel, but its worth for Warren has not been shown here.
@@ -413,64 +461,190 @@ profiles (D396). So these 14 scans, from 2026-11-02 to 2026-11-06, are not a bas
 - **Scan memory reached all 14 scans.** The pass-after-pass rate (8 of 12) means nothing while passing was the only answer.
 - **Too small or not read:** everything about decisions. Read the scans after the load, which still run the prompts before D394.
 
-### Phase 1: prompt and settings, no new data
+#### Production, read 2026-11-20 at `002a44a` on `0090`
 
-- **Merged:** the four rules (section 5), with this document, in #386.
-- **PR:** raise the limit to 8,000 in `apps/orchestrator/src/http/routes/agents.ts` and
-  `apps/web/src/components/InstructionsField.tsx`, if the user agrees.
-- **Done on the user's word, 2026-11-09:** appendix B is the Warren template in English and Hebrew
-  (`agents.templates.warren.persona`). A template fills new agents only: **an existing Warren agent keeps its stored text**, so
-  the user pastes appendix B there and sets the settings in section 3.3. This text describes today's tools, so phase 3 has to
-  change it.
-- **Build the evaluation** (section 7.4) and run it on these rules first, as a paid run the user approves.
+The user's own account, SELECT only, scans since the universe load of 2026-11-09 13:11 UTC, read in the morning before that
+day's scans. Nine trading days: enough to see how the agents work, far too few to judge results.
 
-*Done when:* the evaluation shows the rules' effect, including a thesis that says what would prove it wrong.
+| Agent | Model | Scans | Pass | Trade | `invalid_answer` | Tool calls per scan | Per scan | Proposals: approved, rejected, expired |
+|---|---|---|---|---|---|---|---|---|
+| George | `anthropic/claude-opus-5.5` | 18 | 9 | 8 | 1 | 4.17 | $0.162 | 4, 1, 3 |
+| Warren | `anthropic/claude-opus-5.5` since 2026-11-11 | 7 | 6 | 1 | 0 | - | $0.083 | 1, 0, 0 |
 
-### Phase 2: measure the evidence gap
+Warren also ran two scans on Flash Lite before the change of model. Tool calls per scan were not split for Warren.
 
-- **PR:** log figures sourced only from the instructions (section 7.1).
+**What the agents do**
 
-*Done when:* a week of scans gives a rate, and the user decides whether to tighten.
+- **Ideas come from the movers or from what is already held.** `search_universe` is 1 of 81 tool calls. Every George buy was
+  a mover (AXON and TTEK from the losers, NVDA from the most active) or a holding bought again.
+- **No agent had sold when this was read**: 27 scans, no sell, so the Performance tab's realised result and success rate were
+  empty. **The first sell came hours later:** George's pre-open scan of 2026-11-20 proposed selling its whole NVDA position
+  (18 shares); the user approved it in Telegram before the open and the proposal's `open_approval` reads `filled` - D398's
+  first real use. It is not in the table above.
+- **Neither agent has topics or limits.** `topics` is empty on both (D414, the user's to type). Maximum position, cash buffer
+  and maximum holdings are all null: when read, Warren held 43% of its capital in PEP and George about 30% in NVDA.
+- **The theses on Opus are good**: they separate evidence from judgment, say what would prove them wrong, and say when data
+  is missing. D394's rules show.
+- **Rough results, for the record only:** George about -4.9%, Warren about -2.1%, SPY about -2.2%. The minimum fee of $7.50 a
+  trade weighs on a $1,000 budget.
 
-### Phase 3: financial statements
+**What is broken**
+
+1. **Research on the main portfolio is starved.** Eight of nine daily runs ended `budget_reached`; the eight Opus runs gave
+   44 of the 176 ratings due. `MAX_OUTPUT_TOKENS = 800` (`services/ai/app/research/run.py`) cuts a Hebrew answer: 71 of 118 calls came
+   back malformed, every one at exactly 800 completion tokens, and the retry is cut the same way. About 60% of the $3.545
+   spent bought nothing. Holdings are read `ORDER BY i.symbol` (`research/store.py`), so the same first seven to nine are
+   rated each day and 13 of 22 have had no rating since 2026-11-09. The one Flash Lite run rated 20 of 22 for $0.048.
+2. **The figure check refuses a true Hebrew sentence.** "ב-20 ימים" ("in 20 days") came back as "figures not in the
+   evidence: 20" in 8 of George's 18 scans; one ended `invalid_answer`. **Reproduced 2026-11-20** on the stored evidence of
+   the 2026-11-19 scan (`change_percent: {"20d": "-25.31"}`): the English sentence passes, the Hebrew one passes when the
+   number follows a space or a maqaf, and it is refused after a prefix hyphen ("ב-20 ימים", "ב-20 יום", "ב-20 ימי מסחר").
+   `_NUMBER_PATTERN` reads the prefix hyphen as a minus, and `_is_named_window` requires `token.isdigit()`
+   (`services/ai/app/narration/evidence_validator.py`). "20 הימים", with the article, is refused too: the unit list has no
+   "הימים". "ב-45 ימים" is refused, correctly: no key names that window.
+3. **A trade proposal raised in quiet hours reaches nobody in time.** The user's quiet hours are 22:00-07:00. George's
+   post-close scan runs about 23:15 Israel time. A trade announcement respects quiet hours
+   (`apps/orchestrator/src/services/tradeProposals.ts`, `announce`), so it goes to the digest, which shows counts only. All
+   3 post-close proposals expired; all 4 approved ones came from the 16:02 pre-open scan and were decided in Telegram within
+   28 to 80 minutes. Approving for the open (D398) does not help a proposal nobody saw.
+4. **The research lens does not fit the portfolio** (section 6.6): 29 "hold" and 15 "sell" on Opus, the sells repeating on
+   EOSE, HODL and CIFR; 3 of 4 research proposals rejected by the user.
+
+**Also read:** 22 main holdings; no target weights, so no rebalance proposal can fire; no Ask call since 2026-11-09.
+
+**Seen in the running UI the same day** (the local compose copy, Hebrew, 1280 and 375 px wide, viewing only; the research
+ratings table and an open proposal were not seen, compose has neither; production, Telegram and English were not looked at):
+
+- The dashboard's default view shows "Account" larger than "Total value": Account adds the agents' paper cash under a
+  "holdings only" caption. "Real only" shows the two equal.
+- The new-agent drawer: the Warren template sets an 8% maximum position and the budget field hints 1,000, which caps a
+  position at $80. No schedule, model or cost is shown, and the agent is created with a schedule the user never saw.
+- An agent's page opens on Holdings. Scans is a list of "No trade" rows with no reason on the row; an opened row shows the
+  tools' arguments as escaped JSON, with the thesis at the bottom. Two estimates of a scan's cost disagree on one agent.
+- Ask's introduction still says it never says what to buy or sell (stale since D386). Settings is 13 cards on one page.
+- Six pages at 375 px have no sideways overflow. The schedule card (times on the user's clock, scans and cost a day) is good.
+
+### The updated plan (chosen by the user, 2026-11-20, D415)
+
+The plan of 2026-11-09 was phases 1 to 7. Its content stays; the order changes, and three things it did not cover come in:
+what is broken today (A), what an agent is told without any new data (C), and who advises on the main portfolio (D).
+
+| Updated | Was | What |
+|---|---|---|
+| A | new | Repairs: research limits, the Hebrew window, proposals in quiet hours |
+| B | phase 1's unbuilt half | The evaluation |
+| C | section 7, items 3 and 5; phase 5's verdicts | Briefing and base prompt, no new provider; the other templates |
+| D | new | The main portfolio's advisor |
+| E | phase 3 | Financial statements |
+| F | phase 6 and section 7, item 2, without the dependence on the DCF | Agent notes and the watchlist |
+| G | phases 4 and 7; phase 5's `analysis` field | The DCF, the full Buffett prompt, trends |
+| With E | phase 2 | Log figures sourced only from the instructions (D227) |
+| Beside | new | The user's flow |
+
+**Why this order, and what the old one would have cost.** The old order went from the evaluation straight to statements and
+the DCF, which serve one agent's style. Meanwhile research would have kept spending most of its allowance on cut-off
+answers, four scans in ten would have kept being sent back for a true sentence, and every evening proposal would have kept
+expiring unseen. Repairs come first because every later measurement reads these same scans.
+
+### Phase A: repairs
+
+- **The Hebrew window** (bug, a failing test first): a number after a Hebrew prefix hyphen is a window's length when a key
+  names it; add the article form to the units. The check must not get looser: "ב-45 ימים" and "ב-20 מניות" stay refused.
+- **Research:** stop cutting answers (the output limit, and no retry of an answer that was cut by the limit); read holdings
+  least recently rated first; decide whether research keeps sharing its agent's allowance until phase D.
+- **Quiet hours:** a trade proposal still open when quiet hours end is announced then, with its buttons.
+
+Each of the three has one question for the user before it is built (the limit's size, the allowance, what happens at the
+end of quiet hours). Asked one at a time.
+
+*Done when:* a research run on production rates every holding within its allowance; a week of scans has no refusal of a
+named window; a proposal raised at 23:15 is on the user's phone at 07:00. Each is read on production after a deploy.
+
+### Phase B: the evaluation
+
+- **Build it** (section 7.4): a fixed set of stored briefings, run before and after a prompt change through Langfuse, on
+  Flash Lite first. Reading: passes without tools, repeated reasons, refusals by kind, a thesis that says what would prove
+  it wrong. A paid run, so the user approves each one and its budget.
+
+*Done when:* it shows the effect of D394's rules, and phase C's changes are judged by it before they are deployed.
+
+### Phase C: what an agent is told, with no new provider
+
+- **Holdings first, with what a holder knows:** weight, gain or loss, days held, and the thesis and the "what would prove me
+  wrong" the agent wrote when it bought. Today a holding carries quantity, cost, date and findings.
+- **A verdict per holding** (`hold`, `watch`, `exit`; section 7.3), so keeping a holding becomes a decision that can be read each time.
+- **Market context:** the index's move, and which slot this scan is (before the open, after the close).
+- **Tools:** a company's description (stored for the universe since D396, whose owner-only premise has to be settled
+  first), and news by topic or for the market, since `get_news` needs a symbol today.
+- **The other templates:** George, Ray and Cathie are three or four sentences; Warren's has a structure (what to look for,
+  what to avoid, when to sell, what the data cannot show). Rewrite the three the same way, in both languages.
+- **Check Ask** against the same rules (section 7.5).
+
+A template does not fill topics: D414 rejected default topics per template, and nothing measured since changes that.
+The instructions limit (4,000 to 8,000; `apps/orchestrator/src/http/routes/agents.ts` and
+`apps/web/src/components/InstructionsField.tsx`) is asked here if a rewritten template needs it.
+
+*Done when:* the evaluation shows fewer scans that open on the movers alone, and a pass names each holding's verdict.
+
+### Phase D: the main portfolio's advisor
+
+Section 6.6. Its questions come first, one at a time; the first PR's scope is agreed before it starts.
+
+*Done when:* every holding has a rating no older than the agreed age, each rating names the holding's weight and gain from
+the evidence, and the Research page says who rates and what it costs.
+
+### Phase E: financial statements
 
 - **Decided:** our own bounded mapping over `companyfacts` (section 4.2). The first PR's scope is agreed with the user before it starts.
 - **PR:** `FundamentalsProvider`, shared stored statements, `get_fundamentals`; ROIC, FCF and debt to EBIT computed in code,
-  in research evidence too.
+  in research evidence too. Appendix B, the Warren template, describes today's tools, so this phase changes it; an
+  existing agent keeps its stored text, so the user pastes the new one.
+- **PR, beside it:** log figures sourced only from the instructions (section 7.1, D227), then a week of scans gives a rate
+  and the user decides whether to tighten.
 
 *Done when:* a thesis can quote a ROIC the validator traces to a tool result; a missing field is `null` and the agent says
 so; tests stay hermetic on fixtures. Empty, stale and source-down cases are covered.
 
-### Phase 4: the DCF
+### Phase F: agent notes and the watchlist
 
-- **PR:** `get_intrinsic_value`, assumptions as constants, returning the inputs and the discount to price.
-
-*Done when:* the calculation is deterministic and tested against constants; banks and insurers answer "not available".
-
-### Phase 5: output format
-
-- **PR:** `analysis`, `hold` and `watch` (section 6.3), through the validator, the web and the catalogues.
-
-*Done when:* an absent section shows nothing, every language passes CI, and Telegram is unchanged.
-
-### Phase 6: watchlist and triggered scans
-
-- **PR:** the watchlist (section 6.4) with empty, loading, error and permission-denied states.
+- **PR:** the watchlist (section 6.4) with empty, loading, error and permission-denied states. It starts as symbol, reason and
+  date, which today vanish after three scans; a value joins it in phase G. This is the one change to section 6.4, which
+  placed the watchlist after the DCF.
 - **PR:** scans triggered by a price crossing, and movers by agent (section 7.2).
 
 *Done when:* the cost per agent is measured against phase 0.
 
-### Phase 7: the full Buffett prompt and trends
+### Phase G: the DCF, the full Buffett prompt and trends
 
-- Rewrite appendix A: fix section 3.2's contradictions, drop what the system already says, and use phases 3-6. Tax waits for M12.
+- **PR:** `get_intrinsic_value`, assumptions as constants, returning the inputs and the discount to price. Deterministic,
+  tested against constants; banks and insurers answer "not available".
+- **PR:** the optional `analysis` field (section 6.3), through the validator, the web and the catalogues.
+- Rewrite appendix A: fix section 3.2's contradictions, drop what the system already says, and use phases E to G. Tax waits
+  for M12.
 - Weigh the trend options in section 6.5.
 
 *Done when:* the prompt saves, passes the evaluation and the instructions check finds no conflict with its settings.
 
+### Beside the plan: the user's flow
+
+Small PRs between phases, each on the user's word, in this order:
+
+1. The dashboard's main figure counts real money only; paper cash is shown apart.
+2. The new-agent drawer: a template's position limit against the budget, and the schedule, model and cost a day before saving.
+3. The reason for "No trade" on the scan's row; readable tool calls when a row is opened.
+4. An agent's page opens on its last decision.
+5. Stale wording: Ask's introduction; the empty proposals inbox.
+6. A first-run path, and the own-key requirement shown where it blocks (the product review's top findings, `docs/reviews/`).
+
+### No code needed, the user's own
+
+Type topics for each agent (D414). Set a maximum position and a cash buffer on both. Raise Warren's paper budget if a
+$7.50 fee on a $430 position is not the test wanted. Set target weights if rebalance proposals are wanted.
+
 ### Order
 
-Phases 0-2 cost little and improve every agent, so they come first. Phases 3 and 4 are what make the Buffett prompt real. Phases 5
-and 6 depend on them. M12 (tax) and D228 (research sub-agent, tool picker) stay where they are.
+A before everything. B before C, so C is judged by it. D can start once A's research repairs are read on production. E to G
+keep their old order. M12 (tax) and D228 (research sub-agent, tool picker) stay where they are.
 
 ### Non-goals
 
