@@ -238,6 +238,65 @@ def test_a_window_no_key_names_is_still_a_figure():
     assert unsourced_figures("A 60-dayish range.", evidence) == ["60"]
 
 
+#: Shaped like a real `get_price_history` answer (`app/agents/tools.py`): each window
+#: is a key of `change_percent`, and no value is within half a unit of 20 or 45. The
+#: first attempt to reproduce the refusal passed because its made-up evidence held a
+#: "-20.2", which sourced the "20" by rounding (2026-11-20).
+PRICE_HISTORY = {
+    "symbol": "NVDA",
+    "currency": "USD",
+    "last_close": "142.87",
+    "last_close_date": "2026-11-19",
+    "trading_days": 60,
+    "change_percent": {"5d": "-8.14", "20d": "-25.31", "60d": "-12.66", "period": "-12.66"},
+    "high": "196.38",
+    "low": "139.02",
+    "closes": [
+        {"date": "2026-08-26", "close": "163.58"},
+        {"date": "2026-10-22", "close": "191.28"},
+        {"date": "2026-11-19", "close": "142.87"},
+    ],
+}
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "המניה ירדה 25.31% ב-20 ימים.",
+        "ירידה של 25.31% ב-20 יום.",
+        "ירידה של 25.31% ב-20 ימי מסחר.",
+        "ירידה של 25.31% ב‑20 ימים.",  # U+2011, the hyphen a model often writes
+        "ירידה של 12.66% ב-60 הימים האחרונים, ושל 8.14% ב-5 הימים האחרונים.",
+        "ירידה של 25.31% במהלך 20 הימים האחרונים.",
+    ],
+)
+def test_a_hebrew_window_after_a_prefix_hyphen_is_not_a_figure(text):
+    # Measured on production 2026-11-20: "ב-20 ימים" ("in 20 days") was refused as an
+    # unsourced "20" in 8 of an agent's 18 scans, though a key named the window. The
+    # prefix's hyphen was read as a minus, and "הימים" ("the days") was no unit.
+    assert unsourced_figures(text, PRICE_HISTORY) == [], text
+
+
+def test_a_hebrew_prefix_hyphen_sources_nothing_a_key_does_not_name():
+    # No key names 45 days.
+    assert unsourced_figures("ירידה של 25.31% ב-45 ימים.", PRICE_HISTORY) == ["45"]
+    assert unsourced_figures("ירידה של 25.31% ב-45 הימים האחרונים.", PRICE_HISTORY) == ["45"]
+    # Twenty shares are a quantity, not a window.
+    assert unsourced_figures("ירידה של 25.31% ב-20 מניות.", PRICE_HISTORY) == ["20"]
+    # The right length in the wrong unit is not the window the key names.
+    assert unsourced_figures("ירידה של 25.31% ב-20 השבועות האחרונים.", PRICE_HISTORY) == ["20"]
+    # A minus the writer wrote is a minus: only a hyphen glued to a Hebrew word is a prefix's.
+    assert unsourced_figures("שינוי של -20 ימים.", PRICE_HISTORY) == ["-20"]
+    # In English a hyphen before a number joins a qualifier, and "sub-20" is not 20.
+    assert unsourced_figures("A sub-20 day slide.", PRICE_HISTORY) == ["20"]
+
+
+def test_a_hebrew_window_with_the_article_is_read_in_every_unit():
+    evidence = {"range": {"52w": None, "6m": None, "5y": None}}
+    for text in ("ב-52 השבועות האחרונים.", "ב-6 החודשים האחרונים.", "ב-5 השנים האחרונות."):
+        assert unsourced_figures(text, evidence) == [], text
+
+
 def test_quotes_any_finds_one_figure_of_the_evidence_in_the_text() -> None:
     idle = {"amount": "750.00", "percent_of_capital": "75"}
     assert quotes_any("Holding 750.00 for now.", idle)

@@ -4,7 +4,30 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-20, later - **The agent plan has a new order, chosen by the user (D415): repairs first.** A review
+Updated: 2026-11-21 - **Phase A, repair 1: the figure check reads a Hebrew window (D416, VERSION 0.0.11).** Merged
+(#400), not deployed. The first of phase A's three repairs, each its own PR by the user's choice.
+- **What changed:** `evidence_validator.py` reads "ב-20 ימים" and "20 הימים האחרונים" as the window a key names
+  (`change_percent: {"20d": ...}`). The hyphen glued to a Hebrew word is dropped before the length is read, and the
+  Hebrew plurals take the article in every unit. A failing test came first, on evidence shaped like a real
+  `get_price_history` answer.
+- **Not looser:** "ב-45 ימים" (no key), "ב-20 מניות" (not a unit), "ב-20 השבועות" (wrong unit), " -20 ימים" (a real
+  minus) and "sub-20 day" stay refused, each pinned by a test.
+- **The user's answers for the other two repairs (2026-11-20):** research's output limit is 2,000 tokens and an answer
+  cut by the limit is not retried; research keeps sharing its agent's allowance until phase D, reading holdings in
+  rotation; a trade proposal held by quiet hours and still open when they end is announced then, with its buttons.
+  The user also asked for one deploy after the third merge, compose first.
+- **Measured for those answers (production, SELECT only, since 2026-11-09):** all 71 cut Opus answers begin as JSON
+  and 62 had reached `findings`, so they were cut near the end. Accepted Opus answers are 556 to 785 tokens; the
+  worst measured case is about 1,790. A call costs about $0.03, so 22 holdings are about $0.66 against a $0.50
+  allowance of which the agent's own scan has already spent $0.06 to $0.19: **no limit lets one Opus run rate all
+  22**. Rotation rates each holding about every two days; rating all 22 daily needs a larger allowance, the user's
+  own setting. Phase A's "done when" for research is read that way.
+- **Not verified:** nothing on production. Owed after deploy: a week of scans with no refusal of a named window.
+- **Local:** a worktree's venv is `uv venv --python 3.12 && uv pip install -e '.[dev]'` in `services/ai`; the main
+  checkout's venv still lacks `cryptography`.
+- **Decisions reach 416** (next: **417**).
+
+Earlier: 2026-11-20, later - **The agent plan has a new order, chosen by the user (D415): repairs first.** A review
 read the user's own account on production (SELECT only, `002a44a`, `0090`) and walked the local copy's screens; the
 numbers and the plan are in `docs/PROPOSAL-AGENT-PERFORMANCE.md` section 8, the main portfolio's advisor in 6.6.
 Documents only (#399): no code, no deploy, `VERSION` unchanged.
@@ -7255,6 +7278,18 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
       still to ask; the research limit, the allowance and the quiet-hours behaviour are each the user's.
     - **Consequence:** phase numbers 1 to 7 in older entries (D412's "phase 3", the handoffs of 2026-11-09) mean the old
       plan; the document's table maps them to the letters.
+416. **When a window's length is read, only a hyphen glued to a Hebrew word is a prefix's** (#400, 2026-11-21).
+    "ב-20 ימים" was refused as an unsourced "20" in 8 of George's 18 scans on production, though the history tool's
+    `20d` names that window: `_NUMBER_PATTERN` reads the hyphen as a minus and `_is_named_window` wants a bare whole
+    number. The hyphen is now dropped when the character before it is a Hebrew letter, and the Hebrew plural units take
+    the article ("20 הימים האחרונים"). A plain bug, fixed test-first; the argued part is the hyphen's scope.
+    - *Rejected:* reuse `_as_written`, which drops a hyphen after any letter. It is right for reporting a figure and
+      wrong here: in English a hyphen before a number joins a qualifier, and "a sub-20 day slide" would have been
+      sourced by the `20d` key while claiming a different window.
+    - *Rejected:* stop `_NUMBER_PATTERN` matching a hyphen after a letter. Every figure in the text passes through
+      it; "ב-39.69%" is matched with either sign today, and a change there moves what every check reads.
+    - **Consequence:** a window written after an English word and a hyphen stays a figure. None was seen on
+      production; if one is, it is a new measured case, not a reason to widen this one.
 
 ## Bugs that cost real time, and the lesson from each
 
