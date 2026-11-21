@@ -430,3 +430,4 @@ while this file is out of date.
 | 417 | Research's output limit is 2,000 tokens, and an answer the limit cut is not sent back |
 | 418 | Research keeps counting against its agent's daily allowance until the main portfolio has its own advisor |
 | 419 | Research reads the holding it tried longest ago first, and an attempt counts whatever its status |
+| 420 | A trade proposal held by quiet hours or a mute is announced when the hold ends, if it is still open |

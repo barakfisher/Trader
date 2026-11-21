@@ -398,6 +398,13 @@ export interface Messages {
    */
   tradeMarketClosed: (opens: { day: string | null; time: string }) => string;
   /**
+   * The first line of a trade proposal announced after it was held back (D420):
+   * when the agent raised it, in the user's zone, and what held it, so a
+   * message that arrives in the morning is not read as this morning's. `day` is
+   * set only when it was raised on an earlier local day.
+   */
+  tradeHeld: (raised: { day: string | null; time: string; reason: 'quiet_hours' | 'muted' }) => string;
+  /**
    * A research view's headline on the real portfolio (D392): the agent and its
    * word, from the catalogue; the rationale under it is the model's.
    */
@@ -854,6 +861,10 @@ const en: Messages = {
     day === null
       ? `The market is still closed; it opens at ${time}.`
       : `The market is still closed; it opens on ${day} at ${time}.`,
+  tradeHeld: ({ day, time, reason }) =>
+    `Proposed ${day === null ? '' : `on ${day} `}at ${time}, ${
+      reason === 'muted' ? 'while notifications were muted' : 'during your quiet hours'
+    }.`,
   researchProposalHeadline: (agent, action, symbol) =>
     `${agent} recommends: ${{ buy_more: 'buy more', trim: 'trim', sell: 'sell', buy: 'buy' }[action]} ${symbol}`,
   researchAcknowledgeOnly:
@@ -1456,6 +1467,10 @@ const he: Messages = {
     day === null
       ? `השוק עדיין סגור, ייפתח בשעה ${ltr(time)}.`
       : `השוק עדיין סגור, ייפתח ב${day} בשעה ${ltr(time)}.`,
+  tradeHeld: ({ day, time, reason }) =>
+    `ההצעה הועלתה ${day === null ? '' : `ב${day} `}בשעה ${ltr(time)}, ${
+      reason === 'muted' ? 'כשההתראות היו מושתקות' : 'בשעות השקט שלכם'
+    }.`,
   researchProposalHeadline: (agent, action, symbol) =>
     `המלצת ${isolated(agent)}: ${{ buy_more: 'לקנות עוד', trim: 'לצמצם', sell: 'למכור', buy: 'לקנות' }[action]} ${ltr(symbol)}`,
   researchAcknowledgeOnly:

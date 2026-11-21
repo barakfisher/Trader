@@ -2511,6 +2511,171 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe('trade proposals held back and not yet announced (D420)', () => {
+    // Its own account, erased at the end: agent_scans does not cascade from users.
+    const OWNER = randomUUID();
+    let simulated = '';
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 2 * 3_600_000);
+    const opensAt = new Date(now.getTime() + 3_600_000);
+
+    async function propose(symbol: string): Promise<{ proposalId: string; observationId: string }> {
+      const scan = (
+        await getPool().query(
+          `INSERT INTO agent_scans (user_id, agent_id, trigger, finished_at, outcome, briefing)
+           VALUES ($1, $2, 'manual', now(), 'trade', '{}') RETURNING id`,
+          [OWNER, simulated],
+        )
+      ).rows[0].id as string;
+      return queries.createTradeProposal({
+        userId: OWNER,
+        agentId: simulated,
+        scanId: scan,
+        kind: 'buy',
+        payload: { symbol, quantity: '1', priceMinor: 10_000, priceAsOf: null, currency: 'USD' },
+        expiresAt,
+        opensAt,
+        headline: `Held test proposes to buy 1 ${symbol} at 100.00`,
+        thesis: `${symbol} thesis.`,
+        localized: { he: { headline: 'h', explanation: `${symbol} thesis.` } },
+        evidence: {},
+      });
+    }
+
+    const claim = (observationId: string, channel: string, reason: string) =>
+      queries.claimNotification({
+        userId: OWNER,
+        agentId: simulated,
+        channel,
+        refKind: 'observation',
+        refId: observationId,
+        route: channel === 'digest' ? 'digest' : 'push',
+        reason,
+        status: 'pending',
+        dedupeKey: `${channel}:observation:${observationId}`,
+      });
+
+    /** This account's rows only: the list is every user's. */
+    const held = async (at: Date = now) =>
+      (await queries.listHeldTradeProposals('telegram', at)).filter((row) => row.user_id === OWNER);
+
+    beforeAll(async () => {
+      await getPool().query("INSERT INTO users (id, status, llm_cap_micro_usd) VALUES ($1, 'active', 0)", [OWNER]);
+      simulated = (
+        await getPool().query(
+          `INSERT INTO agents (user_id, slug, name, persona, budget_minor)
+           VALUES ($1, 'held-test', 'Held test', 'Patient.', 100000) RETURNING id`,
+          [OWNER],
+        )
+      ).rows[0].id as string;
+    });
+
+    afterAll(async () => {
+      await getPool().query("UPDATE users SET status = 'rejected' WHERE id = $1", [OWNER]);
+      await getPool().query('SELECT erase_account($1)', [OWNER]);
+    });
+
+    it('lists a proposal held by quiet hours or a mute, with what its message needs', async () => {
+      const quiet = await propose('ZZHQ');
+      const muted = await propose('ZZHM');
+      // Announced at once: no digest row, so it was never held.
+      const pushed = await propose('ZZHP');
+      await claim(quiet.observationId, 'digest', 'quiet_hours');
+      await claim(muted.observationId, 'digest', 'muted');
+      await claim(pushed.observationId, 'telegram', 'above_floor');
+
+      const rows = await held();
+
+      expect(rows.map((row) => [row.proposal_id, row.held_reason])).toEqual([
+        [quiet.proposalId, 'quiet_hours'],
+        [muted.proposalId, 'muted'],
+      ]);
+      expect(rows[0]).toMatchObject({
+        user_id: OWNER,
+        agent_id: simulated,
+        observation_id: quiet.observationId,
+        kind: 'buy',
+        opens_at: opensAt,
+        headline: 'Held test proposes to buy 1 ZZHQ at 100.00',
+        explanation: 'ZZHQ thesis.',
+        localized: { he: { headline: 'h', explanation: 'ZZHQ thesis.' } },
+      });
+      expect(rows[0]!.scan_id).toEqual(expect.any(String));
+      expect(rows[0]!.created_at).toBeInstanceOf(Date);
+    });
+
+    it('drops it once it is claimed on the channel, decided, or past its expiry', async () => {
+      const announced = await propose('ZZHA');
+      const decided = await propose('ZZHD');
+      const waiting = await propose('ZZHW');
+      for (const row of [announced, decided, waiting]) await claim(row.observationId, 'digest', 'quiet_hours');
+      const listed = async (at: Date = now) => (await held(at)).map((row) => row.proposal_id);
+      expect(await listed()).toEqual(expect.arrayContaining([announced.proposalId, decided.proposalId, waiting.proposalId]));
+
+      // Sent or failed, a row on the channel means it was announced there.
+      await claim(announced.observationId, 'telegram', 'above_floor');
+      await getPool().query("UPDATE proposals SET state = 'rejected', decided_at = now() WHERE id = $1", [decided.proposalId]);
+
+      expect(await listed()).not.toContain(announced.proposalId);
+      expect(await listed()).not.toContain(decided.proposalId);
+      expect(await listed()).toContain(waiting.proposalId);
+      // Another channel's claim is not this channel's.
+      expect((await queries.listHeldTradeProposals('email', now)).map((row) => row.proposal_id)).toContain(announced.proposalId);
+      // At its expiry it is no longer worth a message.
+      expect(await listed(expiresAt)).not.toContain(waiting.proposalId);
+    });
+
+    it('is not asked again once the user has answered it for the open', async () => {
+      const row = await propose('ZZHO');
+      await claim(row.observationId, 'digest', 'quiet_hours');
+      expect((await held()).map((r) => r.proposal_id)).toContain(row.proposalId);
+
+      // Approved for the open on the dashboard while it was held (D398): still pending.
+      expect(await queries.queueOpenApproval(OWNER, row.proposalId, 'web', now)).toBe(true);
+
+      expect((await held()).map((r) => r.proposal_id)).not.toContain(row.proposalId);
+    });
+
+    it("reads only the proposal's own user's notification rows", async () => {
+      const unheld = await propose('ZZHX');
+      const waiting = await propose('ZZHY');
+      await claim(waiting.observationId, 'digest', 'quiet_hours');
+      // Another user's rows that name these observations: a digest row for one
+      // that was never held, and a channel row for one that is still waiting.
+      const foreign = (observationId: string, channel: string, reason: string) =>
+        queries.claimNotification({
+          userId: USER,
+          agentId: AGENT,
+          channel,
+          refKind: 'observation',
+          refId: observationId,
+          route: channel === 'digest' ? 'digest' : 'push',
+          reason,
+          status: 'pending',
+          dedupeKey: `foreign:${randomUUID()}`,
+        });
+      expect(await foreign(unheld.observationId, 'digest', 'quiet_hours')).not.toBeNull();
+      expect(await foreign(waiting.observationId, 'telegram', 'above_floor')).not.toBeNull();
+
+      const everyone = await queries.listHeldTradeProposals('telegram', now);
+
+      expect(everyone.map((row) => row.proposal_id)).not.toContain(unheld.proposalId);
+      expect(everyone.filter((row) => row.proposal_id === waiting.proposalId)).toHaveLength(1);
+      expect(everyone.every((row) => row.user_id !== USER)).toBe(true);
+    });
+
+    it("leaves out an account that is not active", async () => {
+      const row = await propose('ZZHI');
+      await claim(row.observationId, 'digest', 'quiet_hours');
+      await getPool().query("UPDATE users SET status = 'disabled' WHERE id = $1", [OWNER]);
+      try {
+        expect(await held()).toEqual([]);
+      } finally {
+        await getPool().query("UPDATE users SET status = 'active' WHERE id = $1", [OWNER]);
+      }
+    });
+  });
+
   describe('trade proposals (0044), rolled back', () => {
     // agent_scans does not cascade from users, so everything here is rolled back.
     it('writes the observation and the proposal once per scan, and holds the constraints', async () => {

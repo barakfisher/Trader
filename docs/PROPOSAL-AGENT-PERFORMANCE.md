@@ -558,7 +558,8 @@ Each of the three has one question for the user before it is built (the limit's 
 end of quiet hours). Asked one at a time.
 
 **Built, 2026-11-21:** the Hebrew window (#400, D416); research's limit, no retry of a cut answer and the rotation
-(#401, D417-D419). **Answered by the user, 2026-11-20:** a limit of 2,000 output
+(#401, D417-D419); a held proposal announced when its hold ends (#402, D420). All three are merged;
+each "done when" below is owed until it is read on production. **Answered by the user, 2026-11-20:** a limit of 2,000 output
 tokens and no retry of an answer cut by it; research keeps sharing its agent's allowance until phase D, in rotation; a
 proposal held by quiet hours and still open when they end is announced then.
 
@@ -568,7 +569,8 @@ Opus; in rotation each holding is rated about every two days. Rating all of them
 
 *Done when:* research on production rates every holding within its allowance, over as many runs as the allowance needs
 (one run, once the allowance covers them all); a week of scans has no refusal of a
-named window; a proposal raised at 23:15 is on the user's phone at 07:00. Each is read on production after a deploy.
+named window; a proposal raised at 23:15 is on the user's phone by 07:15 (the sweep runs every quarter hour). Each is
+read on production after a deploy.
 
 ### Phase B: the evaluation
 
