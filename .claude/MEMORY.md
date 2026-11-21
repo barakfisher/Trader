@@ -4,8 +4,34 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-21, evening - **Phase A, repair 3: a trade proposal held by quiet hours is announced when they end
-(D420, VERSION 0.0.13).** Merged (#402). The last of phase A's three repairs; all three are on `main`.
+Updated: 2026-11-21, after the deploy - **Phase A is deployed: #400-#402 on compose and production at `ac4ee36`,
+VERSION 0.0.13, head `0090`.** On the user's word, compose first, then production; both databases backed up first.
+None of the three carries a migration. The grant that covered them (three PRs and one deploy) is used up.
+- **Nothing has exercised the repairs on production yet.** The deploy was on a Saturday: the market is closed until
+  Monday 2026-11-23, so no scan has proposed and no research run has called a model under the new limit. Production's
+  first proposal sweep after the deploy (09:09 UTC) answered `ok` with `heldAnnounced: 0`, which shows the new step
+  runs and nothing more: no pending proposal existed. The sweep's result is in `runs.stats` (there is no
+  `runs.result`).
+- **Compose cannot show repair 3.** It runs no scheduler on purpose (`SCHEDULER_ENABLED=false`), so the proposal sweep
+  never fires there. Compose also has no research agent assigned, so the Research page's new schedule and stop lines
+  were not seen on a running UI. On production: `/research`, the line under the agent picker.
+- **Seen on compose:** the services healthy at `ac4ee36`, and Settings' quiet-hours and mute hints in Hebrew, at the
+  desktop width and at 375 px with no sideways scroll. English was not looked at.
+- **Phase A's "done when" is still owed, and the first chances to read it are dated:**
+  - research: the run of Monday evening (about 21:17 UTC). Read malformed research calls at exactly 2,000 completion
+    tokens (near none), a `failed` rating whose problem starts "the answer was cut" if any, and on Tuesday whether
+    the run starts with the holdings Monday's did not reach;
+  - the Hebrew window: a week of scans with no refusal of a window an evidence key names;
+  - quiet hours: the first post-close scan that proposes (about 23:15 Israel time). Its observation has a `sent` row
+    on `telegram` created between 07:00 and 07:15 the next morning, and that sweep's `heldAnnounced` is above zero.
+    Nothing was sent to the real chat to test it.
+- **One Opus run still cannot rate all 22 holdings at a $0.50 allowance** (D418, the user's choice): rotation rates
+  each about every two days. All 22 daily needs about $1.00 on the research agent, the user's own setting.
+- **Four merges since the handoff of #399**, this one included; the handoff is due at five. Next is phase B (the
+  evaluation), only on the user's word.
+
+Earlier: 2026-11-21, evening - **Phase A, repair 3: a trade proposal held by quiet hours is announced when they end
+(D420, VERSION 0.0.13).** Merged (#402), deployed 2026-11-21. The last of phase A's three repairs; all three are on `main`.
 - **What changed:** the proposal sweep (every 15 minutes) now ends with `announceHeldTradeProposals`
   (`services/tradeProposals.ts`). A scan's trade proposal whose announcement went to the digest for quiet hours or a
   mute, that is still `pending` and unexpired, and whose user may be interrupted again, is sent as it would have
@@ -40,7 +66,7 @@ Updated: 2026-11-21, evening - **Phase A, repair 3: a trade proposal held by qui
 - **Decisions reach 420** (next: **421**). Three merges since the handoff of #399; the handoff is due at five.
 
 Earlier: 2026-11-21, later - **Phase A, repair 2: research stops cutting its answers and reads holdings in rotation
-(D417-D419, VERSION 0.0.12).** Merged (#401), not deployed. The second of phase A's three repairs.
+(D417-D419, VERSION 0.0.12).** Merged (#401), deployed 2026-11-21. The second of phase A's three repairs.
 - **What changed:** `research/run.py` asks for 2,000 output tokens (was 800), and an answer the limit cut is stored
   as a `failed` rating ("the answer was cut by the output limit") without a second call. The provider now says when
   an answer stopped at the limit: `LLMCompletion.truncated`, from `finish_reason: "length"`.
@@ -74,7 +100,7 @@ Earlier: 2026-11-21, later - **Phase A, repair 2: research stops cutting its ans
 - **Decisions reach 419** (next: **420**).
 
 Earlier: 2026-11-21 - **Phase A, repair 1: the figure check reads a Hebrew window (D416, VERSION 0.0.11).** Merged
-(#400), not deployed. The first of phase A's three repairs, each its own PR by the user's choice.
+(#400), deployed 2026-11-21. The first of phase A's three repairs, each its own PR by the user's choice.
 - **What changed:** `evidence_validator.py` reads "ב-20 ימים" and "20 הימים האחרונים" as the window a key names
   (`change_percent: {"20d": ...}`). The hyphen glued to a Hebrew word is dropped before the length is read, and the
   Hebrew plurals take the article in every unit. A failing test came first, on evidence shaped like a real
