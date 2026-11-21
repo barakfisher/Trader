@@ -30,10 +30,10 @@ different number:
     (`"60d": null`, `"5d": "5.29"`), which hold no number to match, and two of
     four real scans were refused for "a 60-day range" (2026-10-07). So a whole
     number written straight before a unit of time - "60-day", "over 5 days",
-    "60 יום" - is sourced when a key names that window (`60d`). A window no key
-    names is still a figure: "its worst day in 14 months" is a claim about
-    history nobody supplied. The figure a window qualifies - "up 5.29% over 5
-    days" - is checked as ever.
+    "60 יום", "ב-20 הימים האחרונים" - is sourced when a key names that window
+    (`60d`). A window no key names is still a figure: "its worst day in 14
+    months" is a claim about history nobody supplied. The figure a window
+    qualifies - "up 5.29% over 5 days" - is checked as ever.
 
 Everything else is unsourced, including a figure that is merely plausible.
 """
@@ -125,12 +125,13 @@ _MONTH_DAY = re.compile(rf"\b{_MONTH}\s+{_ORDINAL}\b{_YEAR}", re.IGNORECASE)
 
 #: A unit of time straight after a number, joined by a hyphen, a maqaf or one
 #: space - "60-day", "52 weeks", "20 ימי" - captured as its key letter (d, w, m,
-#: y). English and Hebrew, the languages a thesis is written in (D51).
+#: y). English and Hebrew, the languages a thesis is written in (D51). A Hebrew
+#: plural may carry the article: "20 הימים האחרונים" is "the last 20 days".
 _WINDOW_UNITS = {
-    "d": r"(?:trading[- ])?days?|sessions?|יום|ימים|ימי",
-    "w": r"weeks?|שבוע|שבועות",
-    "m": r"months?|חודש|חודשים",
-    "y": r"years?|שנה|שנים",
+    "d": r"(?:trading[- ])?days?|sessions?|יום|ה?ימים|ימי",
+    "w": r"weeks?|שבוע|ה?שבועות",
+    "m": r"months?|חודש|ה?חודשים",
+    "y": r"years?|שנה|ה?שנים",
 }
 _WINDOW_AFTER = {
     unit: re.compile(rf"(?:-|\u05be| )(?:{words})(?![a-z])")
@@ -138,6 +139,9 @@ _WINDOW_AFTER = {
 }
 #: A key naming a window: "5d", "60d", "52w", "change_20d".
 _WINDOW_KEY = re.compile(r"(?:^|_)(\d{1,3})([dwmy])$")
+#: The Hebrew letters, alef to tav. Only a hyphen glued to one of them is a
+#: prefix's when a window is read: an English one joins a qualifier ("sub-20").
+_HEBREW_FIRST, _HEBREW_LAST = "א", "ת"
 
 
 def is_ratio_key(key: str) -> bool:
@@ -304,8 +308,24 @@ def named_windows(evidence: object) -> set[tuple[int, str]]:
     return found
 
 
-def _is_named_window(token: str, text: str, end: int, windows: set[tuple[int, str]]) -> bool:
-    """A window's length - "60-day" - that a key in the evidence names."""
+def _after_hebrew_prefix(text: str, start: int) -> bool:
+    """Whether the hyphen at `start` is glued to a Hebrew word: "ב-20", "in 20"."""
+    return start > 0 and _HEBREW_FIRST <= text[start - 1] <= _HEBREW_LAST
+
+
+def _is_named_window(
+    token: str, text: str, start: int, end: int, windows: set[tuple[int, str]]
+) -> bool:
+    """A window's length - "60-day", "ב-20 ימים" - that a key in the evidence names.
+
+    The length is a whole number with no sign. Hebrew joins a preposition to a
+    number with a hyphen, which `_NUMBER_PATTERN` reads as a minus, so that one
+    hyphen is dropped first; a minus the writer wrote still names no window.
+    Measured on production 2026-11-20: "ב-20 ימים" was refused in 8 of an agent's
+    18 scans though the history tool's `20d` named it (D416).
+    """
+    if token.startswith("-") and _after_hebrew_prefix(text, start):
+        token = token[1:]
     if not token.isdigit():
         return False
     return any(
@@ -409,7 +429,7 @@ def _figures(text: str, evidence: Mapping[str, object]) -> list[tuple[str, bool]
         if written is None:
             continue
         places = -written.as_tuple().exponent if written.as_tuple().exponent < 0 else 0
-        if _is_named_window(token, text, match.end(), windows):
+        if _is_named_window(token, text, match.start(), match.end(), windows):
             continue
         is_percent = _PERCENT_AFTER.match(text, match.end()) is not None
         supported = _supported(written, places, as_percent if is_percent else sourced)

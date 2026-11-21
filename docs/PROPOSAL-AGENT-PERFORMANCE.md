@@ -557,7 +557,16 @@ expiring unseen. Repairs come first because every later measurement reads these 
 Each of the three has one question for the user before it is built (the limit's size, the allowance, what happens at the
 end of quiet hours). Asked one at a time.
 
-*Done when:* a research run on production rates every holding within its allowance; a week of scans has no refusal of a
+**Built, 2026-11-21:** the Hebrew window (#400, D416). **Answered by the user, 2026-11-20:** a limit of 2,000 output
+tokens and no retry of an answer cut by it; research keeps sharing its agent's allowance until phase D, in rotation; a
+proposal held by quiet hours and still open when they end is announced then.
+
+**What the allowance allows (measured 2026-11-20):** a research call on Opus costs about $0.03, so the 22 holdings are
+about $0.66 against a $0.50 allowance that the agent's own scan has already drawn on. One run cannot rate all 22 on
+Opus; in rotation each holding is rated about every two days. Rating all of them daily needs a larger allowance.
+
+*Done when:* research on production rates every holding within its allowance, over as many runs as the allowance needs
+(one run, once the allowance covers them all); a week of scans has no refusal of a
 named window; a proposal raised at 23:15 is on the user's phone at 07:00. Each is read on production after a deploy.
 
 ### Phase B: the evaluation

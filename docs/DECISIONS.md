@@ -426,3 +426,4 @@ while this file is out of date.
 | 413 | Five topics per agent, five candidates per topic |
 | 414 | An agent with no topics has no topics section; nothing is filled in for it |
 | 415 | The agent plan's order is the updated one: repairs, the evaluation, what an agent is told, the main portfolio's advisor, then statements, the watchlist and the DCF |
+| 416 | When a window's length is read, only a hyphen glued to a Hebrew word is a prefix's |
