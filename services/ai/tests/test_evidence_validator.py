@@ -289,6 +289,14 @@ def test_a_hebrew_prefix_hyphen_sources_nothing_a_key_does_not_name():
     assert unsourced_figures("שינוי של -20 ימים.", PRICE_HISTORY) == ["-20"]
     # In English a hyphen before a number joins a qualifier, and "sub-20" is not 20.
     assert unsourced_figures("A sub-20 day slide.", PRICE_HISTORY) == ["20"]
+    # A whole Hebrew word before the hyphen is no prefix, whichever dash was written.
+    assert unsourced_figures("ירידה-20 ימים.", PRICE_HISTORY) == ["20"]
+    assert unsourced_figures("ירידה−20 ימים.", PRICE_HISTORY) == ["20"]
+
+
+@pytest.mark.parametrize("prefix", ["ב", "כ", "ל", "מ", "וב", "שב", "בכ"])
+def test_each_hebrew_prefix_before_a_window_is_read(prefix):
+    assert unsourced_figures(f"ירידה של 25.31% {prefix}-20 ימים.", PRICE_HISTORY) == []
 
 
 def test_a_hebrew_window_with_the_article_is_read_in_every_unit():

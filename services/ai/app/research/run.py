@@ -54,6 +54,7 @@ from app.research.evidence import holding_evidence, market_evidence
 from app.research.rating import (
     HELD_RATINGS,
     MAX_FINDINGS,
+    NOT_JSON,
     UNHELD_RATINGS,
     UNSOURCED_PREFIX,
     ParsedRating,
@@ -236,9 +237,10 @@ async def _rate(
         tally.cost_micro_usd += completion.estimated_cost_micro_usd
         model = completion.model
         parsed, problems = parse_rating(completion.text, held=held)
-        if parsed is None and completion.truncated:
+        if completion.truncated and problems == [NOT_JSON]:
             # Not sent back: the retry repeats the whole prompt under the same
             # limit. On production 16 retries of a cut answer were cut again.
+            # An answer that reached the limit whole is checked like any other.
             await llm.record_verdict(completion.call_id, "malformed")
             return None, [f"{CUT_BY_LIMIT} ({MAX_OUTPUT_TOKENS} tokens)"], model
         if parsed is not None:

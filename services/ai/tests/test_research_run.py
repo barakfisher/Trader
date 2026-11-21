@@ -17,6 +17,7 @@ from app.agents.scan_budget import AgentBudget
 from app.agents.scan_log import ScanAgent
 from app.llm.base import LLMCompletion, TokenUsage
 from app.research import run as research_run
+from app.research.rating import MAX_RATIONALE_CHARS, UNSOURCED_PREFIX
 from app.research.run import (
     CUT_BY_LIMIT,
     MAX_OUTPUT_TOKENS,
@@ -135,3 +136,28 @@ async def test_a_whole_answer_that_reached_the_limit_is_kept() -> None:
 
     assert parsed is not None and problems == []
     assert llm.verdicts == ["accepted"]
+
+
+async def test_a_whole_answer_at_the_limit_that_a_check_refuses_still_goes_back() -> None:
+    # Whole JSON whose rationale is too long: the limit did not cut it, so asking
+    # again can fix it, and it is not stored as a cut answer.
+    long = json.dumps({"rating": "hold", "rationale": "x" * (MAX_RATIONALE_CHARS + 1)})
+    llm = ScriptedLLM(_completion(long, truncated=True), _completion(WHOLE))
+
+    parsed, problems, _tally = await _rate(llm)
+
+    assert parsed is not None and problems == []
+    assert len(llm.calls) == RESEARCH_ATTEMPTS
+
+
+async def test_an_unsourced_figure_goes_back_once_and_is_then_refused() -> None:
+    invented = json.dumps({"rating": "hold", "rationale": "CCJ is a buy at 99.99."})
+    llm = ScriptedLLM(*([_completion(invented)] * RESEARCH_ATTEMPTS))
+
+    parsed, problems, tally = await _rate(llm)
+
+    assert parsed is None
+    assert len(problems) == 1 and problems[0].startswith(UNSOURCED_PREFIX)
+    assert len(llm.calls) == RESEARCH_ATTEMPTS
+    assert tally.cost_micro_usd == RESEARCH_ATTEMPTS * CALL_COST
+    assert llm.verdicts == ["unsourced_figures"] * RESEARCH_ATTEMPTS

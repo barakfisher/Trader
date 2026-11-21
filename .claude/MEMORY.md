@@ -17,8 +17,18 @@ Updated: 2026-11-21, later - **Phase A, repair 2: research stops cutting its ans
 - **No migration.** The rotation is a lateral read of `research_ratings` by user and instrument; the only index
   there is partial (`status = 'rated'`), which is fine at hundreds of rows a user and worth a look at thousands.
 - **Deliberate:** a cut answer's `llm_calls.verdict` stays `malformed` (a new verdict needs a migration of the CHECK);
-  the rating's problem text is what tells a cut from a refusal. A whole answer that reached the limit after its
-  closing brace parses and is kept.
+  the rating's problem text is what tells a cut from a refusal. "Cut" means the provider said so *and* the text is
+  not a JSON object (`rating.NOT_JSON`): a whole answer that reached the limit is checked, and sent back, like any other.
+- **An independent QA pass (`bf-qa`) read #400 and this PR** and found no blocker; three things came of it, all here.
+  The rotation test had one rating per holding and one user, so `min()` for `max()` or a missing `user_id` would
+  have passed: it now has both. A whole answer at the limit that failed a form check was being stored as cut. And
+  #400's hyphen rule took any Hebrew letter, so "ירידה-20 ימים" read as a window: it is now a standing prefix only
+  (D416, amended). Its differential run of #400 against the old validator, about 1.9 million text and evidence
+  pairs, found no text accepted beyond the Hebrew windows.
+- **Side effect - the guards refuse a little earlier.** The pre-call ceilings (`llm/budget.py`, `llm/monthly_cap.py`)
+  price a call at its output limit, so each research call now reserves 2,000 tokens of output, not 800: about
+  $0.03 more on Opus. A run stops that much sooner before the installation's daily ceiling or a user's monthly
+  limit; the agent's own allowance is checked on what was spent and is unaffected.
 - **Not verified:** no real model has answered under the new limit (a paid run is the user's word), and
   `finish_reason: "length"` was not observed live from OpenRouter for Opus: the 71 cut calls sat at exactly 800
   completion tokens, which is what that reason means, but `llm_calls` does not store it. **After deploy, read:**
@@ -7314,12 +7324,15 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
       it; "ב-39.69%" is matched with either sign today, and a change there moves what every check reads.
     - **Consequence:** a window written after an English word and a hyphen stays a figure. None was seen on
       production; if one is, it is a new measured case, not a reason to widen this one.
+    - **Amended in #401, after the QA pass:** "a Hebrew word" was any Hebrew letter before the hyphen, so "ירידה-20
+      ימים" ("a decline-20 days") read as the `20d` window. The rule is now a standing prefix: one to three of the
+      joining letters (משה וכלב) with no letter before them, which covers "ב-", "כ-", "ול-", "שב-" and "בכ-".
 417. **Research's output limit is 2,000 tokens, and an answer the limit cut is not sent back** (#401, the user,
     2026-11-20). At 800, 71 of 118 Hebrew answers on Opus were cut on production: all began as JSON and 62 had reached
     `findings`, so they were whole-looking answers stopped near the end. An accepted answer took 556 to 785 tokens;
     the longest accepted answer at the lowest measured characters per token needs about 1,790. A cut answer is
-    known from the provider (`LLMCompletion.truncated`, `finish_reason: "length"`) and stored as a `failed` rating
-    with its reason; the holding waits for its next turn (D419).
+    one the provider stopped at the limit (`LLMCompletion.truncated`, `finish_reason: "length"`) whose text is not a
+    JSON object; it is stored as a `failed` rating with its reason, and the holding waits for its next turn (D419).
     - *Rejected:* 1,500, the scans' limit. It covers the usual answer and still cuts the worst measured one.
     - *Rejected:* one retry asking for a shorter answer. A retry repeats the whole prompt, about $0.03 on Opus from
       the same allowance, and 16 retries of a cut answer on production were cut again.

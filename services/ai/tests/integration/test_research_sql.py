@@ -267,6 +267,51 @@ async def test_the_holding_tried_longest_ago_is_read_first(
     await _run(loaded, agent, llm, at=NOW + ABANDONED_AFTER)
     assert order() == ["CCJ", "NXE"]
 
+    # CCJ again, so it has an old attempt and a new one: the newest is what counts,
+    # and CCJ, first tried before NXE, is now behind it.
+    llm = ScriptedLLM(_rating("hold"), OwnKeyRequiredError("own_key_required"))
+    await _run(loaded, agent, llm, at=NOW + 2 * ABANDONED_AFTER)
+    assert order() == ["NXE", "CCJ"]
+
+    # Another user's research of the same stock is not this user's attempt.
+    with loaded.begin() as connection:
+        other = connection.execute(
+            text(
+                "INSERT INTO users (role, status, llm_cap_micro_usd) "
+                "VALUES ('user', 'active', 10000000) RETURNING id::text"
+            )
+        ).scalar_one()
+        other_agent = connection.execute(
+            text(
+                "INSERT INTO agents (user_id, slug, name, persona, budget_minor) "
+                "VALUES (CAST(:u AS uuid), 'analyst', 'Analyst', 'Patient.', 100000) "
+                "RETURNING id::text"
+            ),
+            {"u": other},
+        ).scalar_one()
+        run = connection.execute(
+            text(
+                "INSERT INTO research_runs (user_id, agent_id, trigger, started_at) "
+                "VALUES (CAST(:u AS uuid), CAST(:a AS uuid), 'manual', :at) RETURNING id::text"
+            ),
+            {"u": other, "a": other_agent, "at": NOW + 3 * ABANDONED_AFTER},
+        ).scalar_one()
+        connection.execute(
+            text(
+                "INSERT INTO research_ratings (run_id, user_id, agent_id, instrument_id, symbol, "
+                "status, problems, created_at) VALUES (CAST(:r AS uuid), CAST(:u AS uuid), "
+                "CAST(:a AS uuid), CAST(:i AS uuid), 'NXE', 'failed', '[]', :at)"
+            ),
+            {
+                "r": run,
+                "u": other,
+                "a": other_agent,
+                "i": _instrument(loaded, "NXE"),
+                "at": NOW + 3 * ABANDONED_AFTER,
+            },
+        )
+    assert order() == ["NXE", "CCJ"]
+
 
 async def test_a_failed_call_fails_that_holding_only(loaded: Engine, agent: ScanAgent) -> None:
     llm = ScriptedLLM(LLMTimeoutError("scripted", 30), _rating("trim", "NXE trades at 8.12."))

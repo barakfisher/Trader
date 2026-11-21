@@ -139,9 +139,13 @@ _WINDOW_AFTER = {
 }
 #: A key naming a window: "5d", "60d", "52w", "change_20d".
 _WINDOW_KEY = re.compile(r"(?:^|_)(\d{1,3})([dwmy])$")
-#: The Hebrew letters, alef to tav. Only a hyphen glued to one of them is a
-#: prefix's when a window is read: an English one joins a qualifier ("sub-20").
-_HEBREW_FIRST, _HEBREW_LAST = "א", "ת"
+#: A Hebrew prefix standing before a number's hyphen: one to three of the
+#: letters that join a word ("ב-", "כ-", "ול-", "שב-"), with no letter before
+#: them. Only that hyphen is a prefix's when a window is read. A whole word's
+#: is not ("ירידה-20"), and an English one joins a qualifier ("sub-20").
+_HEBREW_PREFIX = re.compile(r"(?<![א-ת])[משהוכלב]{1,3}$")
+#: The most text `_HEBREW_PREFIX` reads: three letters and the one before them.
+_HEBREW_PREFIX_REACH = 4
 
 
 def is_ratio_key(key: str) -> bool:
@@ -309,8 +313,9 @@ def named_windows(evidence: object) -> set[tuple[int, str]]:
 
 
 def _after_hebrew_prefix(text: str, start: int) -> bool:
-    """Whether the hyphen at `start` is glued to a Hebrew word: "ב-20", "in 20"."""
-    return start > 0 and _HEBREW_FIRST <= text[start - 1] <= _HEBREW_LAST
+    """Whether the hyphen at `start` follows a Hebrew prefix: "ב-20", "in 20"."""
+    before = text[max(0, start - _HEBREW_PREFIX_REACH) : start]
+    return _HEBREW_PREFIX.search(before) is not None
 
 
 def _is_named_window(
@@ -320,7 +325,8 @@ def _is_named_window(
 
     The length is a whole number with no sign. Hebrew joins a preposition to a
     number with a hyphen, which `_NUMBER_PATTERN` reads as a minus, so that one
-    hyphen is dropped first; a minus the writer wrote still names no window.
+    hyphen is dropped first; a minus the writer wrote still names no window,
+    and neither does a hyphen after a whole word.
     Measured on production 2026-11-20: "ב-20 ימים" was refused in 8 of an agent's
     18 scans though the history tool's `20d` named it (D416).
     """
