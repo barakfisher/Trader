@@ -91,6 +91,12 @@ export interface NotifiableFinding {
   /** D400: the approval for the open this newer trade proposal replaced. */
   replacesOpenApproval?: { side: 'buy' | 'sell'; quantity: string; symbol: string };
   /**
+   * A trade proposal announced after its hold ended (D420): when the agent
+   * raised it (ISO 8601 UTC) and what held it. The message then begins by
+   * saying so.
+   */
+  heldSince?: { raisedAt: string; reason: 'quiet_hours' | 'muted' };
+  /**
    * The observation's rule, subject and evidence. Present for scan findings, so
    * a move and a drawdown on one holding can be sent as one message (decision
    * 148); a finding without them is always sent on its own.
@@ -157,20 +163,37 @@ function localDay(at: Date, timeZone: string): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(at);
 }
 
-/** "The market is still closed; it opens at 16:30", in the user's zone and language. */
-export function marketClosedLine(opensAt: string, now: Date, timeZone: string, messages: Messages): string {
-  const opens = new Date(opensAt);
+/** A moment as the user's clock shows it, with its weekday when it is not today's. */
+function clockAndDay(at: Date, now: Date, timeZone: string, messages: Messages): { day: string | null; time: string } {
   const time = new Intl.DateTimeFormat(messages.locale, {
     timeZone,
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
-  }).format(opens);
+  }).format(at);
   const day =
-    localDay(opens, timeZone) === localDay(now, timeZone)
+    localDay(at, timeZone) === localDay(now, timeZone)
       ? null
-      : new Intl.DateTimeFormat(messages.locale, { timeZone, weekday: 'long' }).format(opens);
-  return messages.tradeMarketClosed({ day, time });
+      : new Intl.DateTimeFormat(messages.locale, { timeZone, weekday: 'long' }).format(at);
+  return { day, time };
+}
+
+/** "The market is still closed; it opens at 16:30", in the user's zone and language. */
+export function marketClosedLine(opensAt: string, now: Date, timeZone: string, messages: Messages): string {
+  return messages.tradeMarketClosed(clockAndDay(new Date(opensAt), now, timeZone, messages));
+}
+
+/** "Proposed on Thursday at 23:15, during your quiet hours", in the user's zone and language. */
+export function heldLine(
+  held: NonNullable<NotifiableFinding['heldSince']>,
+  now: Date,
+  timeZone: string,
+  messages: Messages,
+): string {
+  return messages.tradeHeld({
+    ...clockAndDay(new Date(held.raisedAt), now, timeZone, messages),
+    reason: held.reason,
+  });
 }
 
 function toOutbound(
@@ -201,10 +224,16 @@ function toOutbound(
     finding.trade === true && finding.marketOpensAt !== undefined
       ? appendLine(marketClosedLine(finding.marketOpensAt, now, settings.timezone, messages), text.explanation ?? '')
       : text.explanation;
-  const explanation =
+  const replacing =
     finding.trade === true && finding.replacesOpenApproval !== undefined
       ? appendLine(messages.openApproval.replaces(finding.replacesOpenApproval), opening ?? '')
       : opening;
+  // A proposal announced after its hold ended says first when it was raised:
+  // its price is that moment's, and the message arrives hours later (D420).
+  const explanation =
+    finding.trade === true && finding.heldSince !== undefined
+      ? appendLine(heldLine(finding.heldSince, now, settings.timezone, messages), replacing ?? '')
+      : replacing;
   const body =
     finding.trade === true
       ? appendLine(explanation, messages.tradeNotAdvice)

@@ -101,6 +101,8 @@ const AAPL_PROFILE = {
 const EMPTY_BOOK = { holdings_cost_minor: '0', symbol_cost_minor: '0', held_count: 0, holds_symbol: false };
 let book = EMPTY_BOOK;
 let proposal = proposalRow();
+/** What `listHeldTradeProposals` answers: proposals held back and not yet announced (D420). */
+let heldRows: Record<string, unknown>[] = [];
 
 vi.mock('../src/db/pool.js', () => ({
   queryOne: vi.fn(async () => ({ ok: 1 })),
@@ -167,6 +169,7 @@ vi.mock('../src/db/queries.js', () => ({
   getUser: vi.fn(async () => USER),
   getOrCreateUserSettings: vi.fn(async () => settingsRow),
   claimNotification: vi.fn(async () => ({ id: 'n-1' })),
+  listHeldTradeProposals: vi.fn(async () => heldRows),
   settleNotification: vi.fn(async () => undefined),
 }));
 
@@ -242,6 +245,7 @@ beforeEach(() => {
   ledger.applied = true;
   proposal = proposalRow();
   book = EMPTY_BOOK;
+  heldRows = [];
 });
 
 describe('the expiry (D4)', () => {
@@ -710,5 +714,226 @@ describe('the other decisions on a trade (D48)', () => {
     expect(await decide('undo')).toMatchObject({ outcome: 'refused', reason: 'not_for_trades' });
     expect(queries.applyProposalTransition).not.toHaveBeenCalled();
     expect(await decide('reject')).toMatchObject({ outcome: 'applied', state: 'rejected' });
+  });
+});
+
+describe('a held proposal is announced when its hold ends (D420)', () => {
+  // Jerusalem is UTC+3 on these dates, and the quiet hours are the user's on production.
+  const QUIET = { quiet_hours_start: '22:00', quiet_hours_end: '07:00' };
+  const RAISED = new Date('2026-10-07T20:15:00Z'); // 23:15, inside the quiet hours
+  const NIGHT = new Date('2026-10-08T01:00:00Z'); // 04:00, still inside
+  const MORNING = new Date('2026-10-08T04:05:00Z'); // 07:05, just after them
+  const OPENS = new Date('2026-10-08T13:30:00Z'); // 16:30 the same local day
+  const AFTER_OPEN = new Date('2026-10-08T14:00:00Z');
+  const THESIS = 'AAPL fell 3.18% to 200.00.';
+
+  function heldRow(overrides: Record<string, unknown> = {}) {
+    return {
+      proposal_id: PROPOSAL,
+      user_id: USER.id,
+      agent_id: AGENT,
+      observation_id: 'o-1',
+      kind: 'buy',
+      scan_id: SCAN,
+      opens_at: OPENS,
+      created_at: RAISED,
+      headline: 'Value proposes to buy 3 AAPL at 200.00',
+      explanation: THESIS,
+      localized: {},
+      held_reason: 'quiet_hours',
+      ...overrides,
+    };
+  }
+
+  /** The line a held proposal's message begins with, as the catalogue writes it. */
+  function raisedLine(language: string, reason: 'quiet_hours' | 'muted'): string {
+    const messages = messagesFor(language);
+    const clock = { timeZone: USER.timezone, hour: '2-digit', minute: '2-digit', hour12: false } as const;
+    return messages.tradeHeld({
+      day: new Intl.DateTimeFormat(messages.locale, { timeZone: USER.timezone, weekday: 'long' }).format(RAISED),
+      time: new Intl.DateTimeFormat(messages.locale, clock).format(RAISED),
+      reason,
+    });
+  }
+
+  async function sweep(now: Date, settings: Record<string, unknown>) {
+    const before = settingsRow;
+    settingsRow = { ...settingsRow, ...settings };
+    const notifier = stubNotifier();
+    try {
+      return { announced: await tradeProposals.announceHeldTradeProposals(notifier, now), notifier };
+    } finally {
+      settingsRow = before;
+    }
+  }
+
+  it('sends it once quiet hours are over, with its buttons, saying first when it was raised', async () => {
+    heldRows = [heldRow()];
+
+    const { announced, notifier } = await sweep(MORNING, QUIET);
+
+    expect(announced).toBe(1);
+    expect(queries.listHeldTradeProposals).toHaveBeenCalledWith(notifier.channel, MORNING);
+    expect(queries.claimNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: notifier.channel, route: 'push', refKind: 'observation', refId: 'o-1' }),
+    );
+    expect(notifier.send).toHaveBeenCalledTimes(1);
+    // Approve at the open (D398): the market it waits for has not opened yet.
+    expect(notifier.send).toHaveBeenCalledWith(expect.objectContaining({ proposalId: PROPOSAL, trade: true, atOpen: true }));
+    // When it was raised, when the market opens, then the message as it would have been.
+    const messages = messagesFor('en');
+    expect(sentBody(notifier)).toBe(
+      [
+        raisedLine('en', 'quiet_hours'),
+        messages.tradeMarketClosed({ day: null, time: '16:30' }),
+        THESIS,
+        'Checked: price history AAPL (21 trading days) · position',
+        messages.tradeNotAdvice,
+      ].join('\n\n'),
+    );
+    expect(queries.listScanToolCalls).toHaveBeenCalledWith(USER.id, AGENT, SCAN);
+  });
+
+  it('leaves it held while quiet hours last, without reading its scan', async () => {
+    heldRows = [heldRow()];
+
+    const { announced, notifier } = await sweep(NIGHT, QUIET);
+
+    expect(announced).toBe(0);
+    expect(notifier.send).not.toHaveBeenCalled();
+    expect(queries.claimNotification).not.toHaveBeenCalled();
+    expect(queries.listScanToolCalls).not.toHaveBeenCalled();
+  });
+
+  it('leaves it held while a mute lasts, and sends it when the mute is over', async () => {
+    heldRows = [heldRow({ held_reason: 'muted' })];
+
+    const muted = await sweep(MORNING, { muted_until: new Date(MORNING.getTime() + 60_000) });
+    expect(muted.announced).toBe(0);
+    expect(muted.notifier.send).not.toHaveBeenCalled();
+
+    const over = await sweep(MORNING, { muted_until: new Date(MORNING.getTime() - 60_000) });
+    expect(over.announced).toBe(1);
+    expect(sentBody(over.notifier).startsWith(raisedLine('en', 'muted'))).toBe(true);
+  });
+
+  it('offers plain Approve once the market it waited for has opened', async () => {
+    heldRows = [heldRow({ held_reason: 'muted' })];
+
+    const { announced, notifier } = await sweep(AFTER_OPEN, {});
+
+    expect(announced).toBe(1);
+    const [message] = notifier.send.mock.calls[0] as unknown as [Record<string, unknown>];
+    expect(message).toMatchObject({ proposalId: PROPOSAL, trade: true });
+    expect(message).not.toHaveProperty('atOpen');
+    expect(sentBody(notifier)).not.toContain(messagesFor('en').tradeMarketClosed({ day: null, time: '16:30' }));
+  });
+
+  it('says it in Hebrew for a Hebrew user', async () => {
+    heldRows = [heldRow()];
+
+    const { notifier } = await sweep(MORNING, { ...QUIET, language: 'he' });
+
+    expect(sentBody(notifier).startsWith(raisedLine('he', 'quiet_hours'))).toBe(true);
+  });
+
+  it('sends nothing for a proposal another sweep already claimed on the channel', async () => {
+    heldRows = [heldRow()];
+    vi.mocked(queries.claimNotification).mockResolvedValueOnce(null);
+
+    const { announced, notifier } = await sweep(MORNING, QUIET);
+
+    expect(announced).toBe(0);
+    expect(notifier.send).not.toHaveBeenCalled();
+  });
+
+  it('names no day for a proposal raised earlier the same day', async () => {
+    // 00:30 in Jerusalem on the morning it is announced.
+    heldRows = [heldRow({ created_at: new Date('2026-10-07T21:30:00Z') })];
+
+    const { notifier } = await sweep(MORNING, QUIET);
+
+    const line = messagesFor('en').tradeHeld({ day: null, time: '00:30', reason: 'quiet_hours' });
+    expect(line).toBe('Proposed at 00:30, during your quiet hours.');
+    expect(sentBody(notifier).startsWith(`${line}\n\n`)).toBe(true);
+  });
+
+  it("reads each proposal by its own user's settings, and sends it to that user only", async () => {
+    const OTHER = '00000000-0000-0000-0000-000000000002';
+    const OTHER_AGENT = '90000000-0000-0000-0000-0000000000b2';
+    heldRows = [
+      heldRow(),
+      heldRow({ proposal_id: 'p-2', observation_id: 'o-2', scan_id: 's-2', user_id: OTHER, agent_id: OTHER_AGENT }),
+    ];
+    // The first user is still muted; the other is not, reads Hebrew and lives in New York.
+    vi.mocked(queries.getOrCreateUserSettings).mockImplementation((async (userId: string) => ({
+      ...settingsRow,
+      ...(userId === OTHER ? { language: 'he' } : { muted_until: new Date(MORNING.getTime() + 60_000) }),
+    })) as never);
+    vi.mocked(queries.getUser).mockImplementation((async (userId: string) => ({
+      ...USER,
+      id: userId,
+      timezone: userId === OTHER ? 'America/New_York' : USER.timezone,
+    })) as never);
+    const notifier = stubNotifier();
+    try {
+      expect(await tradeProposals.announceHeldTradeProposals(notifier, MORNING)).toBe(1);
+    } finally {
+      vi.mocked(queries.getOrCreateUserSettings).mockImplementation(async () => settingsRow as never);
+      vi.mocked(queries.getUser).mockImplementation(async () => USER as never);
+    }
+
+    expect(notifier.send).toHaveBeenCalledTimes(1);
+    expect(notifier.send).toHaveBeenCalledWith(expect.objectContaining({ userId: OTHER, proposalId: 'p-2', language: 'he' }));
+    expect(queries.claimNotification).toHaveBeenCalledTimes(1);
+    expect(queries.claimNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: OTHER, agentId: OTHER_AGENT, refId: 'o-2' }),
+    );
+    // Its own scan's checks, and its own clock: 16:15 on Wednesday in New York.
+    expect(queries.listScanToolCalls).toHaveBeenCalledTimes(1);
+    expect(queries.listScanToolCalls).toHaveBeenCalledWith(OTHER, OTHER_AGENT, 's-2');
+    const messages = messagesFor('he');
+    expect(sentBody(notifier).startsWith(messages.tradeHeld({ day: null, time: '16:15', reason: 'quiet_hours' }))).toBe(false);
+    const newYork = { timeZone: 'America/New_York' } as const;
+    expect(
+      sentBody(notifier).startsWith(
+        messages.tradeHeld({
+          day: new Intl.DateTimeFormat(messages.locale, { ...newYork, weekday: 'long' }).format(RAISED),
+          time: new Intl.DateTimeFormat(messages.locale, { ...newYork, hour: '2-digit', minute: '2-digit', hour12: false }).format(RAISED),
+          reason: 'quiet_hours',
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps a sell raised into an open market urgent: a mute that ends in quiet hours does not hold it (D70)', async () => {
+    heldRows = [heldRow({ kind: 'sell', opens_at: null, held_reason: 'muted' })];
+    const sell = await sweep(NIGHT, QUIET);
+    expect(sell.announced).toBe(1);
+
+    // A buy, or a sell that waits for an open, has nothing to gain from waking anyone.
+    heldRows = [heldRow({ kind: 'buy', opens_at: null, held_reason: 'muted' }), heldRow({ kind: 'sell', held_reason: 'muted' })];
+    const others = await sweep(NIGHT, QUIET);
+    expect(others.announced).toBe(0);
+    expect(others.notifier.send).not.toHaveBeenCalled();
+  });
+
+  it('answers nothing, and does not throw, when the held proposals cannot be listed', async () => {
+    vi.mocked(queries.listHeldTradeProposals).mockRejectedValueOnce(new Error('database unreachable'));
+
+    const { announced, notifier } = await sweep(MORNING, QUIET);
+
+    expect(announced).toBe(0);
+    expect(notifier.send).not.toHaveBeenCalled();
+  });
+
+  it("goes on to the next user's proposal when one cannot be read", async () => {
+    heldRows = [heldRow(), heldRow({ proposal_id: 'p-2', observation_id: 'o-2' })];
+    vi.mocked(queries.getOrCreateUserSettings).mockRejectedValueOnce(new Error('settings unreadable'));
+
+    const { announced, notifier } = await sweep(MORNING, QUIET);
+
+    expect(announced).toBe(1);
+    expect(notifier.send).toHaveBeenCalledWith(expect.objectContaining({ proposalId: 'p-2' }));
   });
 });

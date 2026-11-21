@@ -4,7 +4,42 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-21, later - **Phase A, repair 2: research stops cutting its answers and reads holdings in rotation
+Updated: 2026-11-21, evening - **Phase A, repair 3: a trade proposal held by quiet hours is announced when they end
+(D420, VERSION 0.0.13).** Merged (#402). The last of phase A's three repairs; all three are on `main`.
+- **What changed:** the proposal sweep (every 15 minutes) now ends with `announceHeldTradeProposals`
+  (`services/tradeProposals.ts`). A scan's trade proposal whose announcement went to the digest for quiet hours or a
+  mute, that is still `pending` and unexpired, and whose user may be interrupted again, is sent as it would have
+  been - thesis, evidence checked, Approve (at the open while the market is closed) and Reject - under a first line
+  saying when it was raised ("Proposed on Thursday at 23:15, during your quiet hours."). Settings' quiet-hours and
+  mute hints say so, in English and Hebrew.
+- **No migration, no new state.** The digest row (`notifications.reason` `quiet_hours` or `muted`) is the record
+  that it was held, and a row for the same observation on the notifier's channel is the record that it was
+  announced; `listHeldTradeProposals` reads both. The digest still counts the held proposal, as before.
+- **Known gaps, deliberate:**
+  - within 15 minutes of the end of quiet hours, not on the minute: the sweep's own rhythm;
+  - the line naming an approval for the open that the proposal replaced (D400) is not repeated, because nothing
+    stores which approval a proposal replaced;
+  - a channel that cannot deliver (no Telegram chat linked) settles the row `failed` and is not tried again, as
+    for a proposal announced at once;
+  - research views (D392) and Ask's drafted proposals (D393) are not covered: they do not expire within the hour.
+  - a proposal raised into an open market (no `opens_at`) whose market has closed by the time its mute ends is
+    offered plain Approve, which then answers that the market is closed. It lives one hour, so the case is narrow;
+    knowing better needs a calendar call per proposal in the sweep.
+- **An independent QA pass (`bf-qa`) read the change, isolation between users included,** and found no way for one
+  user's proposal to reach another. Three things came of it. A proposal the user had already approved for the open
+  on the dashboard while it was held was being asked again: the list now takes only `open_approval IS NULL`. A
+  failed list query would have failed the sweep run after its expiries were applied: the function never throws. And
+  a held sell had lost its urgency: a sell raised into an open market (D70) is sent when its mute ends, quiet hours
+  or not. The tests now use two users with different settings, in the mocks and in Postgres.
+- **Not verified:** nothing in a real chat. **After deploy, read:** a post-close proposal (about 23:15 Israel time)
+  has a `notifications` row on `telegram` for its observation, `sent`, created between 07:00 and 07:15 the next
+  morning; the proposal sweep's run result carries `heldAnnounced`. The first evening scan that proposes is the test.
+- **Phase A's "done when", all owed until read on production after a deploy:** research rates every holding over as
+  many runs as its allowance needs; a week of scans has no refusal of a named window; a proposal raised at 23:15
+  is on the phone by 07:15.
+- **Decisions reach 420** (next: **421**). Three merges since the handoff of #399; the handoff is due at five.
+
+Earlier: 2026-11-21, later - **Phase A, repair 2: research stops cutting its answers and reads holdings in rotation
 (D417-D419, VERSION 0.0.12).** Merged (#401), not deployed. The second of phase A's three repairs.
 - **What changed:** `research/run.py` asks for 2,000 output tokens (was 800), and an answer the limit cut is stored
   as a `failed` rating ("the answer was cut by the output limit") without a second call. The provider now says when
@@ -7358,6 +7393,22 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
     - *Rejected:* a random order. It covers everything on average and promises nothing about any one holding.
     - **Consequence:** research on one stock from its row (D369) counts as that holding's attempt and moves it to
       the back. A holding that fails keeps its last good rating on the page, marked with the failed attempt.
+420. **A trade proposal held by quiet hours or a mute is announced when the hold ends, if it is still open** (#402,
+    the user, 2026-11-20). On production all three proposals of the scan that runs at 23:15 Israel time expired
+    unseen: the announcement went to the digest, which only counts, while all four approved proposals had been
+    decided in Telegram within 80 minutes. The proposal sweep now sends a held proposal in full, with its buttons,
+    once `routeFinding` would push it, under a first line saying when it was raised.
+    - *Rejected:* send it at once without sound (Telegram's silent delivery). Less code, but nothing rings in the
+      morning either, and it works on one channel only.
+    - *Rejected:* push every trade proposal through quiet hours, as an urgent sell is (D70). It wakes the user at
+      23:15 for a trade that cannot fill before 16:30.
+    - *Rejected (mine):* a column or table for "held, to announce". The digest row already says it was held and a
+      row on the channel says it was announced; a second record of the same two facts could disagree with them.
+    - *Rejected (mine):* the one-minute `open_approvals` run as the carrier. On the minute at 07:00, but that run
+      exists to fill approved trades and answers without a run row when nothing is due; the sweep already
+      announces research views every quarter hour.
+    - **Consequence:** the message arrives up to 15 minutes after the hold ends. A mute that ends is treated the
+      same, by the user's answer. The D400 "this replaces" line is not repeated (nothing stores it).
 
 ## Bugs that cost real time, and the lesson from each
 

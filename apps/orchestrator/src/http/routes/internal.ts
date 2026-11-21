@@ -48,6 +48,7 @@ import { sweepExpiredProposals } from '../../services/proposals.js';
 import { fillDueOpenApprovals } from '../../services/openApproval.js';
 import { sweepSupersededAssistantProposals } from '../../services/assistantProposals.js';
 import { sweepResearchProposals } from '../../services/researchProposals.js';
+import { announceHeldTradeProposals } from '../../services/tradeProposals.js';
 import { planScheduledScans } from '../../services/scheduledScans.js';
 import { logger } from '../../logger.js';
 import { localDate, takeSnapshot } from '../../services/snapshot.js';
@@ -305,7 +306,11 @@ async function runForInstallation(context: Context, request: RunRequest): Promis
       const research = await sweepResearchProposals(context.get('notifier'));
       // An Ask proposal a newer rating changed closes the same way (D393).
       const assistantSuperseded = await sweepSupersededAssistantProposals();
-      return done(runId, 'ok', { expired: (await sweepExpiredProposals()).length, research, assistantSuperseded });
+      const expired = (await sweepExpiredProposals()).length;
+      // After the expiries, so a proposal whose time ran out overnight is not
+      // announced: a trade held by quiet hours or a mute that has ended (D420).
+      const heldAnnounced = await announceHeldTradeProposals(context.get('notifier'));
+      return done(runId, 'ok', { expired, research, assistantSuperseded, heldAnnounced });
     }
 
     if (kind === 'auth_sweep') {

@@ -95,6 +95,60 @@ export async function createTradeProposalIn(
   return { proposalId: row.id, observationId: row.observation_id };
 }
 
+/** A scan's trade proposal whose announcement was held back and has not been pushed since (D420). */
+export interface HeldTradeProposalRow {
+  proposal_id: string;
+  user_id: string;
+  agent_id: string;
+  observation_id: string;
+  kind: 'buy' | 'sell';
+  scan_id: string;
+  /** The open it waits for (0087); null when it was raised into an open market. */
+  opens_at: Date | null;
+  created_at: Date;
+  headline: string;
+  /** The thesis, as the model wrote it. */
+  explanation: string;
+  localized: LocalizedTexts;
+  /** Why the announcement went to the digest instead of the channel. */
+  held_reason: 'quiet_hours' | 'muted';
+}
+
+/**
+ * Trade proposals a scan raised while its user was not to be interrupted, that
+ * are still open and were never sent on `channel`. The digest row is the record
+ * that it was held (`notifications.reason`); a row on the channel, sent or
+ * failed, is the record that it was announced, so a proposal leaves this list
+ * the moment it is. One the user has already answered for the open (0087) - on
+ * the dashboard, while it was held - is not asked again.
+ */
+export function listHeldTradeProposals(channel: string, now: Date): Promise<HeldTradeProposalRow[]> {
+  return query<HeldTradeProposalRow>(
+    `-- agent-blind: every user's agents in one sweep; each row carries its user_id and agent_id.
+     SELECT p.id AS proposal_id, p.user_id, p.agent_id, p.observation_id, p.kind, p.scan_id,
+            p.opens_at, p.created_at, o.headline, o.explanation, o.localized,
+            held.reason AS held_reason
+       FROM proposals p
+       JOIN observations o ON o.id = p.observation_id AND o.user_id = p.user_id
+       JOIN users u ON u.id = p.user_id AND u.status = 'active'
+       JOIN notifications held
+         ON held.user_id = p.user_id AND held.ref_kind = 'observation'
+        AND held.ref_id = p.observation_id AND held.channel = 'digest'
+        AND held.reason IN ('quiet_hours', 'muted')
+      WHERE p.kind IN ('buy', 'sell')
+        AND p.scan_id IS NOT NULL
+        AND p.state = 'pending'
+        AND p.open_approval IS NULL
+        AND p.expires_at > $2
+        AND NOT EXISTS (
+              SELECT 1 FROM notifications sent
+               WHERE sent.user_id = p.user_id AND sent.ref_kind = 'observation'
+                 AND sent.ref_id = p.observation_id AND sent.channel = $1)
+      ORDER BY p.created_at`,
+    [channel, now],
+  );
+}
+
 export interface ProposalAttemptToRecord {
   userId: string;
   proposalId: string;
