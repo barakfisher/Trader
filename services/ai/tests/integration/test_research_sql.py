@@ -31,6 +31,7 @@ from app.llm.base import (
 from app.research.rating import UNSOURCED_PREFIX
 from app.research.run import (
     CALL_FAILED,
+    CUT_BY_LIMIT,
     RESEARCH_ATTEMPTS,
     STOP_BUDGET,
     STOP_NO_MODEL,
@@ -51,13 +52,14 @@ NOW = datetime.now(UTC)
 CALL_COST = 1_000
 
 
-def _completion(body: dict[str, Any] | str) -> LLMCompletion:
+def _completion(body: dict[str, Any] | str, *, truncated: bool = False) -> LLMCompletion:
     return LLMCompletion(
         text=body if isinstance(body, str) else json.dumps(body),
         model="scripted/model",
         usage=TokenUsage(prompt_tokens=10, completion_tokens=5),
         estimated_cost_micro_usd=CALL_COST,
         provider="scripted",
+        truncated=truncated,
     )
 
 
@@ -149,8 +151,10 @@ def _market() -> ScriptedMarket:
     return market
 
 
-async def _run(engine: Engine, agent: ScanAgent, llm: ScriptedLLM) -> tuple[str, Any]:
-    run_id = claim_run(engine, agent.user_id, agent.agent_id, "manual", NOW)
+async def _run(
+    engine: Engine, agent: ScanAgent, llm: ScriptedLLM, *, at: datetime = NOW
+) -> tuple[str, Any]:
+    run_id = claim_run(engine, agent.user_id, agent.agent_id, "manual", at)
     context = scan_context(
         engine=engine,
         market=_market(),  # type: ignore[arg-type]
@@ -170,6 +174,7 @@ async def _run(engine: Engine, agent: ScanAgent, llm: ScriptedLLM) -> tuple[str,
         run_id=run_id,
         holdings=main_holdings(engine, agent.user_id),
         trigger="manual",
+        clock=lambda: at,
     )
     return run_id, tally
 
@@ -222,6 +227,45 @@ async def test_a_refused_answer_goes_back_once_then_is_stored_refused(
     assert ccj.problems == [f"{UNSOURCED_PREFIX}: 99.99"]
     assert "Your previous answer was refused" in llm.prompts[1]
     assert llm.verdicts[:RESEARCH_ATTEMPTS] == ["unsourced_figures"] * RESEARCH_ATTEMPTS
+
+
+async def test_an_answer_cut_by_the_limit_fails_that_holding_without_a_second_call(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    cut = _completion('{"rating": "hold", "rationale": "CCJ trades at 54.32 and', truncated=True)
+    llm = ScriptedLLM(cut, _rating("sell", "NXE trades at 8.12."))
+
+    run_id, tally = await _run(loaded, agent, llm)
+
+    run, ratings = _rows(loaded, run_id)
+    assert (run.status, run.rated) == ("done", 1)
+    assert [(r.symbol, r.status) for r in ratings] == [("CCJ", "failed"), ("NXE", "rated")]
+    assert ratings[0].problems[0].startswith(CUT_BY_LIMIT)
+    # One call for the cut answer, one for NXE: the cut one was not asked again.
+    assert len(llm.prompts) == 2 and tally.cost_micro_usd == 2 * CALL_COST
+    assert llm.verdicts == ["malformed", "accepted"]
+
+
+async def test_the_holding_tried_longest_ago_is_read_first(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    def order() -> list[str]:
+        return [holding.symbol for holding in main_holdings(loaded, agent.user_id)]
+
+    # Never tried: by symbol.
+    assert order() == ["CCJ", "NXE"]
+
+    # A run that stops after CCJ: NXE was not reached, so it is first next time.
+    llm = ScriptedLLM(_rating("hold"), OwnKeyRequiredError("own_key_required"))
+    await _run(loaded, agent, llm)
+    assert order() == ["NXE", "CCJ"]
+
+    # NXE's answer is refused both times. It was tried, so CCJ's turn comes again:
+    # a holding that never passes the checks does not hold the head of the list.
+    bad = _rating(rationale="NXE is a buy at 99.99.")
+    llm = ScriptedLLM(*([bad] * RESEARCH_ATTEMPTS), OwnKeyRequiredError("own_key_required"))
+    await _run(loaded, agent, llm, at=NOW + ABANDONED_AFTER)
+    assert order() == ["CCJ", "NXE"]
 
 
 async def test_a_failed_call_fails_that_holding_only(loaded: Engine, agent: ScanAgent) -> None:

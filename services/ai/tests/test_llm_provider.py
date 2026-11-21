@@ -19,7 +19,11 @@ from app.llm.base import (
     TokenUsage,
 )
 from app.llm.null_provider import NullProvider
-from app.llm.openai_compatible import KEYLESS_PLACEHOLDER, OpenAICompatibleProvider
+from app.llm.openai_compatible import (
+    FINISH_AT_LIMIT,
+    KEYLESS_PLACEHOLDER,
+    OpenAICompatibleProvider,
+)
 from app.llm.pricing import ModelPrice, estimate_cost_micro_usd
 
 MODEL = "anthropic/claude-sonnet-4.5"
@@ -63,6 +67,18 @@ async def test_a_successful_completion_is_parsed_with_usage_and_cost():
     # Asserted against the pricing function rather than a hand-computed number,
     # so retuning a price cannot fail a test about parsing.
     assert result.estimated_cost_micro_usd == estimate_cost_micro_usd(MODEL, result.usage, PRICES)
+
+
+async def test_an_answer_stopped_at_the_output_limit_says_so():
+    cut = _body('{"rating": "hold", "rationale": "cut mid')
+    cut["choices"][0]["finish_reason"] = FINISH_AT_LIMIT
+    whole = _body()
+    whole["choices"][0]["finish_reason"] = "stop"
+
+    for body, truncated in ((cut, True), (whole, False), (_body(), False)):
+        provider = _provider(lambda request, body=body: httpx.Response(200, json=body))
+        result = await provider.complete(system=None, user="q")
+        assert result.truncated is truncated
 
 
 async def test_the_request_carries_the_prompts_model_and_credential():

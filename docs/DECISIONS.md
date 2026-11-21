@@ -427,3 +427,6 @@ while this file is out of date.
 | 414 | An agent with no topics has no topics section; nothing is filled in for it |
 | 415 | The agent plan's order is the updated one: repairs, the evaluation, what an agent is told, the main portfolio's advisor, then statements, the watchlist and the DCF |
 | 416 | When a window's length is read, only a hyphen glued to a Hebrew word is a prefix's |
+| 417 | Research's output limit is 2,000 tokens, and an answer the limit cut is not sent back |
+| 418 | Research keeps counting against its agent's daily allowance until the main portfolio has its own advisor |
+| 419 | Research reads the holding it tried longest ago first, and an attempt counts whatever its status |

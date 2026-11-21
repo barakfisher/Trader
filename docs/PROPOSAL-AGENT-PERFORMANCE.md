@@ -557,7 +557,8 @@ expiring unseen. Repairs come first because every later measurement reads these 
 Each of the three has one question for the user before it is built (the limit's size, the allowance, what happens at the
 end of quiet hours). Asked one at a time.
 
-**Built, 2026-11-21:** the Hebrew window (#400, D416). **Answered by the user, 2026-11-20:** a limit of 2,000 output
+**Built, 2026-11-21:** the Hebrew window (#400, D416); research's limit, no retry of a cut answer and the rotation
+(#401, D417-D419). **Answered by the user, 2026-11-20:** a limit of 2,000 output
 tokens and no retry of an answer cut by it; research keeps sharing its agent's allowance until phase D, in rotation; a
 proposal held by quiet hours and still open when they end is announced then.
 
