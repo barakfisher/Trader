@@ -106,6 +106,10 @@ _MAX_RETRY_AFTER_SECONDS = 10.0
 #: a credential, and never the environment's OPENAI_API_KEY.
 KEYLESS_PLACEHOLDER = "keyless"
 
+#: The `finish_reason` of an answer that stopped at `max_tokens` rather than at
+#: its own end. OpenRouter normalises every vendor's spelling to this one.
+FINISH_AT_LIMIT = "length"
+
 #: Models whose gateway honours `cache_control` on a content part. Anthropic's
 #: do through OpenRouter: the marked prefix is billed at a tenth on every later
 #: turn of the same conversation, which is most of an agent's scan (§14.1).
@@ -519,6 +523,7 @@ class OpenAICompatibleProvider:
             estimated_cost_micro_usd=cost,
             provider=self.name,
             tool_calls=tool_calls,
+            truncated=getattr(choice, "finish_reason", None) == FINISH_AT_LIMIT,
         )
 
 

@@ -98,6 +98,10 @@ class LLMCompletion:
     #: The tools the model asked for, in order (`converse` only). A turn may
     #: carry tool calls and no text; `complete` never returns one without text.
     tool_calls: tuple[ToolCall, ...] = ()
+    #: The provider stopped writing at the output limit (`finish_reason: "length"`),
+    #: so `text` ends where the limit fell, not where the model meant to. Asking
+    #: again under the same limit is cut the same way.
+    truncated: bool = False
     #: Whose key paid for it; set by `own_key.OwnKeyProvider`.
     paid_by: PaidBy = "installation"
 

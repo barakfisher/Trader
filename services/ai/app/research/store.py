@@ -56,7 +56,16 @@ def research_agent_id(engine: Engine, user_id: str) -> str | None:
 
 
 def main_holdings(engine: Engine, user_id: str) -> list[MainHolding]:
-    """The main portfolio's holdings (the primary agent's, D1), by symbol."""
+    """The main portfolio's holdings (the primary agent's, D1), the one research
+    last tried longest ago first.
+
+    A run that stops early - a spent allowance, the time limit - has read the
+    head of this list, so the order decides who is ever rated. By symbol, the
+    same first holdings were rated every day and 13 of 22 had no rating in
+    eleven days (production, 2026-11-20). A holding never tried comes first,
+    then the oldest attempt; an attempt counts whatever its status, so a
+    holding whose answer keeps being refused takes its turn and no more (D419).
+    """
     with engine.connect() as connection:
         rows = connection.execute(
             text(
@@ -65,8 +74,13 @@ def main_holdings(engine: Engine, user_id: str) -> list[MainHolding]:
                   FROM holdings h
                   JOIN agents a ON a.id = h.agent_id AND a.user_id = h.user_id AND a.is_primary
                   JOIN instruments i ON i.id = h.instrument_id
+                  LEFT JOIN LATERAL (
+                      SELECT max(r.created_at) AS tried_at
+                        FROM research_ratings r
+                       WHERE r.user_id = h.user_id AND r.instrument_id = h.instrument_id
+                  ) last ON true
                  WHERE h.user_id = CAST(:user AS uuid)
-                 ORDER BY i.symbol
+                 ORDER BY last.tried_at NULLS FIRST, i.symbol
                 """
             ),
             {"user": user_id},

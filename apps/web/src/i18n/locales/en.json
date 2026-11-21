@@ -2233,7 +2233,7 @@
     "pausedAgent": "{{name}} (paused)",
     "noAgents": "Create an agent on the Agents page first: research uses its model and its instructions as its lens.",
     "assignFailed": "The agent could not be assigned.",
-    "schedule": "{{name}} researches every holding once each trading day after the US market closes, when this installation schedules agents' scans, and whenever you run it here.",
+    "schedule": "{{name}} researches your holdings each trading day after the US market closes, when this installation schedules agents' scans, and whenever you run it here. It starts with the holding it researched longest ago.",
     "cost_one": "About one model call per holding: {{count}} call a run.",
     "cost_other": "About one model call per holding: {{count}} calls a run.",
     "run": "Run research now",
@@ -2254,8 +2254,8 @@
       "safety_limit_reached": "Your monthly safety limit on AI spending is reached. Raise it in Settings, or wait for the next month."
     },
     "stops": {
-      "budget_reached": "It stopped early: the agent's model budget for today was spent.",
-      "time_limit": "It stopped early: the run reached its time limit.",
+      "budget_reached": "It stopped early: the agent's model budget for today was spent. The holdings it did not reach come first in the next run.",
+      "time_limit": "It stopped early: the run reached its time limit. The holdings it did not reach come first in the next run.",
       "holdings_limit": "Only the first holdings were researched: a run has a limit.",
       "no_model": "It stopped: no model could be called.",
       "own_key_required": "It stopped: there is no working API key of your own.",

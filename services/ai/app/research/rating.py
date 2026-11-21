@@ -66,6 +66,8 @@ _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")
 
 #: How a problem naming unsourced figures begins.
 UNSOURCED_PREFIX = "figures not in the evidence"
+#: The one problem of an answer that could not be read at all.
+NOT_JSON = "the answer is not a JSON object"
 
 
 def ratings_for(held: bool) -> tuple[Rating, ...]:
@@ -89,9 +91,9 @@ def parse_rating(raw: str, *, held: bool) -> tuple[ParsedRating | None, list[str
     try:
         data = json.loads(body)
     except json.JSONDecodeError:
-        return None, ["the answer is not a JSON object"]
+        return None, [NOT_JSON]
     if not isinstance(data, dict):
-        return None, ["the answer is not a JSON object"]
+        return None, [NOT_JSON]
     problems: list[str] = []
     allowed = ratings_for(held)
     rating = data.get("rating")

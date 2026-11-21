@@ -3,7 +3,9 @@
 Per holding: the server gathers the evidence (`evidence.py`), the model is
 called once with it, and the answer is checked (`rating.py`). An answer that
 fails the form or figure checks goes back once with its problems, so a
-holding costs one call, or two at most (`RESEARCH_ATTEMPTS`). The run writes
+holding costs one call, or two at most (`RESEARCH_ATTEMPTS`). An answer the
+output limit cut is not sent back: the same limit cuts the second one too, and
+the holding waits for the next run (D417). The run writes
 only its own rows: a Buy more, Trim, Sell or Buy becomes an acknowledge-only
 proposal on the real portfolio afterwards, raised by the orchestrator's
 proposal sweep (D392), and nothing ever trades (guideline 2).
@@ -14,7 +16,10 @@ proposal sweep (D392), and nothing ever trades (guideline 2).
   user who is not the admin, under their safety limit (D245, D250), on the
   agent's model (D284). A refused key or a reached limit stops the run there.
 - **The agent's daily allowance** (D45) is checked before every call; research
-  counts against it beside the agent's scans.
+  counts against it beside the agent's scans, until the main portfolio has its
+  own advisor (D418). When it does not cover every holding, the run stops and
+  says why; the holdings it did not reach are read first by the next run
+  (`store.main_holdings`), so over a few runs every holding is rated.
 - **`RESEARCH_MAX_HOLDINGS`** holdings per run, and **`RESEARCH_TIME_LIMIT`**
   seconds: what is left is not researched, and the run says why.
 """
@@ -49,6 +54,7 @@ from app.research.evidence import holding_evidence, market_evidence
 from app.research.rating import (
     HELD_RATINGS,
     MAX_FINDINGS,
+    NOT_JSON,
     UNHELD_RATINGS,
     UNSOURCED_PREFIX,
     ParsedRating,
@@ -69,8 +75,12 @@ log = get_logger("research.run")
 RESEARCH_MAX_HOLDINGS = 50
 #: Calls per holding: the answer, and one retry when a check refuses it.
 RESEARCH_ATTEMPTS = 2
-#: Output tokens per call: a rating, a short rationale and a few findings.
-MAX_OUTPUT_TOKENS = 800
+#: Output tokens per call: a rating, a short rationale and a few findings. The
+#: writer is billed for what it writes, not for this limit. Sized on production
+#: (2026-11-20): at 800, 71 of 118 Hebrew answers on Opus were cut, all of them
+#: complete-looking JSON stopped near its end; an accepted one took 556 to 785
+#: tokens and the worst measured case needs about 1,790 (D417).
+MAX_OUTPUT_TOKENS = 2000
 #: Seconds a run may take; `store.ABANDONED_AFTER` is longer.
 RESEARCH_TIME_LIMIT = 900.0
 
@@ -79,9 +89,11 @@ STOP_BUDGET = "budget_reached"
 STOP_TIME = "time_limit"
 STOP_HOLDINGS = "holdings_limit"
 STOP_NO_MODEL = "no_model"
-#: How a failed holding's problem begins: its call, or its sources.
+#: How a failed holding's problem begins: its call, its sources, or an answer
+#: the output limit cut before it was whole.
 CALL_FAILED = "the model call failed"
 EVIDENCE_FAILED = "the evidence could not be read"
+CUT_BY_LIMIT = "the answer was cut by the output limit"
 
 
 #: How the prompt names each rating, by vocabulary (D392).
@@ -225,6 +237,12 @@ async def _rate(
         tally.cost_micro_usd += completion.estimated_cost_micro_usd
         model = completion.model
         parsed, problems = parse_rating(completion.text, held=held)
+        if completion.truncated and problems == [NOT_JSON]:
+            # Not sent back: the retry repeats the whole prompt under the same
+            # limit. On production 16 retries of a cut answer were cut again.
+            # An answer that reached the limit whole is checked like any other.
+            await llm.record_verdict(completion.call_id, "malformed")
+            return None, [f"{CUT_BY_LIMIT} ({MAX_OUTPUT_TOKENS} tokens)"], model
         if parsed is not None:
             problems = rating_problems(parsed, evidence)
         if parsed is not None and not problems:
@@ -298,7 +316,7 @@ async def run_research(
                         level="DEFAULT" if parsed else "WARNING",
                     )
             failed = parsed is None and any(
-                p.startswith((CALL_FAILED, EVIDENCE_FAILED)) for p in problems
+                p.startswith((CALL_FAILED, EVIDENCE_FAILED, CUT_BY_LIMIT)) for p in problems
             )
             insert_rating(
                 engine,
