@@ -579,6 +579,27 @@ read on production after a deploy.
   Flash Lite first. Reading: passes without tools, repeated reasons, refusals by kind, a thesis that says what would prove
   it wrong. A paid run, so the user approves each one and its budget.
 
+**Answered by the user, 2026-11-22 (D421-D425):** the world is held fixed, as a frozen copy of production, not as
+stored briefings; eight cases, the two real agents on four dumps, three samples each; counting for what a transcript
+shows and a Sonnet judge for the two readings that need a reader; the cases in a file here and each run an experiment
+in Langfuse; a comparison is `main` against the change's branch. The paid runs use Opus 5.5, the model both agents run
+on, after one run on Flash Lite that only proves the path.
+
+**Built, 2026-11-22 (#404):** the frozen worlds, the runner and the counted readings. Measured while building: a dump
+holds closes for 29 instruments, and 13 of the 15 movers in its newest briefing had none, so a world is frozen with the
+closes it lacks, fetched once (D426). All eight briefings build identically twice, with every symbol they name priced.
+**Not built:** the judge, the Langfuse experiment and the switch that leaves D394's rules out (the next PR). **Not
+run:** any scan with a real model.
+
+**To run it** (from `services/ai`, with a venv; `--env-file` names a settings file with the OpenRouter key):
+
+```bash
+PYTHONPATH=. .venv/bin/python scripts/freeze_agent_eval_world.py --env-file ../../.env   # once per world; free
+PYTHONPATH=. .venv/bin/python scripts/run_agent_eval.py --briefings-only --env-file ../../.env   # fixed? free
+PYTHONPATH=. .venv/bin/python scripts/run_agent_eval.py --model <id> --max-usd <cap> --side main \
+    --env-file ../../.env   # paid
+```
+
 *Done when:* it shows the effect of D394's rules, and phase C's changes are judged by it before they are deployed.
 
 ### Phase C: what an agent is told, with no new provider

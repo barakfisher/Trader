@@ -4,7 +4,54 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-21, after the deploy - **Phase A is deployed: #400-#402 on compose and production at `ac4ee36`,
+Updated: 2026-11-22 - **Phase B, PR 1: the agent-scan evaluation's frozen worlds, runner and counted readings
+(D421-D426, VERSION 0.0.14).** Scripts and tests only: no service code changed, so there is nothing to deploy.
+Production and compose stay at `ac4ee36`. **No model has run through the runner yet**: a run is paid and each one
+needs the user's word and a budget.
+- **What exists:** `data/eval/agent_scans.json` (eight cases), `scripts/eval-world.sh` (the eval's own Postgres
+  container and the dumps it keeps), `services/ai/scripts/freeze_agent_eval_world.py` (keep a dump, fetch the closes
+  it lacks), `services/ai/scripts/run_agent_eval.py` (the run and its report) and `scripts/agent_eval/`.
+- **The four worlds are frozen on this Mac only**, in `~/Backups/traders/eval`: each dump with its `.closes.json`.
+  Another machine cannot run the set; a world lost there cannot be remade once `db-backup.sh` has pruned its dump
+  from `~/Backups/traders/prod` (the dump of 11-12 goes first).
+- **Checked on the real worlds, free:** `run_agent_eval.py --briefings-only --env-file <main checkout>/.env` built
+  each of the eight briefings on two clones: every pair identical, and every symbol the briefings name priced
+  (14 to 23 a case). The dumps of 11-12 to 11-19 are at `0086` and migrate to `0090` on restore.
+- **Not verified:** a scan with a real model in a frozen world (the end-to-end test runs two samples at once on
+  clones of one template, with a scripted model and a near-empty world); `eval-world.sh` under shellcheck (not
+  installed here, and CI does not run it); what an error from a real provider puts in the report - a refused key
+  stops the run and 200 characters of the refusal are printed, so read the first one for anything it should not say.
+- **What a frozen world cannot show.** Its movers are the five a list that the agent's last real scan was shown,
+  already cut to its mandate that day, so a change to *which* movers an agent sees has nothing else to show. A
+  symbol found by `search_universe` may be unpriced; the report counts it. Every world has the market closed.
+- **Two oddities, both harmless, so nobody "fixes" them:** a scan in a clone starts at the world's clock and
+  finishes at today's (`finish_scan` stamps the real time); and the agent's daily allowance reads today's UTC day,
+  where a fresh clone has no calls, so the allowance never ends a scan in the eval unless one scan alone exceeds it.
+- **Left running on purpose:** the containers `traders-eval-ci` (Postgres, 127.0.0.1:55436, four `frozen_*_ci`
+  databases) and `traders-eval-redis` (127.0.0.1:56379), for PR 2 and the first runs. A run empties its Redis
+  database, which is why the eval has a Redis of its own and refuses database 0 or another host.
+  `bash scripts/eval-world.sh down` removes both with their volumes; the kept dumps stay. The Postgres is
+  also a place to run `tests/integration` (`TEST_DATABASE_URL=postgresql://traders:traders@127.0.0.1:55436/traders_ci`,
+  367 tests, 7.5 minutes); `traders-assistant-ci` on 55435 is gone.
+- **Local:** this worktree got a venv of its own (`uv venv .venv --python 3.12` in `services/ai`, then
+  `uv pip install -e ".[dev]"`). The main checkout's venv has neither `cryptography` nor `langfuse` and fails at
+  `tests/conftest.py`'s import. Compose is running, not stopped as the note of 2026-11-10 says.
+- **The dumps hold every user's rows** (two users on 11-19). A case's agent is looked up among the admin's only
+  (`frozen_world.find_agent_id`), so another user's agent of the same name is never scanned and sent to a model;
+  the server must be a loopback address and every database name end in `_ci`. All three came from the security
+  review of this PR. **A review fix gets its test before it is called done:** the admin-only lookup was "applied"
+  by a scripted edit that matched nothing, and only the two tests written for it showed the query unchanged.
+- **Two runs at once drop each other's clones** (a clone is named for its case and sample). Run one at a time.
+- **Next, each on the user's word:** PR 2 (the Sonnet judge, the Langfuse experiment, the switch that leaves
+  D394's rules out); then a first run on Flash Lite to prove the path (cents), then both sides on Opus 5.5, about
+  $3 a side, with every thesis read by hand once against the judge. Phase B is done when D394's effect is a table
+  in `docs/PROPOSAL-AGENT-PERFORMANCE.md`.
+- **Phase A's "done when" is still owed**, first readable after the scans and the research run of Monday
+  2026-11-23 (the entry below says what to read).
+- **Decisions reach 426** (next: **427**). **This is the fifth merge since the handoff of #399: start the next
+  session from this file.**
+
+Earlier: 2026-11-21, after the deploy - **Phase A is deployed: #400-#402 on compose and production at `ac4ee36`,
 VERSION 0.0.13, head `0090`.** On the user's word, compose first, then production; both databases backed up first.
 None of the three carries a migration. The grant that covered them (three PRs and one deploy) is used up.
 - **Nothing has exercised the repairs on production yet.** The deploy was on a Saturday: the market is closed until
@@ -7436,7 +7483,89 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
     - **Consequence:** the message arrives up to 15 minutes after the hold ends. A mute that ends is treated the
       same, by the user's answer. The D400 "this replaces" line is not repeated (nothing stores it).
 
+421. **The agent-scan evaluation holds the world fixed, and the world is a frozen copy of production** (#404,
+    the user, 2026-11-22). A dated production dump is restored into a disposable database, the clock is set to
+    the moment the dump was taken, and today's code builds the briefing and answers the tools from that copy.
+    - *Rejected:* replay the briefings stored in `agent_scans.briefing`. Cheapest, and enough for a prompt-only
+      change such as D394. It fails phase B's own "done when": phase C changes what a briefing holds, and a
+      stored briefing is JSON built by the code of its day.
+    - *Rejected:* a built world, as the assistant eval has (`scripts/assistant_eval/world.py`). Reproducible on
+      any machine, but its invented prices contradict what a model knows of NVDA, and "opens on the movers" would
+      be measured on movers that never moved.
+    - **Consequence:** the set exists only while the dumps do, on this Mac, outside the repository. It is not
+      refreshed by itself; a newer world is added by running both sides on it (the lesson of #232).
+422. **The set is eight cases: the two real agents on four dumps, three samples each** (#404, the user,
+    2026-11-22). ג'ורג' and וורן on the dumps of 2026-11-12, 11-15, 11-19 and 11-21 - four trading days, from
+    when both hold positions. `data/eval/agent_scans.json` names them.
+    - *Rejected:* agents made from the Ray and Cathie templates as well. They would start with cash only, no
+      holdings and no scan memory; added by the same mechanism when phase C rewrites those templates.
+    - *Rejected:* all fifteen dumps. Three are of 2026-11-10 and two of 11-21: four times the cost for worlds
+      that barely differ.
+    - **Consequence:** every world was dumped with the US market closed, so the set says nothing about a scan
+      made while it is open. `db-backup.sh` keeps the newest 14 dumps: a world is copied to
+      `~/Backups/traders/eval` (`scripts/eval-world.sh keep`), or it is gone within weeks.
+423. **A scan is graded by counting, and by a judge model for what counting cannot read** (#404 builds the
+    counting; the judge is the next PR; the user, 2026-11-22). Counted from the transcript
+    (`scripts/agent_eval/readings.py`): a pass without a tool call, what the server sent back by kind, a sentence
+    repeated word for word from one of the agent's last theses. Judged, yes or no with the sentence quoted: does
+    the thesis say what would prove it wrong, and does it repeat an earlier reason in other words. The judge is
+    `anthropic/claude-sonnet-5.5`, the assistant eval's.
+    - *Rejected:* counting only. Free and stable, and blind to the two things D394 set out to change.
+    - *Rejected:* reading every thesis by hand. 48 theses a comparison, and not the same reading twice.
+    - *Rejected:* Jev (TypeSafe's decision-only judge), asked by the user. About 277 times cheaper, which is
+      nothing at 48 verdicts; it returns no quote to check, no source read tested it in Hebrew, and it is a new
+      provider and key outside OpenRouter. Worth a look again if every production scan is ever judged.
+    - *Rejected:* translating a thesis to English before judging it. The judge would grade the translation, and
+      its quote could not be checked against what the agent wrote.
+    - **Owed with the first run:** read every thesis by hand once and report where the judge disagrees.
+    - **A later experiment, not a decision:** the same eight cases with each persona in English.
+424. **The cases are a file in the repository; a run is an experiment in Langfuse** (#404 for the file, the next
+    PR for Langfuse; the user, 2026-11-22). The file is what code review sees; Langfuse's dataset run gives the
+    side-by-side table and the link from a score to its transcript. Checked against the SDK the service pins
+    (`langfuse>=5.1`): `dataset.run_experiment` takes an async task and evaluators that return typed scores.
+    - *Rejected:* a local report only, as the assistant eval writes. No new use of the SDK, and the comparison of
+      two runs would be written by hand, unlinked from the transcripts.
+    - *Rejected:* the cases defined in Langfuse. A case is a pointer to a dump, so Langfuse cannot hold the set by
+      itself, and a change to it would leave no trace in git.
+    - **Not in the docs, to check when built:** whether a scan's own trace is linked to its run item, and any
+      limit on experiments in the free plan. The SDK's default of 50 concurrent tasks is far above what a spend
+      cap can stop in time.
+425. **What a run compares is a commit: the set on `main`, then on the change's branch** (#404, the user,
+    2026-11-22). The branch is `main` plus the change, so the PR is the only difference, for a prompt and for a
+    briefing alike. A run records its commit and a name for its side. D394 is already merged, so for it alone
+    the runner gets a switch that leaves its four rules out (the next PR); production code gets none.
+    - *Rejected:* every change behind a switch, both states run from one commit. Each of phase C's changes would
+      carry a switch in production code to remember to delete.
+    - *Rejected:* an old commit as D394's "before". It lacks the runner, D397 and D416, so the difference would
+      mix four changes (#232 again).
+    - **Consequence:** a world is restored and migrated again on every run. A copy migrated by a branch with a
+      newer migration would otherwise be ahead of `main`'s code on the next run.
+426. **A frozen world is the dump plus the closes it lacks, fetched once when it is frozen** (#404, mine;
+    measured 2026-11-22 on the dump of 11-19). Production stores closes only for symbols an agent already asked
+    about: 29 instruments had any, and 13 of the 15 movers in the newest briefing had none. Quotes and the movers
+    list are not stored at all. So `freeze_agent_eval_world.py` fetches the daily closes of every symbol the
+    cases' agents were last briefed on, up to the world's clock, into `<dump>.closes.json`; the frozen market
+    quotes the last close at the clock, answers history from that file, and takes the movers from the agent's
+    newest stored briefing.
+    - *Rejected:* answer "unpriced" for what the dump lacks. Nothing invented, and every scan would pass on
+      every mover, so the set would measure the gap and not the agent.
+    - *Rejected:* write the fetched closes into the database and dump it again. One artefact, but a world would
+      stop being a byte copy of a backup, and freezing would need the schema migrated first.
+    - **Consequence:** freezing is the eval's one read of the network and is not repeated: a world whose closes
+      file exists is left alone, because fetching again moves a world runs were compared on. A symbol the agent
+      finds by `search_universe` may still be unpriced; the report counts scans that asked for a price the world
+      lacks. A scan runs on a clone of the world that is dropped afterwards, so no sample is told about another.
+
 ## Bugs that cost real time, and the lesson from each
+
+**An empty answer that a rate limiter can also produce is not a fact about the symbol (2026-11-22, #404).**
+The first real freeze of an eval world fetched closes for 33 symbols and wrote 26 of them down as "without
+history". They had history: the market service answers a call its rate limiter denied with no closes, exactly
+as it answers a symbol that has none, and three worlds' fetches had already used the minute's 60 calls. A
+frozen world is never fetched again, so the gap would have been permanent and every scan would have passed on
+those movers. The fetch now stays at half the limit and asks an empty symbol once more after a minute.
+**Lesson: before recording "none", ask what else returns none on that path; when the record is permanent,
+pace under the limit and ask twice.**
 
 **Count proxies in `X-Forwarded-For` alone, never from the socket (2026-10-22, #294).** The first
 `clientAddress` appended the socket's address to the chain and stepped back N from the end. A
