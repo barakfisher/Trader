@@ -1,0 +1,28 @@
+{
+  "about": [
+    "The agent-scan eval set (D421-D425): each case is one agent's scan in one frozen world.",
+    "A world is a dated dump of production, copied out of the backup rotation by",
+    "`scripts/eval-world.sh freeze`, restored into a disposable database and run with the clock",
+    "set to the moment the dump was taken. The dumps are not in the repository: they hold every",
+    "row of the database. This file names them; the runner refuses a run when one is missing.",
+    "Every world was dumped while the US market was closed, so the last stored close is the",
+    "price at that moment. The set says nothing about a scan made while the market is open.",
+    "An agent is named as it is on production. Read by services/ai/scripts/run_agent_eval.py."
+  ],
+  "worlds": {
+    "2026-11-12": { "dump": "traders-prod-20261112T020013Z" },
+    "2026-11-15": { "dump": "traders-prod-20261115T021851Z" },
+    "2026-11-19": { "dump": "traders-prod-20261119T072136Z" },
+    "2026-11-21": { "dump": "traders-prod-20261121T020016Z" }
+  },
+  "cases": [
+    { "id": "george-2026-11-12", "world": "2026-11-12", "agent": "ג'ורג'" },
+    { "id": "warren-2026-11-12", "world": "2026-11-12", "agent": "וורן" },
+    { "id": "george-2026-11-15", "world": "2026-11-15", "agent": "ג'ורג'" },
+    { "id": "warren-2026-11-15", "world": "2026-11-15", "agent": "וורן" },
+    { "id": "george-2026-11-19", "world": "2026-11-19", "agent": "ג'ורג'" },
+    { "id": "warren-2026-11-19", "world": "2026-11-19", "agent": "וורן" },
+    { "id": "george-2026-11-21", "world": "2026-11-21", "agent": "ג'ורג'" },
+    { "id": "warren-2026-11-21", "world": "2026-11-21", "agent": "וורן" }
+  ]
+}

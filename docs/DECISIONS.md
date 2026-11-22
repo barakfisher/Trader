@@ -431,3 +431,9 @@ while this file is out of date.
 | 418 | Research keeps counting against its agent's daily allowance until the main portfolio has its own advisor |
 | 419 | Research reads the holding it tried longest ago first, and an attempt counts whatever its status |
 | 420 | A trade proposal held by quiet hours or a mute is announced when the hold ends, if it is still open |
+| 421 | The agent-scan evaluation holds the world fixed, and the world is a frozen copy of production |
+| 422 | The set is eight cases: the two real agents on four dumps, three samples each |
+| 423 | A scan is graded by counting, and by a judge model for what counting cannot read |
+| 424 | The cases are a file in the repository; a run is an experiment in Langfuse |
+| 425 | What a run compares is a commit: the set on `main`, then on the change's branch |
+| 426 | A frozen world is the dump plus the closes it lacks, fetched once when it is frozen |
