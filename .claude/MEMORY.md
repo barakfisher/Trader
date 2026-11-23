@@ -4,7 +4,7 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-23 - **A Telegram message keeps up with its proposal (D427, migration 0091, VERSION 0.0.15).**
+Updated: 2026-11-23 - **A Telegram message keeps up with its proposal (#405, D427, migration 0091, VERSION 0.0.15).**
 The user approved a buy for the open from Telegram; it filled at 16:30 and the message still offered *Cancel
 approval*. `telegram_proposal_messages` now remembers the message *Approve at the open* was tapped on, and the
 open (or a superseding proposal) redraws its buttons from the row, in the account's current chat only.
@@ -7565,7 +7565,7 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
       finds by `search_universe` may still be unpriced; the report counts scans that asked for a price the world
       lacks. A scan runs on a clone of the world that is dropped afterwards, so no sample is told about another.
 427. **A Telegram message that shows a proposal is remembered, and the server redraws its buttons when it
-    changes the proposal** (the user, 2026-11-23; found on production that day). A buy approved for the open
+    changes the proposal** (#405, the user, 2026-11-23; found on production that day). A buy approved for the open
     from Telegram filled at 16:30, and the message it was approved on still offered *Cancel approval*: the
     open sent a new message and could edit no old one, because no message id was stored. A table,
     `telegram_proposal_messages` (0091), holds one row per message (chat, message id, opened from
@@ -7593,7 +7593,7 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
 ## Bugs that cost real time, and the lesson from each
 
 **A message's buttons describe the moment it was drawn; whatever changes the proposal later must redraw them
-(2026-11-23, D427).** The open filled an approval and announced it in a new message, and the message it was
+(2026-11-23, #405, D427).** The open filled an approval and announced it in a new message, and the message it was
 approved on kept *Cancel approval*: every redraw so far was a tap's, on its own message, and the server held
 no message id to edit. A tap on the stale button would have corrected it, which is why tests never saw it.
 **Lesson: when the server changes something a chat message shows, ask which message shows it; if nothing
