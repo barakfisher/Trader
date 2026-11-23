@@ -57,6 +57,7 @@ vi.mock('../src/db/queries.js', () => ({
   getUser: vi.fn(async () => ({ id: USER, email: null, base_currency: 'USD', timezone: 'Asia/Jerusalem' })),
   getOrCreateUserSettings: vi.fn(async () => ({ notify_severity: 'high', language })),
   latestRecheck: vi.fn(async () => null),
+  rememberTelegramProposalMessage: vi.fn(async () => undefined),
   laterApprovedProposal: vi.fn(async () => null),
 }));
 
@@ -78,6 +79,7 @@ const { decodeCallbackData, encodeCallbackData, mintNonce } = await import('../s
 const { MESSAGES } = await import('../src/notify/messages.js');
 const { ApiProblem } = await import('../src/http/errors.js');
 const service = await import('../src/services/openApproval.js');
+const queries = await import('../src/db/queries.js');
 const approval = await import('../src/services/tradeApproval.js');
 const { tradeKeyboard } = await import('../src/telegram/tradeApproval.js');
 
@@ -200,6 +202,17 @@ describe('a tap', () => {
     expect(String(edit.body.text)).toContain('16:30');
     expect(labels(edit)).toContain(MESSAGES.en.openApproval.cancelButton);
     expect(labels(edit)).toContain(MESSAGES.en.buttons.reject);
+  });
+
+  it('on Approve at the open remembers the message, so the open can redraw it (D427)', async () => {
+    await tap('queue');
+    expect(queries.rememberTelegramProposalMessage).toHaveBeenCalledWith(USER, PROPOSAL, String(CHAT), 99, false);
+  });
+
+  it('remembers nothing when the queue was refused', async () => {
+    vi.mocked(service.approveForOpen).mockRejectedValue(new ApiProblem(422, 'already_decided', 'no'));
+    await tap('queue');
+    expect(queries.rememberTelegramProposalMessage).not.toHaveBeenCalled();
   });
 
   it('on Cancel approval says so and brings Approve at the open back', async () => {

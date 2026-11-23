@@ -2509,6 +2509,107 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         ),
       ).rejects.toThrow(/proposals_open_approval_is_a_trades/);
     });
+
+    describe('the Telegram messages that show a proposal (0091, D427)', () => {
+      // A chat id past 2^53: it crosses as a string and comes back the same.
+      const chat = '9007199254740993';
+      // A second account with a trade of its own, erased at the end like OWNER.
+      const STRANGER = randomUUID();
+      let strangers = '';
+
+      beforeAll(async () => {
+        await getPool().query("INSERT INTO users (id, status, llm_cap_micro_usd) VALUES ($1, 'active', 0)", [STRANGER]);
+        const agent = (
+          await getPool().query(
+            `INSERT INTO agents (user_id, slug, name, persona, budget_minor)
+             VALUES ($1, 'open-approval-stranger', 'Stranger', 'Patient.', 100000) RETURNING id`,
+            [STRANGER],
+          )
+        ).rows[0].id as string;
+        const scan = (
+          await getPool().query(
+            `INSERT INTO agent_scans (user_id, agent_id, trigger, finished_at, outcome, briefing)
+             VALUES ($1, $2, 'manual', now(), 'trade', '{}') RETURNING id`,
+            [STRANGER, agent],
+          )
+        ).rows[0].id as string;
+        strangers = (
+          await queries.createTradeProposal({
+            userId: STRANGER,
+            agentId: agent,
+            scanId: scan,
+            kind: 'buy',
+            payload: { symbol: `${SYMBOL}X`, quantity: '1', priceMinor: 10_000, priceAsOf: null, currency: 'USD' },
+            expiresAt: new Date(now.getTime() + 2 * 3_600_000),
+            opensAt,
+            headline: 'h',
+            thesis: 't',
+            localized: {},
+            evidence: {},
+          })
+        ).proposalId;
+        await getPool().query('INSERT INTO telegram_bindings (user_id, chat_id) VALUES ($1, $2::bigint)', [OWNER, chat]);
+      });
+
+      afterAll(async () => {
+        await getPool().query("UPDATE users SET status = 'rejected' WHERE id = $1", [STRANGER]);
+        await getPool().query('SELECT erase_account($1)', [STRANGER]);
+      });
+
+      it('remembers them, one proposal per message, in message order', async () => {
+        const first = await propose(opensAt, `${SYMBOL}M`);
+        const second = await propose(opensAt, `${SYMBOL}P`);
+        await queries.rememberTelegramProposalMessage(OWNER, first, chat, 99, false);
+        await queries.rememberTelegramProposalMessage(OWNER, first, chat, 120, true);
+        await queries.rememberTelegramProposalMessage(OWNER, first, chat, 99, false);
+        expect(await queries.listTelegramProposalMessages(OWNER, first)).toEqual([
+          { chat_id: chat, message_id: '99', back_to_pending: false },
+          { chat_id: chat, message_id: '120', back_to_pending: true },
+        ]);
+
+        // The /pending message reused for another proposal moves to it.
+        await queries.rememberTelegramProposalMessage(OWNER, second, chat, 120, true);
+        expect((await queries.listTelegramProposalMessages(OWNER, first)).map((m) => m.message_id)).toEqual(['99']);
+        expect((await queries.listTelegramProposalMessages(OWNER, second)).map((m) => m.message_id)).toEqual(['120']);
+
+        // The menu moved the message to another view: forgotten.
+        await queries.forgetTelegramMessage(chat, 99);
+        expect(await queries.listTelegramProposalMessages(OWNER, first)).toEqual([]);
+      });
+
+      it("never lets another account remember someone's proposal or take their message", async () => {
+        const mine = await propose(opensAt, `${SYMBOL}Q`);
+        await queries.rememberTelegramProposalMessage(OWNER, mine, chat, 200, false);
+        // Someone else's proposal: nothing is written.
+        await queries.rememberTelegramProposalMessage(STRANGER, mine, chat, 201, false);
+        // Their own proposal on OWNER's message: the conflict leaves OWNER's row as it was.
+        await queries.rememberTelegramProposalMessage(STRANGER, strangers, chat, 200, true);
+        expect(await queries.listTelegramProposalMessages(OWNER, mine)).toEqual([
+          { chat_id: chat, message_id: '200', back_to_pending: false },
+        ]);
+        const { rows } = await getPool().query(
+          'SELECT count(*)::int AS n FROM telegram_proposal_messages WHERE user_id = $1',
+          [STRANGER],
+        );
+        expect(rows[0].n).toBe(0);
+      });
+
+      it('lists a message only while its chat is still the account\'s and the account is active (D313)', async () => {
+        const mine = await propose(opensAt, `${SYMBOL}U`);
+        await queries.rememberTelegramProposalMessage(OWNER, mine, chat, 300, false);
+        expect(await queries.listTelegramProposalMessages(OWNER, mine)).toHaveLength(1);
+
+        // Rebound to another chat (or unbound by /stop or a password reset): the old chat is not edited.
+        await getPool().query("UPDATE telegram_bindings SET chat_id = 1234567 WHERE user_id = $1", [OWNER]);
+        expect(await queries.listTelegramProposalMessages(OWNER, mine)).toEqual([]);
+        await getPool().query('UPDATE telegram_bindings SET chat_id = $2::bigint WHERE user_id = $1', [OWNER, chat]);
+
+        await getPool().query("UPDATE users SET status = 'disabled' WHERE id = $1", [OWNER]);
+        expect(await queries.listTelegramProposalMessages(OWNER, mine)).toEqual([]);
+        await getPool().query("UPDATE users SET status = 'active' WHERE id = $1", [OWNER]);
+        expect(await queries.listTelegramProposalMessages(OWNER, mine)).toHaveLength(1);
+      });
+    });
   });
 
   describe('trade proposals held back and not yet announced (D420)', () => {

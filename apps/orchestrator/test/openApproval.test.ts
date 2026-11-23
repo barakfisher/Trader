@@ -70,11 +70,16 @@ vi.mock('../src/services/tradeApproval.js', () => ({
   confirmTradeApproval: vi.fn(),
 }));
 
+vi.mock('../src/telegram/proposalMessages.js', () => ({
+  redrawProposalMessages: vi.fn(async () => undefined),
+}));
+
 vi.mock('../src/logger.js', () => ({
   logger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
 }));
 
 const queries = await import('../src/db/queries.js');
+const { redrawProposalMessages } = await import('../src/telegram/proposalMessages.js');
 const approval = await import('../src/services/tradeApproval.js');
 const { ApiProblem } = await import('../src/http/errors.js');
 const { MESSAGES } = await import('../src/notify/messages.js');
@@ -129,6 +134,7 @@ beforeEach(() => {
   vi.mocked(queries.settleOpenApproval).mockReset().mockResolvedValue(true);
   vi.mocked(queries.claimNotification).mockReset().mockResolvedValue({ id: 'n-1' });
   vi.mocked(queries.applyProposalTransition).mockClear();
+  vi.mocked(redrawProposalMessages).mockClear();
   vi.mocked(approval.previewTradeApproval).mockReset().mockResolvedValue(PREVIEW as never);
   vi.mocked(approval.confirmTradeApproval).mockReset().mockResolvedValue(FILLED as never);
 });
@@ -267,6 +273,41 @@ describe('the open (D398, D399)', () => {
     const { sent, notifier } = recordingNotifier();
     expect(await tick(AFTER_OPEN, notifier)).toMatchObject({ closed: 1 });
     expect(sent).toHaveLength(0);
+  });
+});
+
+describe('the message the approval was tapped on (D427)', () => {
+  it('is redrawn once the open fills it, so Cancel approval is gone', async () => {
+    const { notifier } = recordingNotifier();
+    await tick(AFTER_OPEN, notifier);
+    expect(redrawProposalMessages).toHaveBeenCalledWith(notifier, USER, PROPOSAL, AFTER_OPEN);
+  });
+
+  it.each([
+    ['refused', () => vi.mocked(approval.previewTradeApproval).mockRejectedValue(new ApiProblem(422, 'insufficient_cash', 'short'))],
+    ['closed', () => { row = proposalRow({ state: 'rejected' }); }],
+  ])('is redrawn when the open ends it %s', async (_outcome, arrange) => {
+    arrange();
+    await tick(AFTER_OPEN);
+    expect(redrawProposalMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it('is redrawn when the approval expired waiting', async () => {
+    await tick(new Date(EXPIRES_AT.getTime() + 60_000));
+    expect(redrawProposalMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it('is left alone while the approval is still waiting for the next minute', async () => {
+    vi.mocked(approval.previewTradeApproval).mockRejectedValue(new ApiProblem(422, 'market_closed', 'closed'));
+    await tick(AFTER_OPEN);
+    expect(redrawProposalMessages).not.toHaveBeenCalled();
+  });
+
+  it('is redrawn when a newer proposal replaces the approval', async () => {
+    vi.mocked(queries.supersedeOpenApprovals).mockResolvedValue([{ id: PROPOSAL, state: 'pending', kind: 'buy' }]);
+    const { notifier } = recordingNotifier();
+    await supersedeOlderApprovals(USER, AGENT, 'NVDA', 'newer', notifier, AFTER_OPEN);
+    expect(redrawProposalMessages).toHaveBeenCalledWith(notifier, USER, PROPOSAL, AFTER_OPEN);
   });
 });
 

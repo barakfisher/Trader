@@ -437,3 +437,4 @@ while this file is out of date.
 | 424 | The cases are a file in the repository; a run is an experiment in Langfuse |
 | 425 | What a run compares is a commit: the set on `main`, then on the change's branch |
 | 426 | A frozen world is the dump plus the closes it lacks, fetched once when it is frozen |
+| 427 | A Telegram message that shows a proposal is remembered, and the server redraws its buttons when it changes the proposal |

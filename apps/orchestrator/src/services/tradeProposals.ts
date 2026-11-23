@@ -154,7 +154,7 @@ async function proposeTrade(
   logger().info({ proposalId, scanId, agentId: agent.id, kind }, 'proposal.trade_raised');
   // D400: a newer proposal replaces an approval for the open still waiting on
   // the same symbol, whichever side it is; the message says which it replaced.
-  const replaced = await supersedeOlderApprovals(userId, agent.id, instrument.symbol, proposalId);
+  const replaced = await supersedeOlderApprovals(userId, agent.id, instrument.symbol, proposalId, context.notifier, now);
 
   await announce(userId, agent.id, context.notifier, now, {
     observationId,
