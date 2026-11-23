@@ -8,13 +8,16 @@
  * Approve: the preview at the live price. The message may be read long after it
  * was sent, and the button it carries is the one that was right then.
  *
+ * The message *Approve at the open* was tapped on is remembered, so the open can
+ * take *Cancel approval* off it when it settles the approval (D427).
+ *
  * Nothing here throws to its caller (`updates.ts`): every failure ends in a
  * toast and a keyboard that matches the proposal's real state.
  */
 
 import type { AiClient } from '@traders/shared/ai';
 
-import { getUser } from '../db/queries.js';
+import { getUser, rememberTelegramProposalMessage } from '../db/queries.js';
 import { ApiProblem } from '../http/errors.js';
 import { logger } from '../logger.js';
 import { messagesFor, type Messages } from '../notify/messages.js';
@@ -74,6 +77,18 @@ export async function handleOpenApprovalCallback(input: OpenApprovalCallback): P
           : null;
       keyboard = 'openQueued';
       result = queued.outcome;
+      // The open redraws this message when it settles the approval (D427).
+      if (message !== undefined) {
+        await rememberTelegramProposalMessage(
+          userId,
+          payload.proposalId,
+          chatId,
+          message.message_id,
+          message.fromPending === true,
+        ).catch((error: unknown) =>
+          logger().warn({ err: error, proposalId: payload.proposalId }, 'telegram.proposal_message_remember_failed'),
+        );
+      }
     } else {
       const cancelled = await cancelForOpen(userId, payload.proposalId, 'telegram');
       toast = messages.openApproval.cancelledToast;

@@ -4,7 +4,16 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-22 - **Phase B, PR 1: the agent-scan evaluation's frozen worlds, runner and counted readings
+Updated: 2026-11-23 - **A Telegram message keeps up with its proposal (D427, migration 0091, VERSION 0.0.15).**
+The user approved a buy for the open from Telegram; it filled at 16:30 and the message still offered *Cancel
+approval*. `telegram_proposal_messages` now remembers the message *Approve at the open* was tapped on, and the
+open (or a superseding proposal) redraws its buttons from the row, in the account's current chat only.
+**Not deployed:** compose then production, migration 0091 with it. **Owed after deploy:** approve one trade
+for the open from Telegram and watch its message lose Cancel at the open. **Left on purpose:** an approval for
+the open given on the web still leaves *Approve at the open* in Telegram; recording every sent proposal
+message is the follow-up the same table was built for (D427).
+
+Earlier, 2026-11-22 - **Phase B, PR 1: the agent-scan evaluation's frozen worlds, runner and counted readings
 (D421-D426, VERSION 0.0.14).** Scripts and tests only: no service code changed, so there is nothing to deploy.
 Production and compose stay at `ac4ee36`. **No model has run through the runner yet**: a run is paid and each one
 needs the user's word and a budget.
@@ -7555,8 +7564,41 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
       file exists is left alone, because fetching again moves a world runs were compared on. A symbol the agent
       finds by `search_universe` may still be unpriced; the report counts scans that asked for a price the world
       lacks. A scan runs on a clone of the world that is dropped afterwards, so no sample is told about another.
+427. **A Telegram message that shows a proposal is remembered, and the server redraws its buttons when it
+    changes the proposal** (the user, 2026-11-23; found on production that day). A buy approved for the open
+    from Telegram filled at 16:30, and the message it was approved on still offered *Cancel approval*: the
+    open sent a new message and could edit no old one, because no message id was stored. A table,
+    `telegram_proposal_messages` (0091), holds one row per message (chat, message id, opened from
+    `/pending`). Today a row is written only by an *Approve at the open* tap, and the open redraws every row of
+    the proposal once it settles the approval (filled, refused, expired, closed) or a newer proposal
+    supersedes it. Only the buttons are redrawn, from the row (`tradeKeyboard`); the text stays the message's
+    own, and the new message says what the open did.
+    - *Rejected:* two columns on `proposals` for the tapped message. The same fix today, but a proposal is
+      shown by more than one message (its announcement, and `/pending` views), so recording them all later
+      would replace the columns with a table and leave them dead.
+    - *Rejected, for now:* recording every proposal message as it is sent and redrawing on every decision
+      (an approval on the web still leaves Approve in Telegram). It is the same table later; asked as its own
+      piece of work, because it touches every send and every decision path.
+    - **Consequence:** a `/pending` message is reused for other views, so a menu edit forgets its row, and
+      remembering a message again moves it to the new proposal; otherwise the open would put one proposal's
+      buttons under another view's text. A trade approved for the open *from the web* still leaves *Approve at
+      the open* on its Telegram message: no row is written for it.
+    - **A row is redrawn only in the chat the account is bound to now, while it is active** (the list joins
+      `telegram_bindings` and `users`, as a push does). Found by the security review: without it, a chat
+      unbound by a password reset (D313), `/stop` or a rebind would still have its buttons edited, telling
+      whoever holds it that the approval settled. Rows of an unbound chat are left in place, never read.
+    - **Cost:** a supersede redraws inside proposal creation, so a slow Telegram (10 s timeout a call) slows
+      that scan's proposal; it never fails it.
 
 ## Bugs that cost real time, and the lesson from each
+
+**A message's buttons describe the moment it was drawn; whatever changes the proposal later must redraw them
+(2026-11-23, D427).** The open filled an approval and announced it in a new message, and the message it was
+approved on kept *Cancel approval*: every redraw so far was a tap's, on its own message, and the server held
+no message id to edit. A tap on the stale button would have corrected it, which is why tests never saw it.
+**Lesson: when the server changes something a chat message shows, ask which message shows it; if nothing
+records that, the message is stale by design.** A second one, from the same fix: `ORDER BY message_id` after
+`SELECT message_id::text AS message_id` sorts the text alias, so "120" came before "99". Qualify the column.
 
 **An empty answer that a rate limiter can also produce is not a fact about the symbol (2026-11-22, #404).**
 The first real freeze of an eval world fetched closes for 33 symbols and wrote 26 of them down as "without

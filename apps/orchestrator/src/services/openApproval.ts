@@ -20,6 +20,9 @@
  *   two approvals cannot both fill at the open; the newer proposal says so.
  * - **The tick writes a run only when one is due (D401).** `hasDueOpenApprovals`
  *   is read before the run is claimed.
+ * - **The message it was approved on is redrawn (D427).** Once the open settles
+ *   an approval, or a newer proposal supersedes it, the Telegram message it was
+ *   tapped on loses *Cancel approval* and shows the buttons the row calls for.
  *
  * The approval does not change the proposal's state: it stays `pending` until
  * the fill approves it, so the state machine, the expiry sweep and every other
@@ -46,6 +49,7 @@ import { ApiProblem, notFound, unprocessable } from '../http/errors.js';
 import { logger } from '../logger.js';
 import { messagesFor, type Messages, type NoticeText, type OpenApprovalFigures } from '../notify/messages.js';
 import type { Notifier } from '../notify/notifier.js';
+import { redrawProposalMessages } from '../telegram/proposalMessages.js';
 import { breachFigures, refusalReason } from '../telegram/tradeApproval.js';
 import { fanOut, settingsForNotification } from './notifications.js';
 import { factsOf } from './proposals.js';
@@ -145,6 +149,8 @@ export async function supersedeOlderApprovals(
   agentId: string,
   symbol: string,
   newerProposalId: string,
+  notifier?: Notifier,
+  now: Date = new Date(),
 ): Promise<{ side: 'buy' | 'sell'; quantity: string; symbol: string } | null> {
   const superseded = await supersedeOpenApprovals(userId, agentId, symbol, newerProposalId);
   let replaced: { side: 'buy' | 'sell'; quantity: string; symbol: string } | null = null;
@@ -169,6 +175,7 @@ export async function supersedeOlderApprovals(
     const payload = row.payload as TradeProposalPayload;
     replaced = { side: row.kind as 'buy' | 'sell', quantity: payload.quantity, symbol: payload.symbol };
     logger().info({ userId, proposalId: row.id, newerProposalId }, 'proposal.open_approval_superseded');
+    if (notifier !== undefined) await redrawProposalMessages(notifier, userId, row.id, now);
   }
   return replaced;
 }
@@ -345,6 +352,8 @@ export async function fillDueOpenApprovals(context: OpenApprovalTickContext): Pr
       outcome = 'retrying';
     }
     result[outcome] += 1;
+    // Settled one way or another: the message it was approved on no longer offers Cancel (D427).
+    if (outcome !== 'retrying') await redrawProposalMessages(context.notifier, due.user_id, due.id, now);
   }
   return result;
 }

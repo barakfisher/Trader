@@ -44,6 +44,7 @@ export * from './queries/openApprovals.js';
 export * from './queries/userSettings.js';
 export * from './queries/notifications.js';
 export * from './queries/telegram.js';
+export * from './queries/telegramProposalMessages.js';
 export * from './queries/articles.js';
 export * from './queries/adminUsers.js';
 export * from './queries/research.js';

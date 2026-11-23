@@ -60,6 +60,7 @@ import { scanCostOf } from '../services/scanCost.js';
 import { toScanSummary } from '../services/scanSummary.js';
 import { valuePortfolio } from '../services/valuation.js';
 import type { InlineButton, InlineKeyboard, TelegramNotifier } from './client.js';
+import { forgetRedrawnMessage, NOT_MODIFIED } from './proposalMessages.js';
 import { tradeKeyboard } from './tradeApproval.js';
 import { encodeAgentActionData, type AgentActionPayload } from './agentActionToken.js';
 import { encodeMenuData, QUICK_MUTE_HOURS, type MenuTap, type MenuView } from './menuData.js';
@@ -612,9 +613,6 @@ export async function sendView(
   if (!sent.delivered) logger().warn({ chatId, view: view.view, err: sent.error }, 'telegram.menu_send_failed');
 }
 
-/** Telegram's answer to an edit that would leave the message as it is: a Refresh within the minute. */
-const NOT_MODIFIED = /message is not modified/i;
-
 /**
  * A tap on a menu button: apply a quick mute if it is one, then rewrite the
  * message with the view it names. Never throws (`updates.ts`): a view that
@@ -646,6 +644,8 @@ export async function handleMenuTap(
     // The edit first, so the toast can say when it failed; Telegram keeps the
     // button's spinner until the answer, which is the "working" sign.
     const edited = await deps.telegram.editWithButtons(tap.chatId, tap.messageId, screen.text, screen.keyboard);
+    // The message shows another view now: no proposal's redraw may touch it (D427).
+    if (edited.delivered) await forgetRedrawnMessage(tap.chatId, tap.messageId);
     if (!edited.delivered && NOT_MODIFIED.test(edited.error ?? '')) {
       // A Refresh within the same minute: nothing changed, nothing lost.
       logger().info({ chatId: tap.chatId, view: view.view }, 'telegram.menu_edit_unchanged');

@@ -481,3 +481,7 @@ INSERT INTO upcoming_listing_filings (accession, cik, form, stage, filed_on, url
   ('0000000216-26-000001', '0000000216', 'RW', 'withdrawn', '2026-11-16', 'https://www.sec.gov/Archives/edgar/data/216/000000021626000001/a.htm');
 INSERT INTO runs (id, kind, run_key, status) VALUES
   ('20000000-0000-0000-0000-0000000000ad', 'upcoming_ipos', 'upcoming_ipos:installation:2026-11-19', 'ok');
+-- The Telegram messages that show a proposal (0091): one tapped in the chat, one opened from /pending.
+INSERT INTO telegram_proposal_messages (user_id, proposal_id, chat_id, message_id, back_to_pending) VALUES
+  ('00000000-0000-0000-0000-00000000000a', '50000000-0000-0000-0000-000000000041', 4242, 99, false),
+  ('00000000-0000-0000-0000-00000000000a', '50000000-0000-0000-0000-000000000041', 4242, 120, true);
