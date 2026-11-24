@@ -19,6 +19,9 @@
  * - **Paid for.** The fee of D6, the cash re-checked under the agent's cash-row
  *   lock in the same transaction as the fill; a trade that does not fit is
  *   refused, never resized (§5.1). The database refuses a negative balance too.
+ * - **Out of what is available (D428).** A buy is paid from the balance less
+ *   what approvals waiting to fill have set aside, and a sell hands over the
+ *   holding less the shares waiting sells have set aside (`reservations.ts`).
  * - **Recorded once.** An idempotency key per agent: a repeated submit returns
  *   the fill it already made (guideline 8).
  *
@@ -53,6 +56,7 @@ import {
   type TradableInstrumentRow,
 } from '../db/queries.js';
 import { conflict, notFound, unprocessable, upstreamFailure } from '../http/errors.js';
+import { agentReservations, reservedQuantity, type Reservations } from './reservations.js';
 import { localDate } from './snapshot.js';
 
 /** D28: Yahoo's 15-minute delay plus one cache cycle. Older than this, a quote is refused. */
@@ -310,18 +314,40 @@ function cashChange(side: TradeSide, notional: bigint, fee: bigint): bigint {
   return side === 'buy' ? -(notional + fee) : notional - fee;
 }
 
-/** Refuse what would not fit: cash below zero, or selling more than is held (§5.1). */
-function assertFits(side: TradeSide, cash: bigint, change: bigint, held: bigint, quantity: bigint): void {
-  if (side === 'sell' && quantity > held) {
-    throw unprocessable('insufficient_holding', `the agent holds ${held} shares, fewer than ${quantity}`, {
-      heldQuantity: held.toString(),
-    });
+/**
+ * Refuse what would not fit (§5.1): a sell of more shares than are free, or a
+ * buy that costs more than the cash that is free (D428). A sell's own cash
+ * check reads the whole balance: it adds cash, and a sell that funds a waiting
+ * buy must not be refused for the cash that buy has set aside.
+ */
+function assertFits(
+  side: TradeSide,
+  symbol: string,
+  cash: bigint,
+  change: bigint,
+  held: bigint,
+  quantity: bigint,
+  reserved: Reservations,
+): void {
+  const reservedShares = reservedQuantity(reserved, symbol);
+  if (side === 'sell' && quantity > held - reservedShares) {
+    throw unprocessable(
+      'insufficient_holding',
+      reservedShares > 0n
+        ? `the agent holds ${held} shares, ${reservedShares} of them set aside for approved sells: fewer than ${quantity} are free`
+        : `the agent holds ${held} shares, fewer than ${quantity}`,
+      { heldQuantity: held.toString(), reservedQuantity: reservedShares.toString() },
+    );
   }
-  if (cash + change < 0n) {
-    throw unprocessable('insufficient_cash', 'the agent does not have the cash for this trade and its fee', {
-      cashMinor: toNumber(cash),
-      requiredMinor: toNumber(-change),
-    });
+  const reservedCash = side === 'buy' ? reserved.cashMinor : 0n;
+  if (cash - reservedCash + change < 0n) {
+    throw unprocessable(
+      'insufficient_cash',
+      reservedCash > 0n
+        ? 'the agent does not have the cash for this trade and its fee: part of its cash is set aside for approved buys'
+        : 'the agent does not have the cash for this trade and its fee',
+      { cashMinor: toNumber(cash), reservedMinor: toNumber(reservedCash), requiredMinor: toNumber(-change) },
+    );
   }
 }
 
@@ -340,7 +366,11 @@ export async function previewTrade(request: TradeRequest, context: TradeContext)
   const held = wholeShares(
     (await getAgentHoldingQuantity(request.userId, request.agent.id, instrument.id)) ?? '0',
   );
-  assertFits(request.side, cash, change, held, quantity);
+  const now = (context.now ?? (() => new Date()))();
+  const reserved = await agentReservations(request.userId, request.agent.id, now, {
+    exceptProposalId: request.proposalId ?? null,
+  });
+  assertFits(request.side, instrument.symbol, cash, change, held, quantity, reserved);
   const warnings =
     request.price.source === 'user' ? await typedPriceWarnings(instrument, priceMinor, context) : [];
   return {
@@ -357,8 +387,10 @@ export async function previewTrade(request: TradeRequest, context: TradeContext)
     cashChangeMinor: toNumber(change),
     cashMinor: toNumber(cash),
     cashAfterMinor: toNumber(cash + change),
+    reservedCashMinor: toNumber(reserved.cashMinor),
     heldQuantity: held.toString(),
     heldAfterQuantity: (request.side === 'buy' ? held + quantity : held - quantity).toString(),
+    reservedQuantity: reservedQuantity(reserved, instrument.symbol).toString(),
     currency: 'USD',
     warnings,
   };
@@ -445,7 +477,12 @@ export async function executeFill(
       }
       const holding = await lockAgentHolding(client, request.userId, request.agent.id, instrument.id);
       const held = wholeShares(holding?.quantity ?? '0');
-      assertFits(request.side, cash, change, held, quantity);
+      // Read under the cash lock, which queueing an approval takes too (D428).
+      const reserved = await agentReservations(request.userId, request.agent.id, now, {
+        exceptProposalId: request.proposalId ?? null,
+        client,
+      });
+      assertFits(request.side, instrument.symbol, cash, change, held, quantity, reserved);
 
       const fillId = await insertFill(client, {
         userId: request.userId,

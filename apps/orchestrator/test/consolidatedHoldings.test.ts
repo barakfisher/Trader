@@ -84,6 +84,8 @@ vi.mock('../src/db/pool.js', () => ({
 }));
 
 vi.mock('../src/db/queries.js', () => ({
+  // Nothing waits for the open here: what is available is the balance (D428).
+  listQueuedTrades: vi.fn(async () => []),
   getSessionUser: vi.fn(async (userId: string) => (await import('./session.js')).mockedSessionUser(userId)),
   getUser: vi.fn(async () => USER),
   listAgents: vi.fn(async () => agents),

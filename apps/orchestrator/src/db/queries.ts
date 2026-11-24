@@ -41,6 +41,7 @@ export * from './queries/proposalEpisodes.js';
 export * from './queries/findingEpisodes.js';
 export * from './queries/tradeProposals.js';
 export * from './queries/openApprovals.js';
+export * from './queries/reservations.js';
 export * from './queries/userSettings.js';
 export * from './queries/notifications.js';
 export * from './queries/telegram.js';

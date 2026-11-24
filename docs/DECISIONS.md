@@ -438,3 +438,6 @@ while this file is out of date.
 | 425 | What a run compares is a commit: the set on `main`, then on the change's branch |
 | 426 | A frozen world is the dump plus the closes it lacks, fetched once when it is frozen |
 | 427 | A Telegram message that shows a proposal is remembered, and the server redraws its buttons when it changes the proposal |
+| 428 | An approval waiting to fill sets its cash or shares aside, read from the queue at each check and never stored |
+| 429 | A waiting buy reserves its cost at the agent's price and its fee; a sell's cash check and a funded buy's queueing ignore reservations |
+| 430 | Limit orders, as the user chose them: the agent sets the limit, a day limit both ways, a sell good until cancelled |

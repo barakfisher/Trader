@@ -21,16 +21,18 @@ export type SettledOpenApproval = 'filled' | 'refused' | 'cancelled' | 'expired'
 /**
  * Approve a trade for the open: only while it is pending, raised while the
  * market was closed, and before that open. A cancelled approval may be given
- * again; a settled one may not. True when this call queued it.
+ * again; a settled one may not. True when this call queued it. The service
+ * passes its `client`, after `lockAgentCash`: what the approval sets aside is
+ * checked and queued under one lock (D428).
  */
 export async function queueOpenApproval(
   userId: string,
   proposalId: string,
   surface: OpenApprovalSurface,
   now: Date,
+  client?: PoolClient,
 ): Promise<boolean> {
-  const row = await queryOne<{ id: string }>(
-    `-- agent-blind: addressed by the proposal's own id.
+  const sql = `-- agent-blind: addressed by the proposal's own id.
      UPDATE proposals
         SET open_approval = 'queued',
             open_approval_surface = $3,
@@ -43,10 +45,10 @@ export async function queueOpenApproval(
         AND opens_at > $4
         AND expires_at > $4
         AND (open_approval IS NULL OR open_approval = 'cancelled')
-      RETURNING id`,
-    [userId, proposalId, surface, now],
-  );
-  return row !== null;
+      RETURNING id`;
+  const params = [userId, proposalId, surface, now];
+  if (client) return ((await client.query(sql, params)).rowCount ?? 0) > 0;
+  return (await queryOne<{ id: string }>(sql, params)) !== null;
 }
 
 /** Take back an approval that is still waiting. True when this call cancelled it. */

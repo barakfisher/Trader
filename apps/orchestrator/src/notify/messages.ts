@@ -328,6 +328,8 @@ export interface Messages {
       notScheduledHere: string;
       waitingForBrief: string;
       cash: (cash: string, deposited: string) => string;
+      /** Shown only while an approved buy is waiting to fill (D428). */
+      cashAvailable: (available: string, reserved: string) => string;
       netWorth: (worth: string, pnl: string, percent: string) => string;
       unpriced: (symbols: string[]) => string;
       holdings: (count: number) => string;
@@ -461,6 +463,10 @@ export interface Messages {
     refused: (reason: string, at: string) => string;
     reasons: Record<TradeRefusalCode, string>;
     marketClosed: (nextOpen: string) => string;
+    /** Cash short because approved buys waiting to fill have set some aside (D428). */
+    cashSetAside: (required: string, available: string, reserved: string) => string;
+    /** Shares short because approved sells waiting to fill have set some aside (D428). */
+    sharesSetAside: (held: string, reserved: string) => string;
     farFromAgent: (agentPrice: string, livePrice: string, distance: string) => string;
     /** A price too large for a signed button (`MAX_CALLBACK_PRICE_MINOR`). */
     confirmInApp: string;
@@ -780,6 +786,7 @@ const en: Messages = {
       notScheduledHere: 'Scheduled scans are off on this installation.',
       waitingForBrief: 'Waiting for instructions or settings: it does not scan until it has them.',
       cash: (cash, deposited) => `Cash: ${cash} of ${deposited} deposited`,
+      cashAvailable: (available, reserved) => `Available: ${available} (${reserved} set aside for approved buys)`,
       netWorth: (worth, pnl, percent) => `Net worth: ${worth} (P&L ${pnl}, ${percent})`,
       unpriced: (symbols) => `⚠️ No price for ${symbols.join(', ')}: net worth not known.`,
       holdings: (count) => `${count} ${count === 1 ? 'holding' : 'holdings'}`,
@@ -928,6 +935,10 @@ const en: Messages = {
       other: 'The trade was refused.',
     },
     marketClosed: (nextOpen) => `The market is closed; it opens ${nextOpen}.`,
+    cashSetAside: (required, available, reserved) =>
+      `This needs ${required} with its fee and ${available} is available: ${reserved} is set aside for approved buys.`,
+    sharesSetAside: (held, reserved) =>
+      `The agent holds ${held} shares and ${reserved} of them are set aside for approved sells.`,
     farFromAgent: (agentPrice, livePrice, distance) =>
       `The price is ${livePrice}, ${distance} from the agent's ${agentPrice} - more than 3%.`,
     confirmInApp: 'This price is too large for a Telegram button: confirm it in the app.',
@@ -1387,6 +1398,7 @@ const he: Messages = {
       notScheduledHere: 'סריקות מתוזמנות כבויות בהתקנה הזו.',
       waitingForBrief: 'ממתין להוראות או להגדרות: הוא לא סורק עד שיהיו לו.',
       cash: (cash, deposited) => `מזומן: ${ltr(cash)} מתוך ${ltr(deposited)} שהופקדו`,
+      cashAvailable: (available, reserved) => `זמין: ${ltr(available)} (${ltr(reserved)} שמורים לקניות שאושרו)`,
       netWorth: (worth, pnl, percent) => `שווי נקי: ${ltr(worth)} (רווח/הפסד ${ltr(pnl)}, ${ltr(percent)})`,
       unpriced: (symbols) => `⚠️ אין מחיר ל־${symbols.map(ltr).join(', ')}: השווי הנקי לא ידוע.`,
       holdings: (count) => hebrewCount(count, 'אחזקה אחת', 'אחזקות'),
@@ -1534,6 +1546,10 @@ const he: Messages = {
       other: 'העסקה נדחתה.',
     },
     marketClosed: (nextOpen) => `הבורסה סגורה; היא נפתחת ${isolated(nextOpen)}.`,
+    cashSetAside: (required, available, reserved) =>
+      `העסקה דורשת ${ltr(required)} כולל עמלה, וזמינים ${ltr(available)}: ${ltr(reserved)} שמורים לקניות שאושרו.`,
+    sharesSetAside: (held, reserved) =>
+      `הסוכן מחזיק ${ltr(held)} מניות, ו־${ltr(reserved)} מהן שמורות למכירות שאושרו.`,
     farFromAgent: (agentPrice, livePrice, distance) =>
       `המחיר ${ltr(livePrice)}, ${ltr(distance)} מהמחיר של הסוכן ${ltr(agentPrice)} - יותר מ־${ltr('3%')}.`,
     confirmInApp: 'המחיר גדול מדי לכפתור בטלגרם: אשרו אותו באפליקציה.',

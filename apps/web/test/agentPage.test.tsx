@@ -104,6 +104,7 @@ function account(overrides: Partial<AgentAccountResponse> = {}): AgentAccountRes
   return {
     currency: 'USD',
     cashMinor: 832_542,
+    reservedCashMinor: 0,
     depositsMinor: 1_000_000,
     holdingsValueMinor: 168_000,
     netWorthMinor: 1_000_542,
@@ -184,8 +185,10 @@ const PREVIEW: TradePreview = {
   cashChangeMinor: -67_150,
   cashMinor: 832_542,
   cashAfterMinor: 765_392,
+  reservedCashMinor: 0,
   heldQuantity: '5',
   heldAfterQuantity: '7',
+  reservedQuantity: '0',
   currency: 'USD',
   warnings: [],
 };
@@ -333,6 +336,20 @@ describe('AgentPage with the ledger', () => {
     expect(screen.getByText(/Net worth minus everything deposited \(\$10,000\.00\)/)).toBeTruthy();
     expect(screen.getByText('AAPL')).toBeTruthy();
     expect(screen.getByText('5 shares · average cost $334.58')).toBeTruthy();
+  });
+
+  it('says what is available only while an approved buy waits to fill (D428)', async () => {
+    renderAgent();
+    expect(await screen.findByText('Net worth')).toBeTruthy();
+    expect(screen.queryByText(/set aside for approved buys/)).toBeNull();
+    cleanup();
+
+    // $8,325.42 of cash, $2,001.50 of it waiting on an approved buy.
+    serveAgent(AGENT, account({ reservedCashMinor: 200_150 }));
+    renderAgent();
+    expect(await screen.findByText('$6,323.92 available; $2,001.50 set aside for approved buys')).toBeTruthy();
+    // The balance is still the balance: nothing has left the ledger.
+    expect(screen.getByText('$8,325.42')).toBeTruthy();
   });
 
   it('compares the agent with SPY on the same deposits, and has no score before the agent decides (D24, D42)', async () => {

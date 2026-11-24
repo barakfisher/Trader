@@ -20,6 +20,10 @@
  *   two approvals cannot both fill at the open; the newer proposal says so.
  * - **The tick writes a run only when one is due (D401).** `hasDueOpenApprovals`
  *   is read before the run is claimed.
+ * - **A waiting approval sets its cash or shares aside (D428).** It is queued
+ *   only when what is free covers it - under the agent's cash lock, so two
+ *   approvals cannot both take the last of it - and from then on every other
+ *   trade of the agent is checked against what is left (`reservations.ts`).
  * - **The message it was approved on is redrawn (D427).** Once the open settles
  *   an approval, or a newer proposal supersedes it, the Telegram message it was
  *   tapped on loses *Cancel approval* and shows the buttons the row calls for.
@@ -29,23 +33,33 @@
  * surface read it as they always have.
  */
 
-import { formatMoney, isTradeProposalKind, type TradeProposalPayload } from '@traders/shared';
+import {
+  feeMinor,
+  formatMoney,
+  isTradeProposalKind,
+  notionalMinor,
+  type TradeProposalPayload,
+} from '@traders/shared';
 import type { AiClient } from '@traders/shared/ai';
 
 import {
   applyProposalTransition,
   cancelOpenApproval,
   findProposal,
+  findTradableInstrument,
   getOrCreateUserSettings,
   getUser,
   listDueOpenApprovals,
+  lockAgentCash,
+  lockAgentHolding,
   queueOpenApproval,
   settleOpenApproval,
   supersedeOpenApprovals,
+  transaction,
   type OpenApprovalSurface,
   type ProposalRow,
 } from '../db/queries.js';
-import { ApiProblem, notFound, unprocessable } from '../http/errors.js';
+import { ApiProblem, conflict, notFound, unprocessable } from '../http/errors.js';
 import { logger } from '../logger.js';
 import { messagesFor, type Messages, type NoticeText, type OpenApprovalFigures } from '../notify/messages.js';
 import type { Notifier } from '../notify/notifier.js';
@@ -54,6 +68,7 @@ import { breachFigures, refusalReason } from '../telegram/tradeApproval.js';
 import { fanOut, settingsForNotification } from './notifications.js';
 import { factsOf } from './proposals.js';
 import { effectiveState } from './proposalState.js';
+import { agentReservations, reservedQuantity } from './reservations.js';
 import { confirmTradeApproval, previewTradeApproval } from './tradeApproval.js';
 
 /**
@@ -98,6 +113,66 @@ function refuseQueue(row: ProposalRow, now: Date): never {
   });
 }
 
+/**
+ * Queue the approval if what is free covers it (D428), under the agent's cash
+ * lock - the one every fill takes - so the check and the reservation are one
+ * step. A buy is measured at the agent's price, the only one there is while the
+ * market is closed; the open's fill checks again at the live one.
+ *
+ * A buy the scan funded with its own sells (`fundedBy`, D197) is queued without
+ * the cash check, and sets none aside: its cash arrives when those sells fill,
+ * and the open refuses it then if they did not.
+ */
+async function queueCovered(
+  row: ProposalRow,
+  userId: string,
+  surface: OpenApprovalSurface,
+  now: Date,
+): Promise<boolean> {
+  const payload = row.payload as TradeProposalPayload;
+  // Whatever waits is summed by every later check of this agent, so a trade that
+  // cannot be measured is refused here, funded or not, and never reaches the queue.
+  if (!/^[1-9]\d{0,9}$/.test(String(payload.quantity)) || !Number.isSafeInteger(payload.priceMinor) || payload.priceMinor <= 0) {
+    throw unprocessable('invalid_trade', 'this proposal does not name a whole number of shares at a price');
+  }
+  const instrument = row.kind === 'sell' ? await findTradableInstrument(payload.symbol) : null;
+  if (row.kind === 'sell' && instrument === null) throw notFound(`no instrument ${payload.symbol} is known`);
+  return transaction(async (client) => {
+    const cash = await lockAgentCash(client, userId, row.agent_id);
+    // As a fill refuses it (`executeFill`): without the cash row there is no lock to check under.
+    if (cash === null) throw conflict('agent_has_no_cash', 'this agent has no cash account');
+    const reserved = await agentReservations(userId, row.agent_id, now, { exceptProposalId: row.id, client });
+    if (row.kind === 'buy' && (payload.fundedBy ?? []).length === 0) {
+      const required = notionalMinor(payload.quantity, BigInt(payload.priceMinor)) + feeMinor(payload.quantity);
+      if (cash - reserved.cashMinor < required) {
+        throw unprocessable(
+          'insufficient_cash',
+          reserved.cashMinor > 0n
+            ? 'the agent does not have the cash for this trade and its fee: part of its cash is set aside for approved buys'
+            : 'the agent does not have the cash for this trade and its fee',
+          { cashMinor: Number(cash), reservedMinor: Number(reserved.cashMinor), requiredMinor: Number(required) },
+        );
+      }
+    }
+    if (row.kind === 'sell' && instrument !== null) {
+      const holding = await lockAgentHolding(client, userId, row.agent_id, instrument.id);
+      const held = BigInt((holding?.quantity ?? '0').split('.')[0]!);
+      const reservedShares = reservedQuantity(reserved, payload.symbol);
+      const quantity = BigInt(payload.quantity.split('.')[0]!);
+      if (quantity > held - reservedShares) {
+        throw unprocessable(
+          'insufficient_holding',
+          reservedShares > 0n
+            ? `the agent holds ${held} shares, ${reservedShares} of them set aside for approved sells: fewer than ${quantity} are free`
+            : `the agent holds ${held} shares, fewer than ${quantity}`,
+          { heldQuantity: held.toString(), reservedQuantity: reservedShares.toString() },
+        );
+      }
+    }
+    return queueOpenApproval(userId, row.id, surface, now, client);
+  });
+}
+
 /** *Approve at the open*: queue it, or say why not. A second tap answers `unchanged`. */
 export async function approveForOpen(
   userId: string,
@@ -109,7 +184,14 @@ export async function approveForOpen(
   if (row.open_approval === 'queued' && row.opens_at !== null) {
     return { outcome: 'unchanged', opensAt: row.opens_at.toISOString() };
   }
-  if (await queueOpenApproval(userId, proposalId, surface, now)) {
+  // Only a proposal that could be queued is measured: one that is decided, expired or
+  // past its open is refused for that, below, and never for cash.
+  const queueable =
+    effectiveState(factsOf(row), now) === 'pending' &&
+    row.opens_at !== null &&
+    row.opens_at.getTime() > now.getTime() &&
+    (row.open_approval === null || row.open_approval === 'cancelled');
+  if (queueable && (await queueCovered(row, userId, surface, now))) {
     logger().info({ userId, proposalId, surface }, 'proposal.open_approval_queued');
     return { outcome: 'queued', opensAt: row.opens_at!.toISOString() };
   }

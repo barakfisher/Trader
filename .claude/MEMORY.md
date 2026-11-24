@@ -4,7 +4,35 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-23 - **A Telegram message keeps up with its proposal (#405, D427, migration 0091, VERSION 0.0.15).**
+Updated: 2026-11-24 - **Limit orders: the plan the user chose, and its first PR - cash and shares set aside by
+approvals waiting to fill (#406, D428-D430, VERSION 0.0.16, no migration). Not deployed: compose, then production.**
+- **What the user asked and chose (D430), one question at a time:** agents get limit orders. The agent sets the
+  limit, and it is optional; buy and sell limits both; an approved limit lives to the close of its trading day;
+  a proposal with a limit is approved with it or rejected, never "at market"; a sell limit may be good until
+  cancelled, proposed by the agent and approved once; cash is set aside from the approval. Three PRs, one at a
+  time: **1** what is available (this one), **2** the day limit, **3** the sell good until cancelled. Not built:
+  stops, a buy limit past the day, a target the user sets on a holding, editing the limit, a buy with its sell
+  target in one order.
+- **What PR 1 changed:** `services/reservations.ts` reads the agent's queued approvals; `executeFill` and
+  `previewTrade` check a buy against the balance less waiting buys and a sell against the holding less waiting
+  sells; *Approve at the open* is refused at once when what is free does not cover it, under the cash lock;
+  the agent's account, the Telegram agent view and both refusal wordings say what is set aside. No migration,
+  no Python change.
+- **Measured first, on production, read-only (the user's account, head 0091):** 7 agent fills since 2026-11-09.
+  Four filled 1.9% to 2.8% worse than the proposal's price (three buys above it, one sell below); net about $151
+  on $11,936 traded, 1.27%. Every proposal was raised near 14:02 UTC, half an hour before the open, on a
+  pre-market quote. Only two of the seven went through the approval for the open.
+- **Before PR 3:** nothing in the ledger knows a stock split. A reverse split would fill a long-lived sell
+  limit as if the price had risen. Find out, read-only, whether the market data provider reports splits, and
+  bring the options to the user; do not pick a threshold.
+- **Left open, found by the security review, older than this PR:** the open's tick takes due approvals by
+  `opens_at, id`, so a funded buy can be tried before the sell that funds it and refused for good. And a budget
+  cut before an agent's first fill does not read what is set aside; the open then refuses, it never overdraws.
+- **Not verified:** the account card's new line was checked in a DOM test, not looked at in a browser (no
+  compose proposal is queued to look at). After deploy: approve a buy for the open, open the agent's page and
+  its Telegram view, and read "available"; then try a manual buy that needs the cash set aside.
+
+Earlier, 2026-11-23 - **A Telegram message keeps up with its proposal (#405, D427, migration 0091, VERSION 0.0.15).**
 The user approved a buy for the open from Telegram; it filled at 16:30 and the message still offered *Cancel
 approval*. `telegram_proposal_messages` now remembers the message *Approve at the open* was tapped on, and the
 open (or a superseding proposal) redraws its buttons from the row, in the account's current chat only.
@@ -7589,8 +7617,76 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
       whoever holds it that the approval settled. Rows of an unbound chat are left in place, never read.
     - **Cost:** a supersede redraws inside proposal creation, so a slow Telegram (10 s timeout a call) slows
       that scan's proposal; it never fails it.
+428. **An approval waiting to fill sets its cash or shares aside, read from the queue at each check and never
+    stored** (#406, the user, 2026-11-24). An approval for the open is the user's word that a trade will happen, and
+    until it fills the balance still shows the cash it will spend. Available = the balance less the waiting
+    buys; free shares = the holding less the waiting sells. `listQueuedTrades` is the whole mechanism: a row
+    that fills, is cancelled, superseded, refused or expires stops counting in the statement that moves it out
+    of `queued`.
+    - *Rejected:* a `reserved_minor` column on `agent_cash`, or hold rows in `cash_movements`. Every path out of
+      the queue (five today, more with limits) would have to release, and the one that forgot would leave cash
+      nobody can spend and nothing reports.
+    - *Rejected by the user:* checking only when it fills, as D398 did. It was the recommendation; the user chose
+      the broker's behaviour.
+    - **It is smaller than it sounds, and the reason is D197:** the scan already sets aside every waiting buy
+      when it sizes a new one, and refuses the same symbol and side twice. What was open was what the user does
+      by hand (a manual trade on the agent, approving another proposal) and waiting sells, which reserved
+      nothing anywhere.
+    - **A proposal rejected by hand keeps `open_approval = 'queued'` until the minute tick settles it**, so the
+      query reads `state = 'pending'` and the expiry too. Without them a rejected proposal would hold cash
+      until the next open.
+    - **Queueing takes the agent's cash lock**, the one every fill takes, so the check and the reservation are
+      one step and two approvals cannot both take the last of the cash.
+429. **A waiting buy reserves its cost at the agent's price and its fee; a sell's cash check and a funded buy's
+    queueing ignore reservations** (#406, 2026-11-24).
+    - The open may fill up to 3% above the agent's price (D47), so a reservation can fall short by that much.
+      The fill's own check under the lock is the last word. With a limit (PR 2) the limit is the most a buy can
+      cost, and the reservation becomes exact.
+    - **A sell is checked against the whole balance.** It adds cash; against what is available, the sell that
+      funds a waiting buy would be refused for the cash that buy set aside.
+    - **A buy the scan funded with its own sells (`fundedBy`, D197) is queued without the cash check, and sets
+      none aside.** Its cash arrives when the sells fill. Checked, it could never be approved for the open at
+      all; reserving cash that is not there refused every other buy and showed a negative amount as available
+      (the security review's finding). The open's fill decides for it, so a manual buy made after its sells
+      fill can still take that cash.
+    - **Queueing refuses what it cannot measure and fails closed** (the same review): a payload that is not
+      whole shares at an integer price, an agent with no cash row, a sell of an unknown symbol. Every later
+      check of the agent sums the queue, so one unmeasurable row would have answered 500 for the whole agent.
+    - **Deliberate asymmetry:** the mandate's warnings at approval (D299) still read the balance, not what is
+      available. They warn and never refuse, and the scan reviewed the trade against the book with every
+      waiting buy already counted. A cash-buffer warning can therefore understate while another buy waits.
+    - **Not shown yet:** shares set aside by a waiting sell appear in a refusal and in the trade preview's
+      `reservedQuantity`, but not on the holding's row. PR 3's open-orders view is where they belong.
+430. **Limit orders, as the user chose them: the agent sets the limit, a day limit both ways, a sell good
+    until cancelled** (#406, 2026-11-24; a plan, PR 1 of 3 built). See the update of that date
+    for the answers. Why each went the way it did:
+    - *The agent sets the limit, not a rule from the mandate:* a fixed band is the 3% of D47 again, and the
+      agent learns nothing about choosing a price.
+    - *No "approve at market" on a proposal with a limit* (the user's own argument): it contradicts the thesis
+      that asked for the price, an agent that wants the market price sets no limit, and every fill stays the
+      agent's decision for the evaluation.
+    - *A buy limit ends with its trading day; a sell limit may wait:* a waiting buy holds cash for as long as it
+      waits, a waiting sell only holds shares the agent holds anyway.
+    - *The fill is at the price observed, never at the limit:* quotes are sampled once a minute and delayed, so
+      a brief touch can be missed, and a fill is never invented (guideline 7).
+    - **What a long-lived order needs with it:** the agent sees its open orders at every scan and can withdraw
+      or replace them; pausing or archiving the agent cancels them; a split must not fill one.
 
 ## Bugs that cost real time, and the lesson from each
+
+**`docs/DECISIONS.md` is generated; a row typed by hand fails CI (2026-11-24, #406).** The index is built from
+this file's numbered decisions by `python3 scripts/build_decision_index.py`, and `test_decision_index.py` fails when
+the two differ. Three rows were typed in, two with other wording than the titles here, and the Python suite was
+skipped locally because "no Python changed". **Lesson: a docs change can fail the Python job; write the decision
+here, run the script, and run `pytest` whatever the diff touches.**
+
+**Two claims about the fill path were made to the user from one grep, and both were wrong (2026-11-24,
+#406, D428).** "A trade approved for the open fills whatever the gap" - it is refused beyond 3% of the agent's price
+(D47, `MAX_AGENT_DISTANCE_BPS`); the grep had found only the 0.5% band between preview and confirm. "Nothing sets
+cash aside for a waiting buy" - the scan has since D197 (`pending_trades.py`), in the other service. The user
+chose a design on the second one, and was asked again once the code was read. **Lesson: before telling the user
+what the system lacks, read the module's header in both services; a guard that lives one layer up, or in the
+Python half, does not show in a grep of the function that fills.**
 
 **A message's buttons describe the moment it was drawn; whatever changes the proposal later must redraw them
 (2026-11-23, #405, D427).** The open filled an approval and announced it in a new message, and the message it was

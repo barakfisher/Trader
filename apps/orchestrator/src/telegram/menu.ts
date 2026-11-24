@@ -386,6 +386,14 @@ async function agentScreen(reader: Reader, agent: AgentRow, deps: MenuDeps): Pro
     baseCurrency: agent.currency,
   });
   lines.push('', text.cash(money(account.cashMinor, agent.currency, messages), money(account.depositsMinor, agent.currency, messages)));
+  if (account.reservedCashMinor > 0) {
+    lines.push(
+      text.cashAvailable(
+        money(account.cashMinor - account.reservedCashMinor, agent.currency, messages),
+        money(account.reservedCashMinor, agent.currency, messages),
+      ),
+    );
+  }
   if (account.netWorthMinor !== null && account.pnlMinor !== null) {
     lines.push(
       text.netWorth(

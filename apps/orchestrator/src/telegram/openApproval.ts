@@ -25,7 +25,7 @@ import { approveForOpen, cancelForOpen } from '../services/openApproval.js';
 import type { CallbackPayload } from './callbackToken.js';
 import type { Keyboard, TelegramNotifier } from './client.js';
 import { recheckOffered } from './proposalRecheck.js';
-import { appendBlock, currentKeyboard, handleTradeCallback, stamp } from './tradeApproval.js';
+import { appendBlock, currentKeyboard, handleTradeCallback, refusalReason, stamp } from './tradeApproval.js';
 
 export interface OpenApprovalCallback {
   telegram: TelegramNotifier | null;
@@ -117,6 +117,10 @@ export async function handleOpenApprovalCallback(input: OpenApprovalCallback): P
     } else if (error.code === 'already_decided') {
       toast = messages.refusalReplies.already_decided ?? messages.cannotChange;
       result = 'already_decided';
+    } else if (error.code === 'insufficient_cash' || error.code === 'insufficient_holding') {
+      // What is free does not cover it (D428): said in full, and the proposal stays open.
+      toast = refusalReason(error, messages, timezone);
+      result = error.code;
     } else {
       // Nothing waiting to cancel, or an approval the open already settled.
       toast = messages.openApproval.notWaitingToast;

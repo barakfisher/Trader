@@ -171,6 +171,22 @@ export function refusalReason(error: ApiProblem, messages: Messages, timezone: s
       bpsAsPercent(details.distanceBps),
     );
   }
+  if (error.code === 'insufficient_cash' && typeof details.reservedMinor === 'number' && details.reservedMinor > 0) {
+    const cash = typeof details.cashMinor === 'number' ? details.cashMinor : 0;
+    return messages.trade.cashSetAside(
+      money(details.requiredMinor),
+      money(cash - details.reservedMinor),
+      money(details.reservedMinor),
+    );
+  }
+  if (
+    error.code === 'insufficient_holding' &&
+    typeof details.reservedQuantity === 'string' &&
+    details.reservedQuantity !== '0' &&
+    typeof details.heldQuantity === 'string'
+  ) {
+    return messages.trade.sharesSetAside(details.heldQuantity, details.reservedQuantity);
+  }
   return messages.trade.reasons[REFUSAL_CODES.has(error.code) ? (error.code as TradeRefusalCode) : 'other'];
 }
 

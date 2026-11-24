@@ -12,7 +12,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { LEGAL_VERSION } from '@traders/shared';
+import { feeMinor, formatMoney, LEGAL_VERSION } from '@traders/shared';
 
 const USER = '00000000-0000-0000-0000-000000000001';
 const PRIMARY = '90000000-0000-0000-0000-000000000001';
@@ -123,6 +123,8 @@ vi.mock('../src/db/pool.js', () => ({
 }));
 
 vi.mock('../src/db/queries.js', () => ({
+  // Nothing waits for the open here: what is available is the balance (D428).
+  listQueuedTrades: vi.fn(async () => []),
   findTelegramBindingByChat: vi.fn(async () => ({ user_id: USER, chat_id: String(CHAT), legal_accepted: true })),
   findTelegramBindingByUser: vi.fn(async () => null),
   redeemTelegramBindToken: vi.fn(async () => ({ bound: true })),
@@ -501,6 +503,27 @@ describe('a tap edits the message it is on', () => {
       { view: 'agent', agentId: AGENT },
       { view: 'agents' },
     ]);
+  });
+
+  it('an agent’s view says what is available while an approved buy waits to fill (D428)', async () => {
+    vi.mocked(queries.getAgent).mockResolvedValueOnce(agentRow() as never);
+    vi.mocked(queries.listHoldings).mockResolvedValueOnce([holding('AAPL', '3.000000000000000000')] as never);
+    vi.mocked(queries.listQueuedTrades).mockResolvedValueOnce([
+      { id: 'p-1', kind: 'buy', symbol: 'MSFT', quantity: '2', price_minor: '100000', funded: false },
+    ]);
+    await tapAndSettle(tap(encodeMenuData({ view: 'agent', agentId: AGENT })));
+    const reserved = 2 * 100_000 + Number(feeMinor('2'));
+    const usd = (minor: number) => formatMoney(minor, 'USD', { locale: MESSAGES.en.numberLocale });
+    expect(lastText()).toContain(MESSAGES.en.menu.agent.cash('$9,303.58', '$10,000.00'));
+    expect(lastText()).toContain(MESSAGES.en.menu.agent.cashAvailable(usd(930_358 - reserved), usd(reserved)));
+  });
+
+  it('an agent’s view says nothing of available cash when nothing waits', async () => {
+    vi.mocked(queries.getAgent).mockResolvedValueOnce(agentRow() as never);
+    vi.mocked(queries.listHoldings).mockResolvedValueOnce([holding('AAPL', '3.000000000000000000')] as never);
+    await tapAndSettle(tap(encodeMenuData({ view: 'agent', agentId: AGENT })));
+    // The catalogue's own wording up to its first figure, so a reworded line cannot pass unnoticed.
+    expect(lastText()).not.toContain(MESSAGES.en.menu.agent.cashAvailable('\u0000', '').split('\u0000')[0]);
   });
 
   it('an agent waiting for instructions says so instead of a next scan', async () => {
