@@ -25,6 +25,23 @@ export async function laterApprovedProposal(
 }
 
 /**
+ * Whether an approval of the proposal was refused because the live price was
+ * too far from the agent's (D47), on any surface or at the open: what offers
+ * *Re-check* on a pending proposal (D431). Read from the recorded attempts, so
+ * offering the button needs no quote.
+ */
+export async function hasPriceFarRefusal(userId: string, proposalId: string): Promise<boolean> {
+  const row = await queryOne<{ refused: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM proposal_attempts
+        WHERE user_id = $1 AND proposal_id = $2 AND reason = 'price_far_from_agent'
+     ) AS refused`,
+    [userId, proposalId],
+  );
+  return row?.refused === true;
+}
+
+/**
  * A trade proposal's re-check (D212, D213): the `refresh` scan that names it
  * (`agent_scans.refreshes_proposal_id`, migration 0066), and the proposal that
  * scan raised, if any. The AI service writes both; this side only reads them.

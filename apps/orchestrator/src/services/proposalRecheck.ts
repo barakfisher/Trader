@@ -1,8 +1,10 @@
 /**
- * Re-checking an expired trade proposal (improvements item 4; D212-D217).
+ * Re-checking a trade proposal (improvements item 4; D212-D217, D431-D433).
  *
  * A trade proposal lives an hour from the next open (D4). One the user did not
- * answer in time can be re-checked once, from the web or Telegram: the AI
+ * answer in time can be re-checked once, from the web or Telegram - and so can
+ * one the user approved, whose approval was refused because the live price is
+ * too far from the agent's (`price_far_from_agent`, D431): the AI
  * service runs a `refresh` scan of that one trade (`app/agents/recheck.py`),
  * and a kept trade becomes a new proposal here exactly as a scan's does
  * (`proposeFromScan`: written, announced with Approve and Reject). The AI
@@ -19,13 +21,21 @@
  *
  * Whether *Re-check* is offered (D215) is computed here from the same rows, so
  * the page, the Telegram keyboard and the AI service's refusal agree: a buy or
- * sell that expired unanswered, at most `RECHECK_WINDOW_DAYS` ago, whose agent
- * is active, with no re-check that counts.
+ * sell that expired unanswered, at most `RECHECK_WINDOW_DAYS` ago, or a pending
+ * one with an approval refused for a moved price (D431), whose agent is active,
+ * with no re-check that counts.
+ *
+ * **A moved price's re-check closes the proposal (D432).** Kept, the new
+ * proposal replaces it; declined, it is withdrawn with the agent's reason. Either
+ * way it is rejected by the system, so neither surface can approve it at the
+ * price the agent no longer stands behind, and the Telegram messages that show
+ * it are redrawn. A re-check that reached no answer leaves it pending.
  */
 
 import {
   isTradeProposalKind,
   RECHECK_CHECKS,
+  type RecheckCause,
   RECHECK_UNANSWERED,
   RECHECK_WINDOW_DAYS,
   type ProposalRecheck,
@@ -36,8 +46,10 @@ import {
 import { AiServiceError, type AgentScanResponse, type AiClient } from '@traders/shared/ai';
 
 import {
+  applyProposalTransition,
   findProposal,
   getAgent,
+  hasPriceFarRefusal,
   laterApprovedProposal,
   latestRecheck,
   type ProposalRow,
@@ -46,6 +58,7 @@ import {
 import { aiRefusal, conflict, notFound, upstreamFailure } from '../http/errors.js';
 import { logger } from '../logger.js';
 import type { Notifier } from '../notify/notifier.js';
+import { redrawProposalMessages } from '../telegram/proposalMessages.js';
 import { factsOf } from './proposals.js';
 import { effectiveState } from './proposalState.js';
 import { proposeFromScan } from './tradeProposals.js';
@@ -118,11 +131,18 @@ export async function recheckStatus(
     laterApprovedProposal(userId, row.agent_id, row.id),
   ]);
   const last = stored === null ? null : recheckResultOf(stored, now);
+  const state = effectiveState(factsOf(row), now);
+  // D431: a pending proposal is re-checked for a moved price; an expired one for
+  // its expiry. A proposal a re-check closed (D432) keeps the cause it ran for.
+  const priceMoved =
+    state === 'pending' && row.open_approval !== 'queued' && (await hasPriceFarRefusal(userId, row.id));
+  const cause: RecheckCause | null =
+    state === 'expired' ? 'expired' : priceMoved || (state === 'rejected' && last !== null) ? 'price_moved' : null;
   const blocked: RecheckBlock | null =
-    // Expired is unanswered: an approval or a rejection is terminal and stays itself.
-    effectiveState(factsOf(row), now) !== 'expired'
+    // Approved or rejected stays itself; pending is offered only for a moved price.
+    state !== 'expired' && !priceMoved
       ? 'not_expired'
-      : now.getTime() - row.expires_at.getTime() > RECHECK_WINDOW_MS
+      : state === 'expired' && now.getTime() - row.expires_at.getTime() > RECHECK_WINDOW_MS
         ? 'recheck_window_passed'
         : last?.outcome === 'running'
           ? 'scan_running'
@@ -132,9 +152,9 @@ export async function recheckStatus(
               supersededBy !== null
               ? 'superseded'
               : agent === null || agent.state !== 'active' || agent.is_primary
-              ? 'agent_not_active'
-              : null;
-  return { recheck: { available: blocked === null, last, supersededBy }, blocked };
+                ? 'agent_not_active'
+                : null;
+  return { recheck: { available: blocked === null, cause, last, supersededBy }, blocked };
 }
 
 /** The proposal page's view of it (`ProposalDetailResponse.recheck`). */
@@ -143,7 +163,42 @@ export async function recheckOf(userId: string, row: ProposalRow, now: Date): Pr
 }
 
 /**
- * Re-check one expired trade proposal now. Refusals are the AI service's,
+ * D432: a pending proposal whose re-check reached an answer is closed - replaced
+ * by the new proposal, or withdrawn - and its Telegram messages lose their
+ * buttons. Read fresh: another surface may have decided it meanwhile.
+ */
+async function closeAfterRecheck(
+  userId: string,
+  proposalId: string,
+  result: RecheckResult,
+  context: RecheckContext,
+  now: Date,
+): Promise<void> {
+  const row = await findProposal(userId, proposalId);
+  if (row === null || (row.state !== 'pending' && row.state !== 'snoozed')) return;
+  if (effectiveState(factsOf(row), now) !== 'pending') return;
+  await applyProposalTransition({
+    proposalId: row.id,
+    userId,
+    fromState: row.state,
+    toState: 'rejected',
+    surface: 'system',
+    actorUserId: null,
+    snoozedUntil: null,
+    evidenceSnapshot: row.evidence,
+    idempotencyKey: null,
+    intent: null,
+    revokeIntent: false,
+  });
+  logger().info(
+    { userId, proposalId, outcome: result.outcome, ...(result.outcome === 'proposed' ? { newerProposalId: result.proposalId } : {}) },
+    'proposal.closed_after_recheck',
+  );
+  await redrawProposalMessages(context.notifier, userId, proposalId, now);
+}
+
+/**
+ * Re-check one trade proposal now. Refusals are the AI service's,
  * passed on with their codes (`not_expired`, `already_rechecked`,
  * `budget_spent`, `scan_running`, …); everything else is the result.
  */
@@ -193,5 +248,9 @@ export async function recheckProposal(
     now,
   );
   logger().info({ proposalId, scanId: scan.scan_id, outcome: result.outcome }, 'proposal.rechecked');
+  // Only a moved price's proposal is still pending here; an expired one stays expired.
+  if (result.outcome === 'proposed' || result.outcome === 'declined') {
+    await closeAfterRecheck(userId, proposalId, result, context, now);
+  }
   return result;
 }

@@ -1,9 +1,17 @@
-"""A re-check of one expired trade proposal (improvements item 4; D212-D216).
+"""A re-check of one trade proposal (improvements item 4; D212-D216, D431-D433).
 
-A trade proposal lives an hour from the next open (D4). One the user did not
-answer in time can be re-checked once: the same agent looks at that one trade
-again with today's evidence and either proposes it anew - same symbol and side,
-the quantity set again at the fresh price (D216) - or says why not.
+A trade proposal lives an hour from the next open (D4). It can be re-checked
+once, for one of two causes (`RecheckCause`):
+
+- **expired** - the user did not answer in time (D212);
+- **price_moved** - the user approved it, and the approval was refused because
+  the live price is further than D47's band from the agent's (D431): the
+  proposal is still pending, and nothing can approve it at the agent's price.
+
+The same agent looks at that one trade again with today's evidence and either
+proposes it anew - same symbol and side, the quantity set again at the fresh
+price (D216) - or says why not. For a moved price the orchestrator closes the
+old proposal either way (D432): replaced by the new one, or withdrawn.
 
 **It is a scan, narrowed** (D212): the same instructions, mandate and checks
 (`scan.run_briefed`, `trade_review.py`), the same evidence validator, the same
@@ -22,7 +30,9 @@ own-key rule and the safety limit apply as to any scan (D245, D250). What differ
 
 **Once** is the database's (`0066`, `agent_scans_one_refresh`, D213); the check
 here only refuses before money is spent. Eligible (D215): a buy or sell that
-expired unanswered, at most `RECHECK_WINDOW` ago. A rejected proposal is not,
+expired unanswered, at most `RECHECK_WINDOW` ago, or (D431) a pending one whose
+approval was refused as `price_far_from_agent` - read from `proposal_attempts`,
+so offering the button needs no quote. A rejected proposal is not,
 and neither is one a later approved proposal for the same symbol and side
 already carried out (D218): re-checking it would ask to do the trade twice.
 """
@@ -32,7 +42,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -61,6 +71,11 @@ UNANSWERED_OUTCOMES = (
     "own_key_failed",
     "own_key_required",
 )
+#: `proposal_attempts.reason` of an approval refused for a price too far from the agent's (D47).
+PRICE_FAR_FROM_AGENT = "price_far_from_agent"
+
+#: Why a proposal is re-checked (D431).
+RecheckCause = Literal["expired", "price_moved"]
 
 
 class NotRecheckableError(Exception):
@@ -73,21 +88,22 @@ class NotRecheckableError(Exception):
 
 
 @dataclass(frozen=True)
-class ExpiredTrade:
+class RecheckTrade:
     proposal_id: str
     side: str
     symbol: str
     quantity: Decimal
     price_minor: int
     proposed_at: datetime
-    expired_at: datetime
+    expires_at: datetime
     #: The thesis the user did not answer, in the language it was written in.
     thesis: str | None
+    cause: RecheckCause = "expired"
 
 
-def find_expired_trade(
+def find_recheckable_trade(
     engine: Engine, user_id: str, agent_id: str, proposal_id: str, now: datetime
-) -> ExpiredTrade:
+) -> RecheckTrade:
     """The agent's proposal, if it may be re-checked now; otherwise why not."""
     with engine.connect() as connection:
         row = connection.execute(
@@ -106,7 +122,12 @@ def find_expired_trade(
                               AND later.kind = p.kind AND later.state = 'approved'
                               AND later.payload ->> 'symbol' = p.payload ->> 'symbol'
                               AND later.created_at > p.created_at
-                       ) AS superseded
+                       ) AS superseded,
+                       EXISTS (
+                           SELECT 1 FROM proposal_attempts a
+                            WHERE a.proposal_id = p.id AND a.user_id = p.user_id
+                              AND a.reason = :far
+                       ) AS price_moved
                   FROM proposals p
                   JOIN observations o ON o.id = p.observation_id
                  WHERE p.id = CAST(:proposal AS uuid) AND p.user_id = CAST(:user AS uuid)
@@ -118,16 +139,24 @@ def find_expired_trade(
                 "user": user_id,
                 "agent": agent_id,
                 "unanswered": list(UNANSWERED_OUTCOMES),
+                "far": PRICE_FAR_FROM_AGENT,
             },
         ).one_or_none()
     if row is None:
         raise NotRecheckableError("proposal_not_found", "no such proposal for this agent")
     if row.kind not in ("buy", "sell"):
         raise NotRecheckableError("not_a_trade", "only a trade proposal is re-checked")
+    if row.state not in ("pending", "snoozed", "expired"):
+        raise NotRecheckableError("not_expired", "an approved or rejected proposal stays decided")
     # Expiry is computed (proposalState.ts): a passed deadline is expired, swept or not.
-    if row.state not in ("pending", "snoozed", "expired") or row.expires_at > now:
-        raise NotRecheckableError("not_expired", "only a proposal that expired unanswered")
-    if now - row.expires_at > RECHECK_WINDOW:
+    expired = row.expires_at <= now
+    if not expired and not (row.state == "pending" and row.price_moved):
+        raise NotRecheckableError(
+            "not_expired",
+            "only a proposal that expired unanswered, or whose approval was refused because"
+            " the price moved too far from the agent's",
+        )
+    if expired and now - row.expires_at > RECHECK_WINDOW:
         raise NotRecheckableError(
             "recheck_window_passed", f"it expired more than {RECHECK_WINDOW.days} days ago"
         )
@@ -136,19 +165,20 @@ def find_expired_trade(
     if row.superseded:
         raise NotRecheckableError("superseded", "a later approved proposal already made this trade")
     payload = row.payload
-    return ExpiredTrade(
+    return RecheckTrade(
         proposal_id=row.id,
         side=row.kind,
         symbol=str(payload["symbol"]).upper(),
         quantity=Decimal(str(payload["quantity"])),
         price_minor=int(payload["priceMinor"]),
         proposed_at=row.created_at,
-        expired_at=row.expires_at,
+        expires_at=row.expires_at,
         thesis=row.explanation,
+        cause="expired" if expired else "price_moved",
     )
 
 
-async def recheck_briefing(context: ToolContext, trade: ExpiredTrade) -> dict[str, Any]:
+async def recheck_briefing(context: ToolContext, trade: RecheckTrade) -> dict[str, Any]:
     """What a re-check starts from: the one trade, then today's evidence about it."""
     position = await get_position(context, {})
     quote = await get_quote(context, {"symbols": [trade.symbol]})
@@ -159,8 +189,10 @@ async def recheck_briefing(context: ToolContext, trade: ExpiredTrade) -> dict[st
         "quantity_proposed": f"{trade.quantity.normalize():f}",
         "price_when_proposed": then,
         "proposed_at": trade.proposed_at.isoformat(),
-        "expired_at": trade.expired_at.isoformat(),
+        "cause": trade.cause,
     }
+    if trade.cause == "expired":
+        recheck["expired_at"] = trade.expires_at.isoformat()
     now = quote.get("quotes", {}).get(trade.symbol, {}).get("price")
     if now is not None:
         # Computed here, so the thesis can quote the move rather than work it out (D219).
@@ -180,12 +212,19 @@ async def recheck_briefing(context: ToolContext, trade: ExpiredTrade) -> dict[st
     }
 
 
-def preface(trade: ExpiredTrade) -> str:
+def preface(trade: RecheckTrade) -> str:
     """What the model is told before the briefing. Not evidence (see the module)."""
     quantity = f"{trade.quantity.normalize():f}"
+    what_happened = (
+        "the user did not answer before it expired."
+        if trade.cause == "expired"
+        else "the user approved it, but the price had moved too far from yours to fill it"
+        " at the price you decided at. If you decline, the proposal is withdrawn; if you"
+        " propose it, the new proposal replaces it."
+    )
     lines = [
         "This is a re-check, not a scan. You proposed to "
-        f"{trade.side} {quantity} {trade.symbol}; the user did not answer before it expired.",
+        f"{trade.side} {quantity} {trade.symbol}; {what_happened}",
         "The question is whether your reason then still holds at today's price. Your thesis"
         " must say, in this order: the price when proposed and the price now with the change"
         ' between them, exactly as the briefing\'s "recheck" gives them; whether the reason'
@@ -213,10 +252,10 @@ async def run_recheck(
     llm: LLMProvider,
     context: ToolContext,
     agent: ScanAgent,
-    trade: ExpiredTrade,
+    trade: RecheckTrade,
 ) -> ScanResult:
     """Re-check `trade` for `agent` and store it as a `refresh` scan. The caller has
-    checked the agent as for a scan, and found the trade with `find_expired_trade`."""
+    checked the agent as for a scan, and found the trade with `find_recheckable_trade`."""
     briefing = await recheck_briefing(context, trade)
     return await run_briefed(
         engine=engine,

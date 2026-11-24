@@ -311,7 +311,13 @@ async def run_briefed(
     the row is started, and the model is asked. A scan and a re-check share it."""
     if (brief := mandate_brief(agent.mandate)) is not None:
         briefing["mandate"] = brief
-    pending = pending_trades(engine, agent.user_id, agent.agent_id, context.now)
+    pending = pending_trades(
+        engine,
+        agent.user_id,
+        agent.agent_id,
+        context.now,
+        excluding=focus.proposal_id if focus else None,
+    )
     briefing["waiting_for_approval"] = [trade.as_briefing() for trade in pending]
     # D235: a re-check is about one trade (D216), so it is not asked about idle cash,
     # nor told its earlier scans (D354): its preface already names the trade.

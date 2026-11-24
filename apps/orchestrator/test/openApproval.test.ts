@@ -82,6 +82,8 @@ vi.mock('../src/services/tradeApproval.js', () => ({
   confirmTradeApproval: vi.fn(),
 }));
 
+vi.mock('../src/telegram/proposalRecheck.js', () => ({ recheckOffered: vi.fn(async () => true) }));
+
 vi.mock('../src/telegram/proposalMessages.js', () => ({
   redrawProposalMessages: vi.fn(async () => undefined),
 }));
@@ -330,6 +332,15 @@ describe('the open (D398, D399)', () => {
     expect(sent[0]!.title).toContain('was not made');
     expect(sent[0]!.body).toContain('$171.33');
     expect(sent[0]!.body).toContain('-4.11%');
+    // D431: the message offers Re-check beside Approve and Reject.
+    expect(sent[0]).toMatchObject({ proposalId: PROPOSAL, trade: true, recheck: true });
+  });
+
+  it('offers no buttons on any other refusal', async () => {
+    vi.mocked(approval.previewTradeApproval).mockRejectedValue(new ApiProblem(422, 'insufficient_cash', 'short'));
+    const { sent, notifier } = recordingNotifier();
+    await tick(AFTER_OPEN, notifier);
+    expect(sent[0]!.proposalId).toBeUndefined();
   });
 
   it('says it in the user language', async () => {

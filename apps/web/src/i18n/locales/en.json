@@ -644,6 +644,10 @@
     "reject": "Reject",
     "trade": {
       "agentPrice": "the agent's price {{price}}",
+      "recheck": {
+        "hint": "The agent can re-check this trade once at the new price: if it still holds, a new proposal replaces this one; if not, this one is closed.",
+        "running": "The agent is re-checking the trade at the new price. This can take up to a minute."
+      },
       "thesis": "Why the agent proposes it",
       "paperOnly": "A paper trade: approving it records a fill in the agent's simulated account. No order is placed.",
       "notAdvice": "Not financial or investment advice, and no substitute for a professional: this proposal is for simulation inside the app only.",
@@ -1094,6 +1098,7 @@
       "proposed": "Re-checked {{when}}: the agent proposed it again.",
       "openNew": "Open the new proposal",
       "declined": "Re-checked {{when}}: no new proposal.",
+      "closed": "This proposal is closed and can no longer be approved.",
       "agentSaid": "The agent's reason:",
       "unanswered": "The re-check {{when}} did not finish: {{cause}} You can try again.",
       "checks": {
@@ -1120,7 +1125,7 @@
         "own_key_required": "no OpenRouter key of your own is saved."
       },
       "refusals": {
-        "not_expired": "Only an expired proposal can be re-checked.",
+        "not_expired": "Only an expired proposal, or one refused because the price moved too far from the agent's, can be re-checked.",
         "recheck_window_passed": "It expired too long ago to re-check.",
         "already_rechecked": "This proposal has already been re-checked.",
         "superseded": "A later proposal for the same trade was approved, so there is nothing to re-check.",

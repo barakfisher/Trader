@@ -91,7 +91,12 @@ export const ProposalPage = observer(function ProposalPage() {
             <DecidedCard proposal={proposal} baseCurrency={baseCurrency} />
           )}
           {detail.data?.recheck && (
-            <RecheckCard proposalId={proposal.id} agentId={proposal.agentId} recheck={detail.data.recheck} />
+            <RecheckCard
+              proposalId={proposal.id}
+              agentId={proposal.agentId}
+              recheck={detail.data.recheck}
+              pending={proposal.state === 'pending' || proposal.state === 'snoozed'}
+            />
           )}
           <SubjectLink proposal={proposal} />
           <TrailCard transitions={detail.data?.transitions ?? []} createdAt={proposal.createdAt} expiresAt={proposal.expiresAt} />

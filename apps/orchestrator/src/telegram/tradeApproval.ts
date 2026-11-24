@@ -228,11 +228,17 @@ export function tradeKeyboard(
   return 'trade';
 }
 
-/** The keyboard the proposal's current row calls for. */
+/**
+ * The keyboard the proposal's current row calls for: Approve and Reject gain
+ * Re-check once an approval was refused for a price too far from the agent's
+ * and the re-check is still offered (D431).
+ */
 export async function currentKeyboard(userId: string, proposalId: string, now: Date): Promise<Keyboard> {
   const row = await findProposal(userId, proposalId);
   if (row === null) return 'none';
-  return tradeKeyboard(row, effectiveState(factsOf(row), now), now);
+  const keyboard = tradeKeyboard(row, effectiveState(factsOf(row), now), now);
+  if (keyboard === 'trade' && (await recheckOffered(userId, proposalId, now))) return 'tradeRecheck';
+  return keyboard;
 }
 
 export async function handleTradeCallback(input: TradeCallback): Promise<void> {

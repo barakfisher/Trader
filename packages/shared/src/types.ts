@@ -2260,7 +2260,17 @@ export interface ProposalDetailResponse {
   recheck: ProposalRecheck | null;
 }
 
-// --- Re-checking an expired trade proposal (D212-D217) -------------------------
+// --- Re-checking a trade proposal (D212-D217, D431-D433) -----------------------
+
+/**
+ * Why a trade proposal is (or was) re-checked: it expired unanswered (D212), or
+ * the user approved it and the approval was refused because the live price is
+ * too far from the agent's (`price_far_from_agent`, D431). A re-check of a moved
+ * price closes the proposal either way (D432): replaced by the new proposal, or
+ * withdrawn with the agent's reason.
+ */
+export const RECHECK_CAUSES = ['expired', 'price_moved'] as const;
+export type RecheckCause = (typeof RECHECK_CAUSES)[number];
 
 /** How long after its expiry a trade proposal may be re-checked (D215). The AI service's `RECHECK_WINDOW`. */
 export const RECHECK_WINDOW_DAYS = 7;
@@ -2309,8 +2319,13 @@ export type RecheckResult =
   | { outcome: 'running'; scanId: string; at: string };
 
 export interface ProposalRecheck {
-  /** Whether *Re-check* is offered now (D215): expired unanswered, within the window, not used up. */
+  /**
+   * Whether *Re-check* is offered now (D215, D431): expired unanswered within the
+   * window, or pending with an approval refused for a moved price; not used up.
+   */
   available: boolean;
+  /** Why it is offered, or why the last one ran; null when neither applies. */
+  cause: RecheckCause | null;
   /** The latest re-check, if there was one. */
   last: RecheckResult | null;
   /** The later approved proposal that already made this trade (D218); null when none did. */

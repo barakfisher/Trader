@@ -510,6 +510,8 @@ export interface Messages {
     startedToast: string;
     proposed: (at: string) => string;
     declined: (at: string, reason: string) => string;
+    /** D432: a moved price's re-check that reached an answer closes the proposal it re-checked. */
+    closed: string;
     unanswered: (at: string, cause: string) => string;
     agentSaid: (thesis: string) => string;
     checks: Record<RecheckCheck, string>;
@@ -1044,6 +1046,7 @@ const en: Messages = {
     startedToast: "Re-checking at today's price - the answer follows here.",
     proposed: (at) => `🔄 Re-checked (${at}): a new proposal follows.`,
     declined: (at, reason) => `🔄 Re-checked (${at}): no new proposal. ${reason}`,
+    closed: 'This proposal is closed and can no longer be approved.',
     unanswered: (at, cause) => `🔄 The re-check did not finish (${at}): ${cause} You can try again.`,
     agentSaid: (thesis) => `The agent: ${thesis}`,
     checks: {
@@ -1070,7 +1073,7 @@ const en: Messages = {
       own_key_required: 'no OpenRouter key of your own is saved.',
     },
     refusals: {
-      not_expired: 'Only an expired proposal can be re-checked.',
+      not_expired: "Only an expired proposal, or one refused because the price moved too far from the agent's, can be re-checked.",
       recheck_window_passed: `It expired more than ${RECHECK_WINDOW_DAYS} days ago.`,
       already_rechecked: 'This proposal has already been re-checked.',
       superseded: 'A later proposal for the same trade was approved, so there is nothing to re-check.',
@@ -1653,6 +1656,7 @@ const he: Messages = {
     startedToast: 'בודק שוב במחיר של היום - התשובה תגיע כאן.',
     proposed: (at) => `🔄 נבדק שוב (${ltr(at)}): הצעה חדשה בהודעה הבאה.`,
     declined: (at, reason) => `🔄 נבדק שוב (${ltr(at)}): אין הצעה חדשה. ${reason}`,
+    closed: 'ההצעה הזו נסגרה ואי אפשר לאשר אותה עוד.',
     unanswered: (at, cause) => `🔄 הבדיקה החוזרת לא הסתיימה (${ltr(at)}): ${cause} אפשר לנסות שוב.`,
     agentSaid: (thesis) => `הסוכן: ${thesis}`,
     checks: {
@@ -1679,7 +1683,7 @@ const he: Messages = {
       own_key_required: `לא שמרת מפתח ${ltr('OpenRouter')} משלך.`,
     },
     refusals: {
-      not_expired: 'אפשר לבדוק שוב רק הצעה שפג תוקפה.',
+      not_expired: 'אפשר לבדוק שוב רק הצעה שפג תוקפה, או הצעה שנדחתה כי המחיר זז רחוק מדי ממחיר הסוכן.',
       recheck_window_passed: `תוקפה פג לפני יותר מ־${ltr(RECHECK_WINDOW_DAYS)} ימים.`,
       already_rechecked: 'ההצעה הזו כבר נבדקה שוב.',
       superseded: 'הצעה מאוחרת יותר לאותה עסקה אושרה, אז אין מה לבדוק שוב.',
