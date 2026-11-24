@@ -105,15 +105,32 @@ export function tradeErrorMessage(error: unknown, fallback: string, currency = '
       return t('agents.trade.errors.priceMoved', {
         price: formatMoney(detail<number>(error, 'livePriceMinor'), currency),
       });
-    case 'insufficient_cash':
+    case 'insufficient_cash': {
+      const reserved = detail<number>(error, 'reservedMinor') ?? 0;
+      if (reserved > 0) {
+        return t('agents.trade.errors.insufficientCashReserved', {
+          required: formatMoney(detail<number>(error, 'requiredMinor'), currency),
+          available: formatMoney((detail<number>(error, 'cashMinor') ?? 0) - reserved, currency),
+          reserved: formatMoney(reserved, currency),
+        });
+      }
       return t('agents.trade.errors.insufficientCash', {
         required: formatMoney(detail<number>(error, 'requiredMinor'), currency),
         cash: formatMoney(detail<number>(error, 'cashMinor'), currency),
       });
-    case 'insufficient_holding':
+    }
+    case 'insufficient_holding': {
+      const reserved = Number(detail<string>(error, 'reservedQuantity') ?? 0);
+      if (reserved > 0) {
+        return t('agents.trade.errors.insufficientHoldingReserved', {
+          held: formatNumber(Number(detail<string>(error, 'heldQuantity') ?? 0)),
+          reserved: formatNumber(reserved),
+        });
+      }
       return t('agents.trade.errors.insufficientHolding', {
         held: formatNumber(Number(detail<string>(error, 'heldQuantity') ?? 0)),
       });
+    }
     case 'not_tradable': {
       const reason = detail<string>(error, 'reason');
       if (reason === 'not_usd') return t('agents.trade.errors.notUsd');

@@ -12,6 +12,7 @@
 import type { AgentAccountResponse } from '@traders/shared';
 
 import { sumFeesPaid, type AgentRow, type HoldingRow } from '../db/queries.js';
+import { agentReservations } from './reservations.js';
 import { valuePortfolio, type ValuationContext } from './valuation.js';
 
 export async function valueAgentAccount(
@@ -22,9 +23,10 @@ export async function valueAgentAccount(
 ): Promise<AgentAccountResponse> {
   const cash = Number(agent.cash_minor ?? 0);
   const deposits = Number(agent.budget_minor ?? 0);
-  const [portfolio, feesPaid] = await Promise.all([
+  const [portfolio, feesPaid, reserved] = await Promise.all([
     valuePortfolio(rows, context),
     sumFeesPaid(userId, agent.id),
+    agentReservations(userId, agent.id, new Date()),
   ]);
   const complete = portfolio.summary.unpricedSymbols.length === 0;
   const holdingsValue = complete ? portfolio.summary.totalValueMinor : null;
@@ -33,6 +35,7 @@ export async function valueAgentAccount(
   return {
     currency: agent.currency,
     cashMinor: cash,
+    reservedCashMinor: Number(reserved.cashMinor),
     depositsMinor: deposits,
     holdingsValueMinor: holdingsValue,
     netWorthMinor: netWorth,

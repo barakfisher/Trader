@@ -9,6 +9,7 @@
  * the real portfolio (D1, D22).
  */
 
+import { feeMinor } from '@traders/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createFakeAi } from './fakeAi.js';
@@ -66,6 +67,8 @@ vi.mock('../src/db/pool.js', () => ({
 }));
 
 vi.mock('../src/db/queries.js', () => ({
+  // Nothing waits for the open here: what is available is the balance (D428).
+  listQueuedTrades: vi.fn(async () => []),
   getSessionUser: vi.fn(async (userId: string) => (await import('./session.js')).mockedSessionUser(userId)),
   getUser: vi.fn(async () => USER),
   getAgent: vi.fn(async (_u: string, id: string) =>
@@ -146,6 +149,19 @@ describe('the account', () => {
       pnlMinor: 30000 + marketValue - 100000,
     });
     expect(body.pnlPct).toBeCloseTo(((30000 + marketValue - 100000) / 100000) * 100, 10);
+  });
+
+  it('says how much of the cash approved buys waiting to fill have set aside (D428)', async () => {
+    const send = await signedIn();
+    expect(await (await send('GET', `/agents/${AGENT}/account`)).json()).toMatchObject({ reservedCashMinor: 0 });
+
+    vi.mocked(queries.listQueuedTrades).mockResolvedValueOnce([
+      { id: 'p-1', kind: 'buy', symbol: 'MSFT', quantity: '2', price_minor: '5000', funded: false },
+      { id: 'p-2', kind: 'sell', symbol: 'AAPL', quantity: '1', price_minor: '20000', funded: false },
+    ]);
+    const body = await (await send('GET', `/agents/${AGENT}/account`)).json();
+    // The buy's cost and fee; the sell sets shares aside, not cash. The balance itself is untouched.
+    expect(body).toMatchObject({ cashMinor: 30000, reservedCashMinor: 2 * 5000 + Number(feeMinor('2')) });
   });
 
   it('leaves net worth and P&L null when a holding is unpriced, never partial', async () => {

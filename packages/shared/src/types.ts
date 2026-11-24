@@ -632,8 +632,12 @@ export interface TradePreview {
   cashChangeMinor: number;
   cashMinor: number;
   cashAfterMinor: number;
+  /** Cash set aside by other approved buys still waiting to fill (D428); 0 when none. */
+  reservedCashMinor: number;
   heldQuantity: string;
   heldAfterQuantity: string;
+  /** Shares of this symbol set aside by other approved sells still waiting to fill (D428). */
+  reservedQuantity: string;
   currency: string;
   warnings: TradeWarning[];
 }
@@ -664,6 +668,8 @@ export interface FillView {
 export interface AgentAccountResponse {
   currency: string;
   cashMinor: number;
+  /** Of `cashMinor`, what approved buys waiting to fill have set aside (D428); 0 when none. */
+  reservedCashMinor: number;
   /** The opening deposit and every top-up: what the agent was given. Equals its budget. */
   depositsMinor: number;
   holdingsValueMinor: number | null;

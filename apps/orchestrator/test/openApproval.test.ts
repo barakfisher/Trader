@@ -9,6 +9,8 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { feeMinor } from '@traders/shared';
+
 import type { OutboundNotification } from '../src/notify/notifier.js';
 
 const USER = '00000000-0000-0000-0000-000000000001';
@@ -22,6 +24,11 @@ const EXPIRES_AT = new Date('2026-11-18T15:30:00Z');
 
 let row: Record<string, unknown>;
 let language = 'en';
+/** The agent's balance, its holding of the proposal's symbol, and what already waits (D428). */
+let cash = 1_000_000n;
+let held = '0';
+let queued: Record<string, string | boolean>[] = [];
+const CLIENT = { client: true };
 
 function proposalRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -46,6 +53,11 @@ function proposalRow(overrides: Record<string, unknown> = {}) {
 }
 
 vi.mock('../src/db/queries.js', () => ({
+  transaction: vi.fn(async (fn: (client: unknown) => Promise<unknown>) => fn(CLIENT)),
+  lockAgentCash: vi.fn(async () => cash),
+  lockAgentHolding: vi.fn(async () => (held === '0' ? null : { quantity: held, cost_basis_minor: '10000' })),
+  findTradableInstrument: vi.fn(async () => ({ id: 'i-nvda', symbol: 'NVDA' })),
+  listQueuedTrades: vi.fn(async () => queued),
   findProposal: vi.fn(async () => row),
   getUser: vi.fn(async () => ({ id: USER, timezone: 'Asia/Jerusalem' })),
   getOrCreateUserSettings: vi.fn(async () => ({
@@ -129,6 +141,9 @@ function tick(now: Date, notifier = recordingNotifier().notifier) {
 beforeEach(() => {
   row = proposalRow();
   language = 'en';
+  cash = 1_000_000n;
+  held = '0';
+  queued = [];
   vi.mocked(queries.queueOpenApproval).mockReset().mockResolvedValue(true);
   vi.mocked(queries.cancelOpenApproval).mockReset().mockResolvedValue(true);
   vi.mocked(queries.settleOpenApproval).mockReset().mockResolvedValue(true);
@@ -144,7 +159,9 @@ describe('Approve at the open', () => {
     row = proposalRow({ open_approval: null, open_approval_surface: null, open_approval_at: null });
     const result = await approveForOpen(USER, PROPOSAL, 'web', BEFORE_OPEN);
     expect(result).toEqual({ outcome: 'queued', opensAt: OPENS_AT.toISOString() });
-    expect(queries.queueOpenApproval).toHaveBeenCalledWith(USER, PROPOSAL, 'web', BEFORE_OPEN);
+    expect(queries.queueOpenApproval).toHaveBeenCalledWith(USER, PROPOSAL, 'web', BEFORE_OPEN, CLIENT);
+    // The check and the queueing share the lock every fill takes (D428).
+    expect(queries.lockAgentCash).toHaveBeenCalledWith(CLIENT, USER, AGENT);
   });
 
   it('answers a second tap unchanged, writing nothing', async () => {
@@ -164,6 +181,78 @@ describe('Approve at the open', () => {
     vi.mocked(queries.queueOpenApproval).mockResolvedValue(false);
     await expect(approveForOpen(USER, PROPOSAL, 'web', BEFORE_OPEN)).rejects.toMatchObject({
       code: 'already_decided',
+    });
+  });
+
+  describe('only when what is free covers it (D428)', () => {
+    const unqueued = { open_approval: null, open_approval_surface: null, open_approval_at: null };
+    /** The proposal's own cost: 3 NVDA at the agent's price, and the fee. */
+    const cost = 3 * 15_546 + Number(feeMinor('3'));
+    const WAITING = { id: 'p-other', kind: 'buy', symbol: 'MSFT', quantity: '2', price_minor: '20000', funded: false };
+    const waitingCost = 2 * 20_000 + Number(feeMinor('2'));
+
+    it('refuses a buy that other waiting buys leave no cash for, naming what they set aside', async () => {
+      row = proposalRow(unqueued);
+      queued = [WAITING];
+      cash = BigInt(cost + waitingCost - 1);
+      await expect(approveForOpen(USER, PROPOSAL, 'web', BEFORE_OPEN)).rejects.toMatchObject({
+        code: 'insufficient_cash',
+        details: { cashMinor: cost + waitingCost - 1, reservedMinor: waitingCost, requiredMinor: cost },
+      });
+      expect(queries.queueOpenApproval).not.toHaveBeenCalled();
+    });
+
+    it('queues it when the free cash is exactly its cost', async () => {
+      row = proposalRow(unqueued);
+      queued = [WAITING];
+      cash = BigInt(cost + waitingCost);
+      expect((await approveForOpen(USER, PROPOSAL, 'web', BEFORE_OPEN)).outcome).toBe('queued');
+    });
+
+    it('queues a buy its own scan funded with sells, whose cash has not arrived yet', async () => {
+      row = proposalRow({
+        ...unqueued,
+        payload: { symbol: 'NVDA', quantity: '3', priceMinor: 15_546, currency: 'USD', fundedBy: ['p-sell'] },
+      });
+      cash = 0n;
+      expect((await approveForOpen(USER, PROPOSAL, 'web', BEFORE_OPEN)).outcome).toBe('queued');
+    });
+
+    it('refuses a trade it could not measure, funded or not, so none reaches the queue', async () => {
+      for (const payload of [
+        { symbol: 'NVDA', quantity: '3.5', priceMinor: 15_546, currency: 'USD', fundedBy: ['p-sell'] },
+        { symbol: 'NVDA', quantity: '3', priceMinor: 155.46, currency: 'USD' },
+        { symbol: 'NVDA', quantity: '3', currency: 'USD' },
+      ]) {
+        row = proposalRow({ ...unqueued, payload });
+        await expect(approveForOpen(USER, PROPOSAL, 'web', BEFORE_OPEN)).rejects.toMatchObject({ code: 'invalid_trade' });
+      }
+      expect(queries.queueOpenApproval).not.toHaveBeenCalled();
+    });
+
+    it('refuses, as a fill would, an agent with no cash account or a symbol nobody knows', async () => {
+      row = proposalRow(unqueued);
+      vi.mocked(queries.lockAgentCash).mockResolvedValueOnce(null);
+      await expect(approveForOpen(USER, PROPOSAL, 'web', BEFORE_OPEN)).rejects.toMatchObject({ code: 'agent_has_no_cash' });
+
+      row = proposalRow({ ...unqueued, kind: 'sell' });
+      vi.mocked(queries.findTradableInstrument).mockResolvedValueOnce(null);
+      await expect(approveForOpen(USER, PROPOSAL, 'web', BEFORE_OPEN)).rejects.toMatchObject({ status: 404 });
+      expect(queries.queueOpenApproval).not.toHaveBeenCalled();
+    });
+
+    it('refuses a sell of shares another waiting sell has set aside', async () => {
+      row = proposalRow({ ...unqueued, kind: 'sell' });
+      held = '4.000000000000000000';
+      queued = [{ id: 'p-other', kind: 'sell', symbol: 'NVDA', quantity: '2', price_minor: '15546', funded: false }];
+      await expect(approveForOpen(USER, PROPOSAL, 'web', BEFORE_OPEN)).rejects.toMatchObject({
+        code: 'insufficient_holding',
+        details: { heldQuantity: '4', reservedQuantity: '2' },
+      });
+      expect(queries.queueOpenApproval).not.toHaveBeenCalled();
+
+      queued = [];
+      expect((await approveForOpen(USER, PROPOSAL, 'web', BEFORE_OPEN)).outcome).toBe('queued');
     });
   });
 

@@ -237,6 +237,29 @@ describe('a tap', () => {
     expect(toast()).toBe(MESSAGES.en.openApproval.notWaitingToast);
   });
 
+  it('says what is set aside when the free cash does not cover the approval (D428)', async () => {
+    vi.mocked(service.approveForOpen).mockRejectedValue(
+      new ApiProblem(422, 'insufficient_cash', 'short', { cashMinor: 50_000, reservedMinor: 40_100, requiredMinor: 46_738 }),
+    );
+    await tap('queue');
+    expect(toast()).toBe(MESSAGES.en.trade.cashSetAside('$467.38', '$99.00', '$401.00'));
+  });
+
+  it('says which shares are set aside when a waiting sell holds them (D428)', async () => {
+    const short = (details: Record<string, unknown>) => new ApiProblem(422, 'insufficient_holding', 'short', details);
+    vi.mocked(service.approveForOpen).mockRejectedValue(short({ heldQuantity: '4', reservedQuantity: '2' }));
+    await tap('queue');
+    expect(toast()).toBe(MESSAGES.en.trade.sharesSetAside('4', '2'));
+  });
+
+  it('keeps the plain reason when no waiting sell holds the shares', async () => {
+    vi.mocked(service.approveForOpen).mockRejectedValue(
+      new ApiProblem(422, 'insufficient_holding', 'short', { heldQuantity: '1', reservedQuantity: '0' }),
+    );
+    await tap('queue');
+    expect(toast()).toBe(MESSAGES.en.trade.reasons.insufficient_holding);
+  });
+
   it('speaks Hebrew to a Hebrew user', async () => {
     language = 'he';
     await tap('queue');

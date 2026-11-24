@@ -68,6 +68,8 @@ vi.mock('../src/db/pool.js', () => ({
 }));
 
 vi.mock('../src/db/queries.js', () => ({
+  // Nothing waits for the open here: what is available is the balance (D428).
+  listQueuedTrades: vi.fn(async () => []),
   findTelegramBindingByChat: vi.fn(async () => ({ user_id: USER, chat_id: String(CHAT), legal_accepted: true })),
   getOrCreateUserSettings: vi.fn(async () => ({ language: 'en', notify_severity: 'high', muted_until: null })),
   getUser: vi.fn(async () => ({ id: USER, role, base_currency: 'USD', timezone: 'Asia/Jerusalem' })),

@@ -2443,6 +2443,38 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       expect(await queries.queueOpenApproval(OWNER, open, 'web', now)).toBe(false);
     });
 
+    it('sets aside only what still waits: queued, pending and unexpired (D428)', async () => {
+      const symbol = `${SYMBOL}R`;
+      const id = await propose(opensAt, symbol);
+      const waiting = async (at = now, user = OWNER) =>
+        (await queries.listQueuedTrades(user, simulated, at)).filter((row) => row.id === id);
+      // Proposed, not approved: nothing is set aside yet.
+      expect(await waiting()).toEqual([]);
+
+      await queries.queueOpenApproval(OWNER, id, 'web', now);
+      expect(await waiting()).toEqual([{ id, kind: 'buy', symbol, quantity: '1', price_minor: '10000', funded: false }]);
+      // A buy its scan funded with sells says so: it sets no cash aside (D429).
+      await getPool().query(`UPDATE proposals SET payload = payload || '{"fundedBy": ["p-sell"]}' WHERE id = $1`, [id]);
+      expect((await waiting())[0]).toMatchObject({ funded: true });
+      // The same rows inside a fill's transaction, and no one else's.
+      const inTransaction = await queries.transaction((client) =>
+        queries.listQueuedTrades(OWNER, simulated, now, client),
+      );
+      expect(inTransaction.map((row) => row.id)).toContain(id);
+      expect(await waiting(now, USER)).toEqual([]);
+      // Past its expiry it reserves nothing, though the tick has not settled it yet.
+      expect(await waiting(new Date(now.getTime() + 2 * 3_600_000))).toEqual([]);
+
+      // Leaving the queue is the release: there is no second row to undo.
+      await queries.cancelOpenApproval(OWNER, id);
+      expect(await waiting()).toEqual([]);
+
+      // Rejected by hand while queued: the approval still reads `queued`, and reserves nothing.
+      await queries.queueOpenApproval(OWNER, id, 'web', now);
+      await getPool().query("UPDATE proposals SET state = 'rejected', decided_at = now() WHERE id = $1", [id]);
+      expect(await waiting()).toEqual([]);
+    });
+
     it('is due once its open has come, and a cancel may be taken back and given again', async () => {
       const id = await propose(opensAt, `${SYMBOL}C`);
       await queries.queueOpenApproval(OWNER, id, 'web', now);

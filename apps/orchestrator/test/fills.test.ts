@@ -11,7 +11,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { MIN_FEE_MINOR } from '@traders/shared';
+import { feeMinor, MIN_FEE_MINOR } from '@traders/shared';
 import { ACTIVE_SESSION, sessionCookie } from './session.js';
 
 const USER = {
@@ -55,6 +55,8 @@ interface Ledger {
   fills: Record<string, unknown>[];
 }
 const ledger: Ledger = { cash: 0n, holdings: new Map(), fills: [] };
+/** Approvals waiting for the open, as `listQueuedTrades` answers them (D428). */
+let queued: Record<string, string | boolean>[] = [];
 
 vi.mock('../src/db/pool.js', () => ({
   queryOne: vi.fn(async () => ({ ok: 1 })),
@@ -66,6 +68,7 @@ vi.mock('../src/db/pool.js', () => ({
 }));
 
 vi.mock('../src/db/queries.js', () => ({
+  listQueuedTrades: vi.fn(async () => queued),
   transaction: vi.fn(async (fn: (client: unknown) => Promise<unknown>) => fn({})),
   getSessionUser: vi.fn(async (userId: string) => (await import('./session.js')).mockedSessionUser(userId)),
   getUser: vi.fn(async () => USER),
@@ -211,6 +214,7 @@ beforeEach(() => {
   ledger.cash = 100_000n;
   ledger.holdings.clear();
   ledger.fills.length = 0;
+  queued = [];
 });
 
 describe('the price rules', () => {
@@ -431,6 +435,69 @@ describe('what does not fit is refused, never resized', () => {
   });
 });
 
+describe('what approvals waiting to fill set aside (D428)', () => {
+  /** An approved buy of 2 MSFT at $200.00, waiting for the open. */
+  const WAITING_BUY = { id: 'p-waiting', kind: 'buy', symbol: 'MSFT', quantity: '2', price_minor: '20000', funded: false };
+  const waitingCost = 2 * 20_000 + Number(feeMinor('2'));
+
+  it('refuses a buy the balance covers but the free cash does not, and fills it once the approval is gone', async () => {
+    queued = [WAITING_BUY];
+    const required = 60_000 + Number(feeMinor('3'));
+    expect(100_000 - waitingCost).toBeLessThan(required);
+    expect(await refusal(fills.executeFill(request(), context()))).toMatchObject({
+      code: 'insufficient_cash',
+      details: { cashMinor: 100_000, reservedMinor: waitingCost, requiredMinor: required },
+    });
+    expect(ledger.fills).toHaveLength(0);
+
+    // Filled, cancelled, superseded or expired: it left the queue, and so reserves nothing.
+    queued = [];
+    expect((await fills.executeFill(request(), context())).created).toBe(true);
+  });
+
+  it('refuses the same buy in the preview, which shows what is set aside when it fits', async () => {
+    queued = [WAITING_BUY];
+    const preview = { price: { source: 'quote' as const, shownPriceMinor: null } };
+    expect(await refusal(fills.previewTrade(request(preview), context()))).toMatchObject({
+      code: 'insufficient_cash',
+    });
+    const small = await fills.previewTrade(request({ ...preview, quantity: '1' }), context());
+    expect(small).toMatchObject({ cashMinor: 100_000, reservedCashMinor: waitingCost, reservedQuantity: '0' });
+  });
+
+  it('never sets an approval against its own fill', async () => {
+    queued = [{ id: 'p-own', kind: 'buy', symbol: 'AAPL', quantity: '3', price_minor: '20000', funded: false }, WAITING_BUY];
+    ledger.cash = BigInt(60_000 + Number(feeMinor('3')) + waitingCost);
+    const own = request({ source: 'agent', proposalId: 'p-own', idempotencyKey: 'proposal:p-own' });
+    expect((await fills.executeFill(own, context())).created).toBe(true);
+  });
+
+  it('refuses selling shares a waiting sell has set aside, and sells the rest', async () => {
+    await fills.executeFill(request(), context());
+    queued = [{ id: 'p-sell', kind: 'sell', symbol: 'AAPL', quantity: '2', price_minor: '20000', funded: false }];
+    const two = request({ side: 'sell', quantity: '2', idempotencyKey: 'sell-2' });
+    expect(await refusal(fills.executeFill(two, context()))).toMatchObject({
+      code: 'insufficient_holding',
+      details: { heldQuantity: '3', reservedQuantity: '2' },
+    });
+    const one = await fills.executeFill(request({ side: 'sell', quantity: '1', idempotencyKey: 'sell-1' }), context());
+    expect(one.heldQuantity).toBe('2');
+  });
+
+  it('sets nothing aside for a buy its scan funded with sells: that cash has not arrived (D429)', async () => {
+    queued = [{ ...WAITING_BUY, quantity: '50', funded: true }];
+    const preview = await fills.previewTrade(request({ price: { source: 'quote', shownPriceMinor: null } }), context());
+    expect(preview.reservedCashMinor).toBe(0);
+  });
+
+  it('lets a sell through whatever cash waiting buys have set aside: it funds them', async () => {
+    await fills.executeFill(request(), context());
+    queued = [{ id: 'p-big', kind: 'buy', symbol: 'MSFT', quantity: '50', price_minor: '20000', funded: false }];
+    const sell = await fills.executeFill(request({ side: 'sell', quantity: '1', idempotencyKey: 'sell-1' }), context());
+    expect(sell.created).toBe(true);
+  });
+});
+
 describe('one key, one fill (guideline 8)', () => {
   it('returns the existing fill for a repeated key, without fetching a price or writing', async () => {
     const first = await fills.executeFill(request(), context());
@@ -457,8 +524,10 @@ describe('the preview', () => {
       cashChangeMinor: -(60_000 + Number(MIN_FEE_MINOR)),
       cashMinor: 100_000,
       cashAfterMinor: 100_000 - 60_000 - Number(MIN_FEE_MINOR),
+      reservedCashMinor: 0,
       heldQuantity: '0',
       heldAfterQuantity: '3',
+      reservedQuantity: '0',
       quoteDelaySeconds: 900,
     });
     expect(queries.insertFill).not.toHaveBeenCalled();

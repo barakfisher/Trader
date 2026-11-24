@@ -36,7 +36,17 @@ export function AccountSummary({ agent }: { agent: AgentView }) {
   return (
     <Card title={t('agents.account.title')} action={agent.state === 'archived' ? undefined : <AddCash agent={agent} />}>
       <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
-        <Figure label={t('agents.account.cash')}>{money(data.cashMinor)}</Figure>
+        <Figure label={t('agents.account.cash')}>
+          {money(data.cashMinor)}
+          {data.reservedCashMinor > 0 && (
+            <span className="block text-xs font-normal text-text-muted">
+              {t('agents.account.cashAvailable', {
+                available: formatMoney(data.cashMinor - data.reservedCashMinor, data.currency),
+                reserved: formatMoney(data.reservedCashMinor, data.currency),
+              })}
+            </span>
+          )}
+        </Figure>
         <Figure label={t('agents.account.holdingsValue')}>{money(data.holdingsValueMinor)}</Figure>
         <Figure label={t('agents.account.netWorth')}>{money(data.netWorthMinor)}</Figure>
         <Figure label={t('agents.account.pnl')}>

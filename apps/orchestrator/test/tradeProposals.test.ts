@@ -114,6 +114,8 @@ vi.mock('../src/db/pool.js', () => ({
 }));
 
 vi.mock('../src/db/queries.js', () => ({
+  // Nothing waits for the open here: what is available is the balance (D428).
+  listQueuedTrades: vi.fn(async () => []),
   transaction: vi.fn(async (fn: (client: unknown) => Promise<unknown>) => fn({})),
   getAgent: vi.fn(async () => agentRow()),
   findProposal: vi.fn(async () => proposal),
