@@ -159,7 +159,12 @@ async function finish(
     // Refused before any model call: the refresh is not used up unless that is the reason.
     line = refusalOf(error.code, messages);
     keyboard =
-      error.code === 'already_rechecked' || error.code === 'superseded' || error.status === 404 ? 'none' : 'recheck';
+      error.code === 'already_rechecked' ||
+      error.code === 'superseded' ||
+      error.code === 'already_decided' ||
+      error.status === 404
+        ? 'none'
+        : 'recheck';
   }
   if (telegram === null || message === undefined) return;
   const text = message.text ?? '';

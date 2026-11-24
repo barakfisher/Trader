@@ -110,7 +110,7 @@ def find_recheckable_trade(
             text(
                 """
                 SELECT p.id::text AS id, p.kind, p.state, p.payload, p.created_at,
-                       p.expires_at, o.explanation,
+                       p.expires_at, o.explanation, p.open_approval,
                        EXISTS (
                            SELECT 1 FROM agent_scans s
                             WHERE s.refreshes_proposal_id = p.id
@@ -150,7 +150,9 @@ def find_recheckable_trade(
         raise NotRecheckableError("not_expired", "an approved or rejected proposal stays decided")
     # Expiry is computed (proposalState.ts): a passed deadline is expired, swept or not.
     expired = row.expires_at <= now
-    if not expired and not (row.state == "pending" and row.price_moved):
+    # An approval for the open still waiting may yet fill: the open decides it, not a re-check.
+    waiting = row.open_approval == "queued"
+    if not expired and not (row.state == "pending" and row.price_moved and not waiting):
         raise NotRecheckableError(
             "not_expired",
             "only a proposal that expired unanswered, or whose approval was refused because"

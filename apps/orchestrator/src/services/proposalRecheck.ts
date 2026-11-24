@@ -163,21 +163,15 @@ export async function recheckOf(userId: string, row: ProposalRow, now: Date): Pr
 }
 
 /**
- * D432: a pending proposal whose re-check reached an answer is closed - replaced
- * by the new proposal, or withdrawn - and its Telegram messages lose their
- * buttons. Read fresh: another surface may have decided it meanwhile.
+ * D432: a pending proposal whose re-check reached an answer is closed by the
+ * system. Answers whether this call closed it: false when another surface
+ * decided it while the agent looked (an approval that filled, a rejection).
  */
-async function closeAfterRecheck(
-  userId: string,
-  proposalId: string,
-  result: RecheckResult,
-  context: RecheckContext,
-  now: Date,
-): Promise<void> {
+async function closeRechecked(userId: string, proposalId: string, now: Date): Promise<boolean> {
   const row = await findProposal(userId, proposalId);
-  if (row === null || (row.state !== 'pending' && row.state !== 'snoozed')) return;
-  if (effectiveState(factsOf(row), now) !== 'pending') return;
-  await applyProposalTransition({
+  if (row === null || (row.state !== 'pending' && row.state !== 'snoozed')) return false;
+  if (effectiveState(factsOf(row), now) !== 'pending') return false;
+  const { applied } = await applyProposalTransition({
     proposalId: row.id,
     userId,
     fromState: row.state,
@@ -190,11 +184,7 @@ async function closeAfterRecheck(
     intent: null,
     revokeIntent: false,
   });
-  logger().info(
-    { userId, proposalId, outcome: result.outcome, ...(result.outcome === 'proposed' ? { newerProposalId: result.proposalId } : {}) },
-    'proposal.closed_after_recheck',
-  );
-  await redrawProposalMessages(context.notifier, userId, proposalId, now);
+  return applied;
 }
 
 /**
@@ -230,6 +220,18 @@ export async function recheckProposal(
   }
 
   const now = (context.now ?? (() => new Date()))();
+  // D432: a moved price's proposal - pending when the re-check began - is closed
+  // by an answer, and closed *before* a kept trade is proposed: an approval that
+  // filled while the agent looked wins, and the same trade is not proposed twice
+  // (the security review's race).
+  const movedPrice = effectiveState(factsOf(row), now) === 'pending';
+  const answered = scan.outcome !== null && !UNANSWERED.has(scan.outcome);
+  if (movedPrice && answered) {
+    if (!(await closeRechecked(userId, proposalId, now))) {
+      logger().info({ proposalId, scanId: scan.scan_id }, 'proposal.recheck_overtaken');
+      throw conflict('already_decided', 'the proposal was decided while the agent re-checked it');
+    }
+  }
   const [newProposalId] = await proposeFromScan(userId, agent, scan, {
     ai: context.ai,
     notifier: context.notifier,
@@ -248,9 +250,12 @@ export async function recheckProposal(
     now,
   );
   logger().info({ proposalId, scanId: scan.scan_id, outcome: result.outcome }, 'proposal.rechecked');
-  // Only a moved price's proposal is still pending here; an expired one stays expired.
-  if (result.outcome === 'proposed' || result.outcome === 'declined') {
-    await closeAfterRecheck(userId, proposalId, result, context, now);
+  if (movedPrice && answered) {
+    logger().info(
+      { userId, proposalId, outcome: result.outcome, newerProposalId: newProposalId ?? null },
+      'proposal.closed_after_recheck',
+    );
+    await redrawProposalMessages(context.notifier, userId, proposalId, now);
   }
   return result;
 }

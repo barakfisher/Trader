@@ -7706,6 +7706,11 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
     - **The proposal under re-check is left out of `pending_trades` (`excluding=`).** It is still pending while
       the agent looks, so the D197 duplicate rule would refuse the agent's own re-proposal as `already_waiting`
       and its cash would be set aside twice. An expired proposal never met this, which is why D212 had no need.
+    - **The old proposal is closed before a kept trade is proposed** (the security review). The model takes up to
+      a minute; if the user approved the old one meanwhile and it filled, closing it fails and nothing new is
+      proposed (`already_decided`, logged `proposal.recheck_overtaken`). Proposing first left a filled trade and
+      a fresh proposal for the same one. Nor is a moved price re-checked while an approval for the open waits,
+      in either service: the open decides that one.
 433. **Where Re-check appears** (#PR, 2026-11-24).
     - **Web:** on the trade's card, beside Approve and Reject, once a preview was refused `price_far_from_agent`
       or the open refused it so. Once the agent answers, the proposal's page opens: the inbox no longer lists a

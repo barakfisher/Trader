@@ -282,6 +282,15 @@ describe("a moved price's re-check closes the proposal (D432)", () => {
     expect(closed()).toEqual([{ toState: 'rejected', surface: 'system' }]);
   });
 
+  it('proposes nothing when the proposal was approved while the agent looked (the race)', async () => {
+    vi.mocked(applyProposalTransition).mockResolvedValueOnce({ applied: false, intentId: null } as never);
+    const kept = { ...SCAN, outcome: 'trade' as const, answer: { trades: [{ decision: 'buy', symbol: 'CCJ', refused: false }] } };
+    await expect(
+      recheckProposal(USER.id, PROPOSAL, { ai: fakeAi(async () => kept), notifier: NOTIFIER, now: () => NOW }),
+    ).rejects.toMatchObject({ code: 'already_decided' });
+    expect(proposeFromScan).not.toHaveBeenCalled();
+  });
+
   it('leaves it pending when the re-check reached no answer', async () => {
     const ai = fakeAi(async () => ({ ...SCAN, outcome: 'budget_reached' as const, answer: null }));
     expect((await recheckProposal(USER.id, PROPOSAL, { ai, notifier: NOTIFIER, now: () => NOW })).outcome).toBe('unanswered');

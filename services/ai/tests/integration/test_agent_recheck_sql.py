@@ -305,6 +305,25 @@ def test_a_pending_trade_refused_for_anything_else_is_not(
     assert refused.value.code == "not_expired"
 
 
+def test_a_moved_price_is_not_rechecked_while_an_approval_for_the_open_waits(
+    loaded: Engine,  # noqa: F811
+    agent: ScanAgent,  # noqa: F811
+) -> None:
+    proposal = _proposal(loaded, agent, expired_ago=-timedelta(minutes=30))
+    _refused(loaded, agent, proposal, PRICE_FAR_FROM_AGENT)
+    with loaded.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE proposals SET opens_at = :t, open_approval = 'queued', "
+                "open_approval_surface = 'web', open_approval_at = :t WHERE id = CAST(:p AS uuid)"
+            ),
+            {"t": NOW, "p": proposal},
+        )
+    with pytest.raises(NotRecheckableError) as refused:
+        find_recheckable_trade(loaded, agent.user_id, agent.agent_id, proposal, NOW)
+    assert refused.value.code == "not_expired"
+
+
 async def test_a_moved_price_recheck_is_not_refused_as_its_own_duplicate(
     loaded: Engine,  # noqa: F811
     agent: ScanAgent,  # noqa: F811
