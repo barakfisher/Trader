@@ -31,7 +31,8 @@ import type { Notifier } from '../notify/notifier.js';
 import { recheckProposal, recheckStatus } from '../services/proposalRecheck.js';
 import { minutesOf } from './assistantQuestion.js';
 import type { CallbackPayload } from './callbackToken.js';
-import type { TelegramNotifier } from './client.js';
+import type { Keyboard, TelegramNotifier } from './client.js';
+import { currentKeyboard } from './tradeApproval.js';
 
 export interface RecheckCallback {
   telegram: TelegramNotifier | null;
@@ -114,9 +115,11 @@ export async function startRecheckCallback(input: RecheckCallback): Promise<{ do
   if (status === null || status.blocked !== null) {
     const toast = status === null ? messages.proposalGone : refusalOf(status.blocked!, messages);
     await telegram?.answerCallback(input.callbackId, toast);
-    // A message that cannot be re-checked keeps no button; one that is running keeps its placeholder.
+    // A message that cannot be re-checked keeps no Re-check; one that is running keeps its placeholder.
+    // A pending proposal keeps Approve and Reject (D431): only the re-check is refused.
     if (telegram !== null && message !== undefined && status?.blocked !== 'scan_running') {
-      await telegram.setKeyboard(chatId, message.message_id, payload.proposalId, 'none', language, {
+      const keyboard = row === null ? 'none' : await currentKeyboard(userId, payload.proposalId, clock());
+      await telegram.setKeyboard(chatId, message.message_id, payload.proposalId, keyboard, language, {
         backToPending: message.fromPending === true,
       });
     }
@@ -140,7 +143,7 @@ async function finish(
 ): Promise<void> {
   const { telegram, userId, payload, message, chatId, language } = input;
   let line: string;
-  let keyboard: 'recheck' | 'none';
+  let keyboard: Keyboard;
   try {
     const result = await recheckProposal(userId, payload.proposalId, {
       ai: input.ai,
@@ -167,6 +170,9 @@ async function finish(
         : 'recheck';
   }
   if (telegram === null || message === undefined) return;
+  // A moved price's proposal (D431): the row says what is left - nothing once the
+  // re-check closed it, Approve, Reject and Re-check when it reached no answer.
+  if (cause === 'price_moved') keyboard = await currentKeyboard(userId, payload.proposalId, clock());
   const text = message.text ?? '';
   const edited = await telegram.editMessage(chatId, message.message_id, text === '' ? line : `${text}\n\n${line}`, {
     proposalId: payload.proposalId,

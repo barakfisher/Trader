@@ -171,6 +171,24 @@ describe('the announcement of a trade raised while the market is closed', () => 
     expect(decodeCallbackData(first.callback_data!, SIGNING_SECRET)?.action).toBe('queue');
   });
 
+  it("offers Re-check beside Approve and Reject on the open's refusal for a moved price (D431)", async () => {
+    await notifier.send({
+      userId: USER,
+      title: HEADLINE,
+      body: 'refused',
+      proposalId: PROPOSAL,
+      trade: true,
+      recheck: true,
+      severity: 'notable',
+      language: 'en',
+    });
+    expect(labels(sentCalls[0]!)).toEqual([
+      MESSAGES.en.buttons.approve,
+      MESSAGES.en.buttons.reject,
+      MESSAGES.en.recheck.button,
+    ]);
+  });
+
   it('keeps Approve for a trade raised while the market is open', async () => {
     await notifier.send({ userId: USER, title: HEADLINE, body: 't', proposalId: PROPOSAL, trade: true, severity: 'notable', language: 'en' });
     expect(labels(sentCalls[0]!)).toEqual([MESSAGES.en.buttons.approve, MESSAGES.en.buttons.reject]);

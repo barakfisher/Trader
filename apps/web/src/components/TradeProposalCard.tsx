@@ -3,7 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { RefreshCw } from 'lucide-react';
 
-import type { Proposal, TradeApprovalPreview, TradeProposalPayload } from '@traders/shared';
+import type { Proposal, ProposalRecheck, TradeApprovalPreview, TradeProposalPayload } from '@traders/shared';
 
 import { useTranslation } from '../i18n/index.ts';
 import { formatMoney, formatNumber, formatPercent } from '../i18n/format.ts';
@@ -56,9 +56,12 @@ import { Button, Card, ErrorNote } from './ui.tsx';
 export const TradeProposalCard = observer(function TradeProposalCard({
   proposal,
   linkToPage = true,
+  recheck: offered = null,
 }: {
   proposal: Proposal;
   linkToPage?: boolean;
+  /** The server's word on re-checking it, where the detail was read; the inbox has none (D431). */
+  recheck?: ProposalRecheck | null;
 }) {
   const { proposals } = useStore();
   const { t, i18n } = useTranslation();
@@ -88,10 +91,12 @@ export const TradeProposalCard = observer(function TradeProposalCard({
   const refusedAtOpen = proposal.openApproval?.state === 'refused' ? proposal.openApproval.reason : undefined;
   const remaining = timeLeft(proposal.expiresAt);
   const refusal = proposals.refusal?.proposalId === proposal.id ? proposals.refusal.message : null;
-  // D431: the price moved too far from the agent's, here or at the open.
+  // D431: the price moved too far from the agent's - here, at the open, or on
+  // any surface before, as the server read the recorded attempts.
   const priceFar =
     !queued &&
-    ((preview.error instanceof ApiRequestError && preview.error.code === 'price_far_from_agent') ||
+    ((offered?.available === true && offered.cause === 'price_moved') ||
+      (preview.error instanceof ApiRequestError && preview.error.code === 'price_far_from_agent') ||
       refusedAtOpen === 'price_far_from_agent');
   const recheckRefusal = recheckRefusalMessage(recheck.error);
 

@@ -7721,10 +7721,14 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
       the open's refusal message, which now carries the proposal's buttons. After the answer the message keeps
       no buttons and says the proposal is closed: Telegram has no disabled button, so removing them is the
       equivalent.
-    - **Debt:** the card offers Re-check from what it saw this session. Reload the page after an Approve
-      refusal and only Approve shows, until the next refusal brings Re-check back (the open's refusal is
-      stored, so it survives a reload). A web approval still leaves the old Telegram message's buttons as
-      they were (D427's open follow-up).
+    - **The page and the approval drawer offer it from the server** (`recheck.available`, read from the
+      recorded attempts), so a refusal on Telegram or before a reload still shows it. The inbox list reads no
+      detail per card: there it appears after a refusal seen in that session, or the open's stored one.
+    - **A Telegram re-check that reached no answer keeps Approve, Reject and Re-check** (QA's finding): the
+      keyboard after it is read from the row (`currentKeyboard`), not the expired case's lone Re-check.
+    - **Debt:** the open's refusal message and a refused Approve's message are not recorded in
+      `telegram_proposal_messages`, so a close from another surface leaves their buttons; a tap on them is
+      refused by the server. A web approval likewise leaves the old Telegram buttons (D427's open follow-up).
 
 ## Bugs that cost real time, and the lesson from each
 

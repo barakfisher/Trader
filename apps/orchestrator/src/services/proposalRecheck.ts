@@ -137,7 +137,11 @@ export async function recheckStatus(
   const priceMoved =
     state === 'pending' && row.open_approval !== 'queued' && (await hasPriceFarRefusal(userId, row.id));
   const cause: RecheckCause | null =
-    state === 'expired' ? 'expired' : priceMoved || (state === 'rejected' && last !== null) ? 'price_moved' : null;
+    state === 'expired'
+      ? 'expired'
+      : priceMoved || (state === 'rejected' && (last?.outcome === 'proposed' || last?.outcome === 'declined'))
+        ? 'price_moved'
+        : null;
   const blocked: RecheckBlock | null =
     // Approved or rejected stays itself; pending is offered only for a moved price.
     state !== 'expired' && !priceMoved

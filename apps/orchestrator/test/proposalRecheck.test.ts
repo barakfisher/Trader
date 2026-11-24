@@ -453,12 +453,27 @@ describe('Re-check from Telegram (D217)', () => {
   it("says a moved price's proposal is closed, and leaves it no buttons (D432)", async () => {
     priceFar = true;
     proposal = proposalRow({ state: 'pending', decided_at: null, decided_via: null, expires_at: new Date(NOW.getTime() + HOUR) });
+    // The close is what the redraw then reads.
+    vi.mocked(applyProposalTransition).mockImplementationOnce(async () => {
+      proposal = { ...proposal, state: 'rejected', decided_via: 'system', decided_at: NOW };
+      return { applied: true, intentId: null } as never;
+    });
     const telegram = chat();
     await tap(telegram, undefined, 'he');
     const [, , text, options] = telegram.editMessage.mock.calls[0]! as unknown as [string, number, string, { keyboard: string }];
     expect(text).toContain(messagesFor('he').recheck.closed);
     expect(options.keyboard).toBe('none');
     expect(applyProposalTransition).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a moved price's Approve, Reject and Re-check when the re-check reached no answer", async () => {
+    priceFar = true;
+    proposal = proposalRow({ state: 'pending', decided_at: null, decided_via: null, expires_at: new Date(NOW.getTime() + HOUR) });
+    const telegram = chat();
+    await tap(telegram, fakeAi(async () => ({ ...SCAN, outcome: 'cap_reached', answer: null })), 'en');
+    const [, , text, options] = telegram.editMessage.mock.calls[0]! as unknown as [string, number, string, { keyboard: string }];
+    expect(options.keyboard).toBe('tradeRecheck');
+    expect(text).not.toContain(messagesFor('en').recheck.closed);
   });
 
   it('keeps the button when the re-check reached no answer', async () => {

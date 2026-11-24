@@ -651,9 +651,9 @@ describe('re-checking a trade refused for a moved price (D431, D432)', () => {
     });
 
   it('offers Re-check beside Approve once the price is too far, and asks the agent', async () => {
-    serveTrade(TRADE, { available: true, cause: 'price_moved', last: null, supersededBy: null });
+    serveTrade(TRADE, { available: false, cause: null, last: null, supersededBy: null });
     renderAt('/proposals/p-trade');
-    // Before a refusal, only Approve and Reject; the page's own re-check card stays away.
+    // Before a refusal, only Approve and Reject.
     await screen.findByRole('button', { name: 'Approve' });
     expect(screen.queryByRole('button', { name: 'Re-check' })).toBeNull();
 
@@ -670,6 +670,14 @@ describe('re-checking a trade refused for a moved price (D431, D432)', () => {
     // While the agent answers, nothing else can be pressed.
     expect((screen.getByRole('button', { name: 'Approve' }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole('button', { name: 'Reject' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('offers it from the server after a reload, or a refusal on Telegram, with one button', async () => {
+    serveTrade(TRADE, { available: true, cause: 'price_moved', last: null, supersededBy: null });
+    renderAt('/proposals/p-trade');
+    expect(await screen.findByRole('button', { name: 'Re-check' })).toBeTruthy();
+    // The page's own re-check card stays away: one button.
+    expect(screen.getAllByRole('button', { name: 'Re-check' })).toHaveLength(1);
   });
 
   it('offers it when the open refused it for the price, too', async () => {
