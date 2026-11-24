@@ -7657,7 +7657,8 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
       waiting buy already counted. A cash-buffer warning can therefore understate while another buy waits.
     - **Not shown yet:** shares set aside by a waiting sell appear in a refusal and in the trade preview's
       `reservedQuantity`, but not on the holding's row. PR 3's open-orders view is where they belong.
-430. **Limit orders, as the user chose them** (#406, 2026-11-24; a plan, PR 1 of 3 built). See the update of that date
+430. **Limit orders, as the user chose them: the agent sets the limit, a day limit both ways, a sell good
+    until cancelled** (#406, 2026-11-24; a plan, PR 1 of 3 built). See the update of that date
     for the answers. Why each went the way it did:
     - *The agent sets the limit, not a rule from the mandate:* a fixed band is the 3% of D47 again, and the
       agent learns nothing about choosing a price.
@@ -7672,6 +7673,12 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
       or replace them; pausing or archiving the agent cancels them; a split must not fill one.
 
 ## Bugs that cost real time, and the lesson from each
+
+**`docs/DECISIONS.md` is generated; a row typed by hand fails CI (2026-11-24, #406).** The index is built from
+this file's numbered decisions by `python3 scripts/build_decision_index.py`, and `test_decision_index.py` fails when
+the two differ. Three rows were typed in, two with other wording than the titles here, and the Python suite was
+skipped locally because "no Python changed". **Lesson: a docs change can fail the Python job; write the decision
+here, run the script, and run `pytest` whatever the diff touches.**
 
 **Two claims about the fill path were made to the user from one grep, and both were wrong (2026-11-24,
 #406, D428).** "A trade approved for the open fills whatever the gap" - it is refused beyond 3% of the agent's price
