@@ -32,6 +32,8 @@ vi.mock('../src/db/pool.js', () => ({
   closePool: vi.fn(),
 }));
 
+let priceFar = false;
+
 vi.mock('../src/db/queries.js', () => ({
   findTelegramBindingByChat: vi.fn(async () => ({
     user_id: USER,
@@ -56,6 +58,7 @@ vi.mock('../src/db/queries.js', () => ({
   getAgent: vi.fn(async () => ({ id: 'agent-1', state: 'active', is_primary: false })),
   latestRecheck: vi.fn(async () => null),
   laterApprovedProposal: vi.fn(async () => null),
+  hasPriceFarRefusal: vi.fn(async () => priceFar),
 }));
 
 vi.mock('../src/services/tradeApproval.js', () => ({
@@ -383,6 +386,24 @@ describe('Approve: the preview at the live price (D47)', () => {
     );
     await tap('approve');
     expect(toast()).toBe("The price is $248.00, +3.90% from the agent's $238.68 - more than 3%.");
+  });
+
+  it('adds Re-check beside Approve and Reject once the price is too far from the agent\'s (D431)', async () => {
+    priceFar = true;
+    try {
+      vi.mocked(approval.previewTradeApproval).mockRejectedValueOnce(
+        new ApiProblem(422, 'price_far_from_agent', 'far', { agentPriceMinor: 23_868, livePriceMinor: 24_800, distanceBps: 390 }),
+      );
+      await tap('approve');
+      const buttons = keyboardOf(lastEdit());
+      expect(buttons.map((button) => decodeCallbackData(String(button.callback_data), SIGNING_SECRET)?.action)).toEqual([
+        'approve',
+        'reject',
+        'recheck',
+      ]);
+    } finally {
+      priceFar = false;
+    }
   });
 
   it('takes the buttons away from an expired proposal', async () => {

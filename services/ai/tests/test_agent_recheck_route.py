@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from app.agents.recheck import ExpiredTrade, NotRecheckableError, preface
+from app.agents.recheck import NotRecheckableError, RecheckTrade, preface
 from app.agents.scan import ScanResult
 from app.agents.scan_budget import AgentBudget
 from app.agents.scan_log import AlreadyRefreshedError, ScanAlreadyRunningError
@@ -25,14 +25,14 @@ from tests.test_agent_scan_route import client as client  # noqa: F401 - the fix
 
 PROPOSAL = "50000000-0000-0000-0000-000000000022"
 
-TRADE = ExpiredTrade(
+TRADE = RecheckTrade(
     proposal_id=PROPOSAL,
     side="buy",
     symbol="CCJ",
     quantity=Decimal(3),
     price_minor=5_432,
     proposed_at=datetime(2026, 10, 19, 13, 30, tzinfo=UTC),
-    expired_at=datetime(2026, 10, 19, 14, 30, tzinfo=UTC),
+    expires_at=datetime(2026, 10, 19, 14, 30, tzinfo=UTC),
     thesis="CCJ fell 4.10% to 54.32 on a contract delay.",
 )
 
@@ -41,7 +41,7 @@ TRADE = ExpiredTrade(
 def recheck(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, Any]]:
     state: dict[str, Any] = {"agent": _agent(), "spent": 0, "ran": [], "raise": None, "find": None}
 
-    def fake_find(*_a: Any) -> ExpiredTrade:
+    def fake_find(*_a: Any) -> RecheckTrade:
         if state["find"] is not None:
             raise state["find"]
         return TRADE
@@ -64,7 +64,7 @@ def recheck(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, Any]]:
         "app.routers.agents.agent_budget",
         lambda *_a: AgentBudget(allowance_micro_usd=500_000, spent_micro_usd=state["spent"]),
     )
-    monkeypatch.setattr("app.routers.agents.find_expired_trade", fake_find)
+    monkeypatch.setattr("app.routers.agents.find_recheckable_trade", fake_find)
     monkeypatch.setattr("app.routers.agents.run_recheck", fake_run)
     yield state
 
@@ -170,5 +170,13 @@ def test_the_preface_names_the_one_trade_and_fences_the_old_thesis() -> None:
 
 
 def test_a_proposal_with_no_thesis_is_prefaced_without_one() -> None:
-    told = preface(ExpiredTrade(**{**TRADE.__dict__, "thesis": None}))
+    told = preface(RecheckTrade(**{**TRADE.__dict__, "thesis": None}))
     assert "<<<" not in told
+
+
+def test_the_preface_says_why_the_trade_is_rechecked() -> None:
+    # D431: a moved price is not an unanswered proposal, and the model is told what follows.
+    assert "did not answer before it expired" in preface(TRADE)
+    moved = preface(RecheckTrade(**{**TRADE.__dict__, "cause": "price_moved"}))
+    assert "the user approved it" in moved and "withdrawn" in moved
+    assert "did not answer" not in moved

@@ -441,3 +441,6 @@ while this file is out of date.
 | 428 | An approval waiting to fill sets its cash or shares aside, read from the queue at each check and never stored |
 | 429 | A waiting buy reserves its cost at the agent's price and its fee; a sell's cash check and a funded buy's queueing ignore reservations |
 | 430 | Limit orders, as the user chose them: the agent sets the limit, a day limit both ways, a sell good until cancelled |
+| 431 | A pending trade refused because the price moved too far from the agent's can be re-checked, once |
+| 432 | A moved price's re-check closes the old proposal whatever it decides |
+| 433 | Where Re-check appears |

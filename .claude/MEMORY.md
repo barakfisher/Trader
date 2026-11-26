@@ -4,7 +4,17 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-24 - **Limit orders: the plan the user chose, and its first PR - cash and shares set aside by
+Updated: 2026-11-24 - **Re-check a trade whose price moved too far (#407, D431-D433, VERSION 0.0.17, no
+migration). Not deployed.**
+- **What the user asked and chose, one question at a time:** after an approval is refused because the price is
+  more than 3% from the agent's (D47), a *Re-check* button asks the agent whether the trade still holds at the
+  new price. Still holds: a new proposal replaces the old one. Not: the old one is closed with the agent's
+  reason, Approve and Re-check disabled. Once per proposal. On the web card, on Telegram's refusal, and on the
+  open's refusal message.
+- **Not verified:** a real model run on a moved price (paid; ask first), and the Telegram buttons in a real chat.
+  The web was looked at against a fake API (desktop and phone width), not against the stack.
+
+Earlier the same day - **Limit orders: the plan the user chose, and its first PR - cash and shares set aside by
 approvals waiting to fill (#406, D428-D430, VERSION 0.0.16, no migration). Not deployed: compose, then production.**
 - **What the user asked and chose (D430), one question at a time:** agents get limit orders. The agent sets the
   limit, and it is optional; buy and sell limits both; an approved limit lives to the close of its trading day;
@@ -7671,6 +7681,54 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
       a brief touch can be missed, and a fill is never invented (guideline 7).
     - **What a long-lived order needs with it:** the agent sees its open orders at every scan and can withdraw
       or replace them; pausing or archiving the agent cancels them; a split must not fill one.
+431. **A pending trade refused because the price moved too far from the agent's can be re-checked, once**
+    (#407, the user, 2026-11-24). D47 refuses an approval beyond 3% of the agent's price, and until now the only
+    ways out were Reject or tapping Approve again. Measured on production that day: 9 such refusals on 2
+    proposals (five taps on one NVDA buy on 11-10, then a reject; an NVDA sell refused at the open on 11-24).
+    *Re-check* (D212's focused `refresh` scan) is now offered for a pending buy or sell with a
+    `price_far_from_agent` row in `proposal_attempts`, from any surface or from the open, while no approval for
+    the open is waiting. `find_recheckable_trade` (AI service) and `recheckStatus` (orchestrator) read the same
+    rows, so the button and the refusal agree; the model's preface says the user approved it and the price moved.
+    - *Once, as D213* (the user's choice): the unique index `agent_scans_one_refresh` already says so, and each
+      new proposal gets a re-check of its own.
+    - *Rejected:* no limit but the daily budget. It needs the index changed, and every tap is a paid model call.
+    - *Rejected:* offering it from the live distance. Showing a button would then need a quote.
+432. **A moved price's re-check closes the old proposal whatever it decides** (#407, the user, 2026-11-24).
+    The agent still holds the trade: a **new proposal** at the fresh price, with the quantity sized again,
+    announced as any proposal is, and the old one rejected by the system. The agent declines: the old one is
+    rejected by the system and its page shows the agent's reason under Approve and Re-check, both disabled.
+    A re-check that reached no answer (failure, budget, cap, own key) leaves it pending.
+    - *Rejected by the user:* updating the price on the same proposal. The thesis and quantity were written
+      for the old price, and the evidence validator never checked them against the new one.
+    - *Rejected by the user:* leaving a declined proposal pending with its buttons disabled until it expired.
+      The server would need a new rule to refuse Approve once the price came back within 3%, and the inbox
+      would hold an item nobody can act on.
+    - **The proposal under re-check is left out of `pending_trades` (`excluding=`).** It is still pending while
+      the agent looks, so the D197 duplicate rule would refuse the agent's own re-proposal as `already_waiting`
+      and its cash would be set aside twice. An expired proposal never met this, which is why D212 had no need.
+    - **The old proposal is closed before a kept trade is proposed** (the security review). The model takes up to
+      a minute; if the user approved the old one meanwhile and it filled, closing it fails and nothing new is
+      proposed (`already_decided`, logged `proposal.recheck_overtaken`). Proposing first left a filled trade and
+      a fresh proposal for the same one. Nor is a moved price re-checked while an approval for the open waits,
+      in either service: the open decides that one.
+433. **Where Re-check appears** (#407, 2026-11-24).
+    - **Web:** on the trade's card, beside Approve and Reject, once a preview was refused `price_far_from_agent`
+      or the open refused it so. Once the agent answers, the proposal's page opens: the inbox no longer lists a
+      closed proposal, and the page is where its outcome and the new proposal's link are. The page's own
+      re-check card stays away while such a proposal is pending, so there is one button.
+    - **Telegram:** `tradeRecheck` (Approve and Reject, then Re-check) replaces `trade` wherever the row allows
+      a re-check (`currentKeyboard`): the refusal's redraw, the open's redraw of the tapped message (D427), and
+      the open's refusal message, which now carries the proposal's buttons. After the answer the message keeps
+      no buttons and says the proposal is closed: Telegram has no disabled button, so removing them is the
+      equivalent.
+    - **The page and the approval drawer offer it from the server** (`recheck.available`, read from the
+      recorded attempts), so a refusal on Telegram or before a reload still shows it. The inbox list reads no
+      detail per card: there it appears after a refusal seen in that session, or the open's stored one.
+    - **A Telegram re-check that reached no answer keeps Approve, Reject and Re-check** (QA's finding): the
+      keyboard after it is read from the row (`currentKeyboard`), not the expired case's lone Re-check.
+    - **Debt:** the open's refusal message and a refused Approve's message are not recorded in
+      `telegram_proposal_messages`, so a close from another surface leaves their buttons; a tap on them is
+      refused by the server. A web approval likewise leaves the old Telegram buttons (D427's open follow-up).
 
 ## Bugs that cost real time, and the lesson from each
 

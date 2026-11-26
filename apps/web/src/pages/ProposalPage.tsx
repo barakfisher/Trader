@@ -84,14 +84,24 @@ export const ProposalPage = observer(function ProposalPage() {
                 </p>
               </Card>
               {proposals.decisionError !== null && <ErrorNote message={proposals.decisionError} />}
-              <ProposalCard proposal={proposal} baseCurrency={baseCurrency} linkToPage={false} />
+              <ProposalCard
+                proposal={proposal}
+                baseCurrency={baseCurrency}
+                linkToPage={false}
+                recheck={detail.data?.recheck ?? null}
+              />
             </>
           )}
           {(proposal.state !== 'pending' && proposal.state !== 'snoozed') && (
             <DecidedCard proposal={proposal} baseCurrency={baseCurrency} />
           )}
           {detail.data?.recheck && (
-            <RecheckCard proposalId={proposal.id} agentId={proposal.agentId} recheck={detail.data.recheck} />
+            <RecheckCard
+              proposalId={proposal.id}
+              agentId={proposal.agentId}
+              recheck={detail.data.recheck}
+              pending={proposal.state === 'pending' || proposal.state === 'snoozed'}
+            />
           )}
           <SubjectLink proposal={proposal} />
           <TrailCard transitions={detail.data?.transitions ?? []} createdAt={proposal.createdAt} expiresAt={proposal.expiresAt} />

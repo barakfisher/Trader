@@ -1,7 +1,11 @@
 /**
- * *Re-check* from Telegram (D217): the one button an expired trade proposal's
- * message gets, once a tap finds it expired (we keep no message ids, so nothing
- * swaps the buttons at the deadline itself).
+ * *Re-check* from Telegram (D217, D431): the one button an expired trade
+ * proposal's message gets, once a tap finds it expired (we keep no message ids,
+ * so nothing swaps the buttons at the deadline itself) - and the third beside
+ * Approve and Reject once an approval was refused for a price too far from the
+ * agent's. A moved price's re-check closes the proposal whatever it decides
+ * (D432), so its message keeps no buttons after it: a new proposal arrives as
+ * its own message.
  *
  * A re-check is a model call of up to a minute, and the poller handles updates
  * one at a time, so the tap is answered at once - "re-checking" - and the work
@@ -15,7 +19,7 @@
  * and a second tap meets `already_rechecked` before any model is called.
  */
 
-import type { RecheckResult } from '@traders/shared';
+import type { RecheckCause, RecheckResult } from '@traders/shared';
 import type { AiClient } from '@traders/shared/ai';
 
 import { findProposal, getUser } from '../db/queries.js';
@@ -27,7 +31,8 @@ import type { Notifier } from '../notify/notifier.js';
 import { recheckProposal, recheckStatus } from '../services/proposalRecheck.js';
 import { minutesOf } from './assistantQuestion.js';
 import type { CallbackPayload } from './callbackToken.js';
-import type { TelegramNotifier } from './client.js';
+import type { Keyboard, TelegramNotifier } from './client.js';
+import { currentKeyboard } from './tradeApproval.js';
 
 export interface RecheckCallback {
   telegram: TelegramNotifier | null;
@@ -58,11 +63,11 @@ function stamp(now: Date, timezone: string, messages: Messages): string {
   }).format(now);
 }
 
-/** Whether an expired trade proposal may be re-checked now (D215, D217), read fresh. */
-export async function recheckOffered(userId: string, proposalId: string): Promise<boolean> {
+/** Whether a trade proposal may be re-checked now (D215, D217, D431), read fresh. */
+export async function recheckOffered(userId: string, proposalId: string, now: Date = new Date()): Promise<boolean> {
   try {
     const row = await findProposal(userId, proposalId);
-    return row !== null && (await recheckStatus(userId, row, new Date()))?.blocked === null;
+    return row !== null && (await recheckStatus(userId, row, now))?.blocked === null;
   } catch (error) {
     // Only a button: the expiry it is offered beside must still be said.
     logger().warn({ err: error, proposalId }, 'telegram.recheck_offer_unknown');
@@ -110,9 +115,11 @@ export async function startRecheckCallback(input: RecheckCallback): Promise<{ do
   if (status === null || status.blocked !== null) {
     const toast = status === null ? messages.proposalGone : refusalOf(status.blocked!, messages);
     await telegram?.answerCallback(input.callbackId, toast);
-    // A message that cannot be re-checked keeps no button; one that is running keeps its placeholder.
+    // A message that cannot be re-checked keeps no Re-check; one that is running keeps its placeholder.
+    // A pending proposal keeps Approve and Reject (D431): only the re-check is refused.
     if (telegram !== null && message !== undefined && status?.blocked !== 'scan_running') {
-      await telegram.setKeyboard(chatId, message.message_id, payload.proposalId, 'none', language, {
+      const keyboard = row === null ? 'none' : await currentKeyboard(userId, payload.proposalId, clock());
+      await telegram.setKeyboard(chatId, message.message_id, payload.proposalId, keyboard, language, {
         backToPending: message.fromPending === true,
       });
     }
@@ -123,15 +130,20 @@ export async function startRecheckCallback(input: RecheckCallback): Promise<{ do
     await telegram.showWorking(chatId, message.message_id, 'recheck', language);
   }
   await telegram?.answerCallback(input.callbackId, messages.recheck.startedToast);
-  return { done: finish(input, messages, clock).catch((error: unknown) => {
+  return { done: finish(input, messages, clock, status.recheck.cause).catch((error: unknown) => {
     logger().error({ err: error, proposalId: payload.proposalId }, 'telegram.recheck_failed');
   }) };
 }
 
-async function finish(input: RecheckCallback, messages: Messages, clock: () => Date): Promise<void> {
+async function finish(
+  input: RecheckCallback,
+  messages: Messages,
+  clock: () => Date,
+  cause: RecheckCause | null,
+): Promise<void> {
   const { telegram, userId, payload, message, chatId, language } = input;
   let line: string;
-  let keyboard: 'recheck' | 'none';
+  let keyboard: Keyboard;
   try {
     const result = await recheckProposal(userId, payload.proposalId, {
       ai: input.ai,
@@ -140,15 +152,27 @@ async function finish(input: RecheckCallback, messages: Messages, clock: () => D
     });
     const timezone = (await getUser(userId))?.timezone ?? 'UTC';
     line = recheckLine(result, stamp(clock(), timezone, messages), messages);
+    // D432: a moved price's proposal is closed by an answer, whichever it was.
+    if (cause === 'price_moved' && (result.outcome === 'proposed' || result.outcome === 'declined')) {
+      line = `${line}\n${messages.recheck.closed}`;
+    }
     keyboard = result.outcome === 'unanswered' ? 'recheck' : 'none';
   } catch (error) {
     if (!(error instanceof ApiProblem)) throw error;
     // Refused before any model call: the refresh is not used up unless that is the reason.
     line = refusalOf(error.code, messages);
     keyboard =
-      error.code === 'already_rechecked' || error.code === 'superseded' || error.status === 404 ? 'none' : 'recheck';
+      error.code === 'already_rechecked' ||
+      error.code === 'superseded' ||
+      error.code === 'already_decided' ||
+      error.status === 404
+        ? 'none'
+        : 'recheck';
   }
   if (telegram === null || message === undefined) return;
+  // A moved price's proposal (D431): the row says what is left - nothing once the
+  // re-check closed it, Approve, Reject and Re-check when it reached no answer.
+  if (cause === 'price_moved') keyboard = await currentKeyboard(userId, payload.proposalId, clock());
   const text = message.text ?? '';
   const edited = await telegram.editMessage(chatId, message.message_id, text === '' ? line : `${text}\n\n${line}`, {
     proposalId: payload.proposalId,

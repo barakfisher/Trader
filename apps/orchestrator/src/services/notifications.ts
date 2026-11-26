@@ -80,6 +80,12 @@ export interface NotifiableFinding {
   research?: boolean;
   /** D70: a sell made while the market is open is pushed through quiet hours. */
   urgent?: boolean;
+  /**
+   * D431: the trade's approval was refused for a moved price and it may be
+   * re-checked - the open's refusal - so a channel offers Re-check beside
+   * Approve and Reject.
+   */
+  recheck?: boolean;
   /** A trade proposal's "Evidence checked" line: what the agent's scan looked at. */
   evidenceChecked?: EvidenceChecked;
   /**
@@ -247,6 +253,7 @@ function toOutbound(
     proposalId: finding.proposalId,
     ...(finding.trade === true ? { trade: true } : {}),
     ...(finding.trade === true && finding.marketOpensAt !== undefined ? { atOpen: true } : {}),
+    ...(finding.recheck === true && finding.proposalId !== undefined ? { trade: true, recheck: true } : {}),
     severity: finding.severity,
     language,
   };

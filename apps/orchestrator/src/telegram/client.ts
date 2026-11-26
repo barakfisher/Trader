@@ -55,11 +55,14 @@ const ACTIONS = ['approve', 'reject', 'snooze'] as const;
  * `recheck` is the one button an expired trade proposal may carry (D217).
  * A trade raised while its market is closed has two more (D398): `tradeAtOpen`
  * is Approve at the open and Reject, and `openQueued`, once approved for the
- * open, is Cancel approval and Reject.
+ * open, is Cancel approval and Reject. `tradeRecheck` is Approve, Reject and
+ * Re-check, once an approval was refused for a price too far from the agent's
+ * (D431): the agent may look at the trade again at the new price.
  */
 export type Keyboard =
   | 'decide'
   | 'trade'
+  | 'tradeRecheck'
   | 'tradeAtOpen'
   | 'openQueued'
   | 'undo'
@@ -183,7 +186,13 @@ export class TelegramNotifier implements Notifier {
         : {
             reply_markup: this.keyboardFor(
               notification.proposalId,
-              notification.trade !== true ? 'decide' : notification.atOpen === true ? 'tradeAtOpen' : 'trade',
+              notification.trade !== true
+                ? 'decide'
+                : notification.recheck === true
+                  ? 'tradeRecheck'
+                  : notification.atOpen === true
+                    ? 'tradeAtOpen'
+                    : 'trade',
               notification.language,
             ),
           }),
@@ -239,6 +248,14 @@ export class TelegramNotifier implements Notifier {
         return {
           inline_keyboard: [
             [button('approve', messages.buttons.approve), button('reject', messages.buttons.reject)],
+            ...link,
+          ],
+        };
+      case 'tradeRecheck':
+        return {
+          inline_keyboard: [
+            [button('approve', messages.buttons.approve), button('reject', messages.buttons.reject)],
+            [button('recheck', messages.recheck.button)],
             ...link,
           ],
         };

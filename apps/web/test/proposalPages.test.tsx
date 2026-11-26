@@ -624,6 +624,116 @@ describe("an agent's trade proposal", () => {
   });
 });
 
+describe('re-checking a trade refused for a moved price (D431, D432)', () => {
+  const TRADE = proposal({
+    id: 'p-trade',
+    kind: 'buy',
+    payload: { symbol: 'INTC', quantity: '3', priceMinor: 11_250, priceAsOf: null, currency: 'USD' },
+    headline: 'Value proposes to buy 3 INTC at 112.50',
+    explanation: 'INTC fell.',
+    evidence: {},
+    agentId: 'agent-value',
+    agentName: 'Value',
+    agentIsPrimary: false,
+    scanId: 'scan-1',
+  });
+  const AT = '2026-10-20T15:00:00.000Z';
+  const FAR = new ApiRequestError('far', 422, 'price_far_from_agent', {
+    agentPriceMinor: 11_250,
+    livePriceMinor: 11_700,
+    distanceBps: 400,
+  });
+  const serveTrade = (row: Proposal, recheck: ProposalRecheck | null = null) =>
+    serve({
+      '/proposals/p-trade': { proposal: row, transitions: [], attempts: [], recheck },
+      '/proposals?state=open': { proposals: [] },
+      [`/proposals?state=approved&limit=${RECENT_APPROVALS}`]: { proposals: [] },
+    });
+
+  it('offers Re-check beside Approve once the price is too far, and asks the agent', async () => {
+    serveTrade(TRADE, { available: false, cause: null, last: null, supersededBy: null });
+    renderAt('/proposals/p-trade');
+    // Before a refusal, only Approve and Reject.
+    await screen.findByRole('button', { name: 'Approve' });
+    expect(screen.queryByRole('button', { name: 'Re-check' })).toBeNull();
+
+    post.mockRejectedValueOnce(FAR);
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    const recheck = await screen.findByRole('button', { name: 'Re-check' });
+    expect(screen.getByText(en.proposal.trade.recheck.hint)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+
+    post.mockReturnValueOnce(new Promise(() => {}));
+    fireEvent.click(recheck);
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/proposals/p-trade/recheck', {}));
+    expect(await screen.findByText(en.proposal.trade.recheck.running)).toBeTruthy();
+    // While the agent answers, nothing else can be pressed.
+    expect((screen.getByRole('button', { name: 'Approve' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Reject' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('offers it from the server after a reload, or a refusal on Telegram, with one button', async () => {
+    serveTrade(TRADE, { available: true, cause: 'price_moved', last: null, supersededBy: null });
+    renderAt('/proposals/p-trade');
+    expect(await screen.findByRole('button', { name: 'Re-check' })).toBeTruthy();
+    // The page's own re-check card stays away: one button.
+    expect(screen.getAllByRole('button', { name: 'Re-check' })).toHaveLength(1);
+  });
+
+  it('offers it when the open refused it for the price, too', async () => {
+    serveTrade({
+      ...TRADE,
+      opensAt: new Date(Date.now() - 60_000).toISOString(),
+      openApproval: { state: 'refused', surface: 'web', at: TRADE.createdAt, reason: 'price_far_from_agent' },
+    });
+    renderAt('/proposals/p-trade');
+    expect(await screen.findByRole('button', { name: 'Re-check' })).toBeTruthy();
+  });
+
+  it('does not offer it for any other refusal', async () => {
+    serveTrade(TRADE);
+    renderAt('/proposals/p-trade');
+    post.mockRejectedValueOnce(new ApiRequestError('stale', 409, 'quote_too_old'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: 'Re-check' })).toBeNull();
+  });
+
+  it("shows a closed proposal's Approve and Re-check disabled, under the agent's reason", async () => {
+    serveTrade(
+      { ...TRADE, state: 'rejected', storedState: 'rejected', decidedVia: 'system', decidedAt: AT },
+      {
+        available: false,
+        cause: 'price_moved',
+        supersededBy: null,
+        last: { outcome: 'declined', scanId: 's-2', at: AT, reason: { kind: 'agent', thesis: 'Too dear now.' } },
+      },
+    );
+    renderAt('/proposals/p-trade');
+    expect(await screen.findByText('Too dear now.')).toBeTruthy();
+    expect(screen.getByText(en.proposalPage.recheck.closed)).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Approve' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Re-check' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('links a replaced proposal to the new one, to approve there', async () => {
+    serveTrade(
+      { ...TRADE, state: 'rejected', storedState: 'rejected', decidedVia: 'system', decidedAt: AT },
+      {
+        available: false,
+        cause: 'price_moved',
+        supersededBy: null,
+        last: { outcome: 'proposed', scanId: 's-2', at: AT, proposalId: 'p-new' },
+      },
+    );
+    renderAt('/proposals/p-trade');
+    const link = await screen.findByRole('link', { name: 'Open the new proposal' });
+    expect(link.getAttribute('href')).toBe('/proposals/p-new');
+    expect(screen.getByText(en.proposalPage.recheck.closed)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
+  });
+});
+
 describe('re-checking an expired trade proposal (D212)', () => {
   const TRADE = proposal({
     id: 'p-trade',
@@ -641,13 +751,15 @@ describe('re-checking an expired trade proposal (D212)', () => {
   });
   const AT = '2026-10-20T15:00:00.000Z';
 
-  const serveRecheck = (recheck: Omit<ProposalRecheck, 'supersededBy'> & { supersededBy?: string }) =>
+  const serveRecheck = (
+    recheck: Omit<ProposalRecheck, 'supersededBy' | 'cause'> & Partial<Pick<ProposalRecheck, 'supersededBy' | 'cause'>>,
+  ) =>
     serve({
       '/proposals/p-trade': {
         proposal: TRADE,
         transitions: [],
         attempts: [],
-        recheck: { supersededBy: null, ...recheck },
+        recheck: { supersededBy: null, cause: 'expired', ...recheck },
       },
       '/proposals?state=open': { proposals: [] },
       [`/proposals?state=approved&limit=${RECENT_APPROVALS}`]: { proposals: [] },

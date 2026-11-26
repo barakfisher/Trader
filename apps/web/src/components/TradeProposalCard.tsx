@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { RefreshCw } from 'lucide-react';
 
-import type { Proposal, TradeApprovalPreview, TradeProposalPayload } from '@traders/shared';
+import type { Proposal, ProposalRecheck, TradeApprovalPreview, TradeProposalPayload } from '@traders/shared';
 
 import { useTranslation } from '../i18n/index.ts';
 import { formatMoney, formatNumber, formatPercent } from '../i18n/format.ts';
@@ -15,11 +16,15 @@ import {
   useCancelOpenApproval,
   useConfirmTradeApproval,
   usePreviewTradeApproval,
+  useRecheckProposal,
 } from '../queries/proposals.ts';
+import { useModelAccess } from '../queries/modelAccess.ts';
 import { ApiRequestError } from '../api/client.ts';
 import { useStore } from '../stores/context.tsx';
 import { EvidenceCheckedLine } from './EvidenceChecked.tsx';
 import { MandateBreachWarning } from './MandateBreachWarning.tsx';
+import { OwnKeyNotice } from './OwnKeyNotice.tsx';
+import { recheckRefusalMessage } from './RecheckCard.tsx';
 import { PreviewSummary } from './TradePanel.tsx';
 import { Button, Card, ErrorNote } from './ui.tsx';
 
@@ -41,13 +46,22 @@ import { Button, Card, ErrorNote } from './ui.tsx';
  * (D398): the server fills it when the market opens, with the same checks, and
  * the user is told what happened. Until then the card says it is waiting and
  * offers Cancel; a refusal at the open is said here, and Approve is back.
+ *
+ * A refusal for a price too far from the agent's - on Approve or at the open -
+ * adds **Re-check** (D431): the agent looks at the trade again at the live
+ * price. Whatever it decides closes this proposal (D432), so once it answers
+ * the page of this proposal opens, saying what it came to: the new proposal to
+ * approve, or the agent's reason, with Approve and Re-check disabled.
  */
 export const TradeProposalCard = observer(function TradeProposalCard({
   proposal,
   linkToPage = true,
+  recheck: offered = null,
 }: {
   proposal: Proposal;
   linkToPage?: boolean;
+  /** The server's word on re-checking it, where the detail was read; the inbox has none (D431). */
+  recheck?: ProposalRecheck | null;
 }) {
   const { proposals } = useStore();
   const { t, i18n } = useTranslation();
@@ -57,9 +71,19 @@ export const TradeProposalCard = observer(function TradeProposalCard({
   const confirm = useConfirmTradeApproval(proposal.id);
   const forOpen = useApproveForOpen(proposal.id);
   const cancelForOpen = useCancelOpenApproval(proposal.id);
+  const recheck = useRecheckProposal(proposal.id, proposal.agentId);
+  // D245, D280: no re-check is offered that nobody may pay for; the notice says why.
+  const access = useModelAccess();
+  const navigate = useNavigate();
   const [shown, setShown] = useState<TradeApprovalPreview | null>(null);
   const rejecting = proposals.decidingAction(proposal.id) === 'reject';
-  const busy = preview.isPending || confirm.isPending || forOpen.isPending || cancelForOpen.isPending || rejecting;
+  const busy =
+    preview.isPending ||
+    confirm.isPending ||
+    forOpen.isPending ||
+    cancelForOpen.isPending ||
+    recheck.isPending ||
+    rejecting;
   const queued = proposal.openApproval?.state === 'queued';
   // D398: before its market opens, a trade is approved for the open, not now.
   const beforeOpen =
@@ -67,6 +91,24 @@ export const TradeProposalCard = observer(function TradeProposalCard({
   const refusedAtOpen = proposal.openApproval?.state === 'refused' ? proposal.openApproval.reason : undefined;
   const remaining = timeLeft(proposal.expiresAt);
   const refusal = proposals.refusal?.proposalId === proposal.id ? proposals.refusal.message : null;
+  // D431: the price moved too far from the agent's - here, at the open, or on
+  // any surface before, as the server read the recorded attempts.
+  const priceFar =
+    !queued &&
+    ((offered?.available === true && offered.cause === 'price_moved') ||
+      (preview.error instanceof ApiRequestError && preview.error.code === 'price_far_from_agent') ||
+      refusedAtOpen === 'price_far_from_agent');
+  const recheckRefusal = recheckRefusalMessage(recheck.error);
+
+  const runRecheck = () =>
+    recheck.mutate(undefined, {
+      onSuccess: (result) => {
+        // D432: an answer closed this proposal; its page says what it came to.
+        if (result.outcome === 'proposed' || result.outcome === 'declined') {
+          void navigate({ to: '/proposals/$proposalId', params: { proposalId: proposal.id } });
+        }
+      },
+    });
 
   const approve = () => {
     confirm.reset();
@@ -194,6 +236,26 @@ export const TradeProposalCard = observer(function TradeProposalCard({
           <ErrorNote message={approvalErrorMessage(confirm.error, t('proposal.trade.confirmFailed'), payload.currency)} />
         )}
         {refusal !== null && <ErrorNote message={refusal} />}
+        {priceFar && confirm.data === undefined && (
+          <div className="space-y-1">
+            <p className="text-xs text-text-muted">{t('proposal.trade.recheck.hint')}</p>
+            <OwnKeyNotice access={access} />
+          </div>
+        )}
+        {recheck.isPending && (
+          <p role="status" className="text-xs text-text-muted">
+            {t('proposal.trade.recheck.running')}
+          </p>
+        )}
+        {recheck.data?.outcome === 'unanswered' && (
+          <ErrorNote
+            message={t('proposalPage.recheck.unanswered', {
+              when: formatExactTime(recheck.data.at),
+              cause: t(`proposalPage.recheck.causes.${recheck.data.cause}`),
+            })}
+          />
+        )}
+        {recheckRefusal !== null && <ErrorNote message={recheckRefusal} />}
         {confirm.data && (
           <p role="status" className="rounded-lg bg-gain/10 px-3 py-2 text-xs text-gain">
             {t(`proposal.trade.filled.${confirm.data.fill.side}`, {
@@ -240,6 +302,14 @@ export const TradeProposalCard = observer(function TradeProposalCard({
                   {t('proposal.trade.cancel')}
                 </Button>
               </>
+            )}
+            {priceFar && (
+              <Button variant="secondary" disabled={busy || access.block !== null} onClick={runRecheck}>
+                <span className="flex items-center gap-1.5">
+                  <RefreshCw className={`size-4 ${recheck.isPending ? 'animate-spin' : ''}`} aria-hidden />
+                  {recheck.isPending ? t('proposalPage.recheck.running') : t('proposalPage.recheck.button')}
+                </span>
+              </Button>
             )}
             <Button variant="danger" disabled={busy} onClick={() => void proposals.decide(proposal.id, 'reject')}>
               {rejecting ? t('proposal.inFlight.reject') : t('proposal.reject')}

@@ -1,6 +1,7 @@
 /**
- * Re-checking an expired trade proposal (D212-D217): what a re-check came to,
- * when *Re-check* is offered, the web route, and the Telegram tap.
+ * Re-checking a trade proposal (D212-D217, D431-D432): what a re-check came to,
+ * when *Re-check* is offered - expired, or refused for a moved price - what a
+ * moved price's re-check does to the proposal, the web route, and the Telegram tap.
  *
  * The database is mocked and the AI service faked: the re-check itself - the
  * focused scan, "once", the old thesis kept out of the evidence - is tested in
@@ -57,6 +58,7 @@ let proposal: Record<string, unknown> | null = proposalRow();
 let agent: Record<string, unknown> | null = { id: AGENT, state: 'active', is_primary: false, name: 'Value' };
 let latest: Record<string, unknown> | null = null;
 let later: string | null = null;
+let priceFar = false;
 
 vi.mock('../src/db/pool.js', () => ({
   queryOne: vi.fn(async () => ({ ok: 1 })),
@@ -72,6 +74,8 @@ vi.mock('../src/db/queries.js', () => ({
   getAgent: vi.fn(async () => agent),
   latestRecheck: vi.fn(async () => latest),
   laterApprovedProposal: vi.fn(async () => later),
+  hasPriceFarRefusal: vi.fn(async () => priceFar),
+  applyProposalTransition: vi.fn(async () => ({ applied: true })),
   getSessionUser: vi.fn(async (userId: string) => (await import('./session.js')).mockedSessionUser(userId)),
   getUser: vi.fn(async () => USER),
   listProposalTransitions: vi.fn(async () => []),
@@ -84,6 +88,7 @@ const { recheckResultOf, recheckStatus, recheckProposal } = await import('../src
 const { recheckLine, startRecheckCallback } = await import('../src/telegram/proposalRecheck.js');
 const { messagesFor } = await import('../src/notify/messages.js');
 const { proposeFromScan } = await import('../src/services/tradeProposals.js');
+const { applyProposalTransition } = await import('../src/db/queries.js');
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');
 const { createApp } = await import('../src/http/app.js');
 
@@ -123,6 +128,7 @@ beforeEach(() => {
   agent = { id: AGENT, state: 'active', is_primary: false, name: 'Value' };
   latest = null;
   later = null;
+  priceFar = false;
 });
 
 describe('what a re-check came to', () => {
@@ -214,6 +220,87 @@ describe('when Re-check is offered (D215)', () => {
   it('is not asked of any other kind', async () => {
     proposal = proposalRow({ kind: 'rebalance' });
     expect(await recheckStatus(USER.id, proposal as never, NOW)).toBeNull();
+  });
+});
+
+describe('a pending trade refused for a moved price (D431)', () => {
+  const PENDING = { state: 'pending', decided_at: null, decided_via: null, expires_at: new Date(NOW.getTime() + HOUR) };
+  const status = () => recheckStatus(USER.id, proposal as never, NOW);
+
+  it('is offered once an approval was refused as price_far_from_agent', async () => {
+    proposal = proposalRow(PENDING);
+    expect((await status())?.blocked).toBe('not_expired');
+    priceFar = true;
+    expect(await status()).toMatchObject({ blocked: null, recheck: { available: true, cause: 'price_moved' } });
+  });
+
+  it('is not while an approval for the open is still waiting', async () => {
+    priceFar = true;
+    proposal = proposalRow({ ...PENDING, open_approval: 'queued' });
+    expect((await status())?.blocked).toBe('not_expired');
+  });
+
+  it('is once, as for an expiry', async () => {
+    priceFar = true;
+    proposal = proposalRow(PENDING);
+    latest = scanRow();
+    expect((await status())?.blocked).toBe('already_rechecked');
+    latest = scanRow({ outcome: 'cap_reached', answer: null });
+    expect((await status())?.blocked).toBeNull();
+  });
+
+  it('keeps its cause once the re-check closed it, and an expiry keeps its own', async () => {
+    proposal = proposalRow({ state: 'rejected', decided_via: 'system' });
+    latest = scanRow();
+    expect((await status())?.recheck).toMatchObject({ available: false, cause: 'price_moved' });
+    proposal = proposalRow();
+    expect((await status())?.recheck.cause).toBe('expired');
+  });
+});
+
+describe("a moved price's re-check closes the proposal (D432)", () => {
+  beforeEach(() => {
+    proposal = proposalRow({ state: 'pending', decided_at: null, decided_via: null, expires_at: new Date(NOW.getTime() + HOUR) });
+  });
+  const closed = () =>
+    vi.mocked(applyProposalTransition).mock.calls.map(([transition]) => ({
+      toState: transition.toState,
+      surface: transition.surface,
+    }));
+
+  it('rejects it by the system when the agent declines', async () => {
+    const result = await recheckProposal(USER.id, PROPOSAL, { ai: fakeAi(async () => SCAN), notifier: NOTIFIER, now: () => NOW });
+    expect(result.outcome).toBe('declined');
+    expect(closed()).toEqual([{ toState: 'rejected', surface: 'system' }]);
+  });
+
+  it('rejects it by the system when a new proposal replaces it', async () => {
+    const kept = { ...SCAN, outcome: 'trade' as const, answer: { trades: [{ decision: 'buy', symbol: 'CCJ', refused: false }] } };
+    vi.mocked(proposeFromScan).mockResolvedValueOnce(['p-2']);
+    const result = await recheckProposal(USER.id, PROPOSAL, { ai: fakeAi(async () => kept), notifier: NOTIFIER, now: () => NOW });
+    expect(result).toMatchObject({ outcome: 'proposed', proposalId: 'p-2' });
+    expect(closed()).toEqual([{ toState: 'rejected', surface: 'system' }]);
+  });
+
+  it('proposes nothing when the proposal was approved while the agent looked (the race)', async () => {
+    vi.mocked(applyProposalTransition).mockResolvedValueOnce({ applied: false, intentId: null } as never);
+    const kept = { ...SCAN, outcome: 'trade' as const, answer: { trades: [{ decision: 'buy', symbol: 'CCJ', refused: false }] } };
+    await expect(
+      recheckProposal(USER.id, PROPOSAL, { ai: fakeAi(async () => kept), notifier: NOTIFIER, now: () => NOW }),
+    ).rejects.toMatchObject({ code: 'already_decided' });
+    expect(proposeFromScan).not.toHaveBeenCalled();
+  });
+
+  it('leaves it pending when the re-check reached no answer', async () => {
+    const ai = fakeAi(async () => ({ ...SCAN, outcome: 'budget_reached' as const, answer: null }));
+    expect((await recheckProposal(USER.id, PROPOSAL, { ai, notifier: NOTIFIER, now: () => NOW })).outcome).toBe('unanswered');
+    expect(applyProposalTransition).not.toHaveBeenCalled();
+  });
+
+  it('leaves an expired proposal as it is', async () => {
+    proposal = proposalRow();
+    await recheckProposal(USER.id, PROPOSAL, { ai: fakeAi(async () => SCAN), notifier: NOTIFIER, now: () => NOW });
+    expect(applyProposalTransition).not.toHaveBeenCalled();
   });
 });
 
@@ -361,6 +448,32 @@ describe('Re-check from Telegram (D217)', () => {
     expect(ai.recheckProposal).not.toHaveBeenCalled();
     expect(telegram.setKeyboard).not.toHaveBeenCalled();
     expect(telegram.showWorking).not.toHaveBeenCalled();
+  });
+
+  it("says a moved price's proposal is closed, and leaves it no buttons (D432)", async () => {
+    priceFar = true;
+    proposal = proposalRow({ state: 'pending', decided_at: null, decided_via: null, expires_at: new Date(NOW.getTime() + HOUR) });
+    // The close is what the redraw then reads.
+    vi.mocked(applyProposalTransition).mockImplementationOnce(async () => {
+      proposal = { ...proposal, state: 'rejected', decided_via: 'system', decided_at: NOW };
+      return { applied: true, intentId: null } as never;
+    });
+    const telegram = chat();
+    await tap(telegram, undefined, 'he');
+    const [, , text, options] = telegram.editMessage.mock.calls[0]! as unknown as [string, number, string, { keyboard: string }];
+    expect(text).toContain(messagesFor('he').recheck.closed);
+    expect(options.keyboard).toBe('none');
+    expect(applyProposalTransition).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a moved price's Approve, Reject and Re-check when the re-check reached no answer", async () => {
+    priceFar = true;
+    proposal = proposalRow({ state: 'pending', decided_at: null, decided_via: null, expires_at: new Date(NOW.getTime() + HOUR) });
+    const telegram = chat();
+    await tap(telegram, fakeAi(async () => ({ ...SCAN, outcome: 'cap_reached', answer: null })), 'en');
+    const [, , text, options] = telegram.editMessage.mock.calls[0]! as unknown as [string, number, string, { keyboard: string }];
+    expect(options.keyboard).toBe('tradeRecheck');
+    expect(text).not.toContain(messagesFor('en').recheck.closed);
   });
 
   it('keeps the button when the re-check reached no answer', async () => {

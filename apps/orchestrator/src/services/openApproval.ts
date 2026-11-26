@@ -63,6 +63,7 @@ import { ApiProblem, conflict, notFound, unprocessable } from '../http/errors.js
 import { logger } from '../logger.js';
 import { messagesFor, type Messages, type NoticeText, type OpenApprovalFigures } from '../notify/messages.js';
 import type { Notifier } from '../notify/notifier.js';
+import { recheckOffered } from '../telegram/proposalRecheck.js';
 import { redrawProposalMessages } from '../telegram/proposalMessages.js';
 import { breachFigures, refusalReason } from '../telegram/tradeApproval.js';
 import { fanOut, settingsForNotification } from './notifications.js';
@@ -295,6 +296,8 @@ async function announceOutcome(
   notifier: Notifier,
   now: Date,
   text: (messages: Messages, timezone: string) => NoticeText,
+  /** D431: the refusal was a price too far from the agent's - the message offers Re-check. */
+  { recheck = false }: { recheck?: boolean } = {},
 ): Promise<void> {
   try {
     const [settings, user] = await Promise.all([getOrCreateUserSettings(row.user_id), getUser(row.user_id)]);
@@ -315,6 +318,7 @@ async function announceOutcome(
           // It answers the user's own act at a time they chose, like an
           // urgent sell (D70); a mute still holds it for the digest.
           urgent: true,
+          ...(recheck ? { proposalId: row.id, recheck: true } : {}),
         },
       ],
       settingsForNotification(settings, timezone),
@@ -407,12 +411,19 @@ async function settleOne(userId: string, proposalId: string, context: OpenApprov
       return 'expired';
     }
     if (await settleOpenApproval(userId, proposalId, 'refused', error.code.slice(0, 64))) {
-      await announceOutcome(row, context.notifier, now, (messages, zone) =>
-        messages.openApproval.refused({
-          ...figuresOf(row),
-          reason: refusalReason(error, messages, zone),
-          until: clock(row.expires_at, zone, messages),
-        }),
+      // D431: a price too far from the agent's may be re-checked from the message itself.
+      const recheck = error.code === 'price_far_from_agent' && (await recheckOffered(userId, proposalId, now));
+      await announceOutcome(
+        row,
+        context.notifier,
+        now,
+        (messages, zone) =>
+          messages.openApproval.refused({
+            ...figuresOf(row),
+            reason: refusalReason(error, messages, zone),
+            until: clock(row.expires_at, zone, messages),
+          }),
+        { recheck },
       );
       logger().info({ userId, proposalId, reason: error.code }, 'proposal.open_approval_refused');
     }

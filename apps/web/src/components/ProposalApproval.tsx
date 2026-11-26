@@ -84,7 +84,7 @@ const ProposalApprovalBody = observer(function ProposalApprovalBody({ proposalId
         <span>{t('proposals.ledgerOnly')}</span>
       </p>
       {proposals.decisionError !== null && <ErrorNote message={proposals.decisionError} />}
-      <ProposalCard proposal={proposal} baseCurrency={baseCurrency} />
+      <ProposalCard proposal={proposal} baseCurrency={baseCurrency} recheck={detail.data?.recheck ?? null} />
     </div>
   );
 });

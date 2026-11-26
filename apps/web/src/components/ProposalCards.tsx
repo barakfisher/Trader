@@ -9,6 +9,7 @@ import {
   isTradeProposalKind,
   type Proposal,
   type ProposalAction,
+  type ProposalRecheck,
   type AssistantProposalPayload,
   type ResearchProposalPayload,
 } from '@traders/shared';
@@ -139,15 +140,18 @@ export const ProposalCard = observer(function ProposalCard({
   proposal,
   baseCurrency,
   linkToPage = true,
+  recheck = null,
 }: {
   proposal: Proposal;
   baseCurrency: string;
   /** False on the proposal's own page, where the headline would link to itself. */
   linkToPage?: boolean;
+  /** The server's word on re-checking it, where the proposal's detail was read (D431). */
+  recheck?: ProposalRecheck | null;
 }) {
   // A trade is approved at the live price, and has no snooze (D47, D48).
   if (isTradeProposalKind(proposal.kind)) {
-    return <TradeProposalCard proposal={proposal} linkToPage={linkToPage} />;
+    return <TradeProposalCard proposal={proposal} linkToPage={linkToPage} recheck={recheck} />;
   }
   return <QuestionCard proposal={proposal} baseCurrency={baseCurrency} linkToPage={linkToPage} />;
 });

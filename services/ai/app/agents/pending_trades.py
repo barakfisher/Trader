@@ -48,9 +48,18 @@ class PendingTrade:
 
 
 def pending_trades(
-    engine: Engine, user_id: str, agent_id: str, now: datetime
+    engine: Engine,
+    user_id: str,
+    agent_id: str,
+    now: datetime,
+    *,
+    excluding: str | None = None,
 ) -> list[PendingTrade]:
-    """The agent's buys and sells waiting for a decision (pending or snoozed, not expired)."""
+    """The agent's buys and sells waiting for a decision (pending or snoozed, not expired).
+
+    `excluding` is the proposal a re-check is about (D431): one whose price moved is
+    still pending, and counting it would refuse its own re-proposal as a duplicate
+    and set its cash aside twice. The orchestrator closes it when the re-check ends."""
     with engine.connect() as connection:
         rows = connection.execute(
             text(
@@ -62,10 +71,11 @@ def pending_trades(
                  WHERE p.user_id = CAST(:user AS uuid) AND p.agent_id = CAST(:agent AS uuid)
                    AND p.kind IN ('buy', 'sell') AND p.state IN ('pending', 'snoozed')
                    AND p.expires_at > :now
+                   AND (CAST(:excluding AS uuid) IS NULL OR p.id <> CAST(:excluding AS uuid))
                  ORDER BY p.created_at
                 """
             ),
-            {"user": user_id, "agent": agent_id, "now": now},
+            {"user": user_id, "agent": agent_id, "now": now, "excluding": excluding},
         ).all()
     return [
         PendingTrade(

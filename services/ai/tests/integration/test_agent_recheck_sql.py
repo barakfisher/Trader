@@ -17,10 +17,11 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.agents.recheck import (
+    PRICE_FAR_FROM_AGENT,
     RECHECK_WINDOW,
     UNANSWERED_OUTCOMES,
     NotRecheckableError,
-    find_expired_trade,
+    find_recheckable_trade,
     run_recheck,
 )
 from app.agents.scan_log import AlreadyRefreshedError, ScanAgent, start_scan
@@ -94,6 +95,19 @@ def _proposal(
         ).scalar_one()
 
 
+def _refused(engine: Engine, agent: ScanAgent, proposal: str, reason: str) -> None:
+    """An approval of `proposal` refused for `reason`, as the orchestrator records it (D49)."""
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO proposal_attempts (user_id, proposal_id, surface, reason, "
+                "agent_price_minor, live_price_minor) VALUES (CAST(:u AS uuid), "
+                "CAST(:p AS uuid), 'web', :r, 5100, 5432)"
+            ),
+            {"u": agent.user_id, "p": proposal, "r": reason},
+        )
+
+
 @pytest.fixture()
 def market() -> Iterator[ScriptedMarket]:
     scripted = ScriptedMarket()
@@ -104,7 +118,7 @@ def market() -> Iterator[ScriptedMarket]:
 async def _recheck(
     engine: Engine, agent: ScanAgent, proposal: str, llm: ScriptedLLM, market: ScriptedMarket
 ) -> Any:
-    trade = find_expired_trade(engine, agent.user_id, agent.agent_id, proposal, NOW)
+    trade = find_recheckable_trade(engine, agent.user_id, agent.agent_id, proposal, NOW)
     return await run_recheck(
         engine=engine,
         llm=llm,  # type: ignore[arg-type]
@@ -182,7 +196,7 @@ async def test_a_pass_says_why_and_uses_the_recheck_up(
 
     assert result.outcome == "no_trade"
     with pytest.raises(NotRecheckableError) as refused:
-        find_expired_trade(loaded, agent.user_id, agent.agent_id, proposal, NOW)
+        find_recheckable_trade(loaded, agent.user_id, agent.agent_id, proposal, NOW)
     assert refused.value.code == "already_rechecked"
     # The database's own guard, for the race the check above cannot see.
     with pytest.raises(AlreadyRefreshedError):
@@ -205,7 +219,7 @@ def test_a_recheck_that_reached_no_answer_does_not_use_it_up(
             ),
             {"o": outcome, "id": scan},
         )
-    assert find_expired_trade(loaded, agent.user_id, agent.agent_id, proposal, NOW)
+    assert find_recheckable_trade(loaded, agent.user_id, agent.agent_id, proposal, NOW)
     start_scan(loaded, agent, "refresh", {}, NOW, refreshes_proposal_id=proposal)
 
 
@@ -228,7 +242,7 @@ def test_only_an_unanswered_expiry_within_the_window_is_rechecked(
 ) -> None:
     proposal = _proposal(loaded, agent, expired_ago=expired_ago, state=state, kind=kind)
     with pytest.raises(NotRecheckableError) as refused:
-        find_expired_trade(loaded, agent.user_id, agent.agent_id, proposal, NOW)
+        find_recheckable_trade(loaded, agent.user_id, agent.agent_id, proposal, NOW)
     assert refused.value.code == code
 
 
@@ -237,7 +251,7 @@ def test_a_swept_expiry_within_the_window_is_rechecked(
     agent: ScanAgent,  # noqa: F811
 ) -> None:
     proposal = _proposal(loaded, agent, expired_ago=timedelta(days=6), state="expired")
-    trade = find_expired_trade(loaded, agent.user_id, agent.agent_id, proposal, NOW)
+    trade = find_recheckable_trade(loaded, agent.user_id, agent.agent_id, proposal, NOW)
     assert (trade.side, trade.symbol, trade.price_minor) == ("buy", "CCJ", 5_100)
     assert trade.thesis == OLD_THESIS
 
@@ -251,7 +265,7 @@ def test_a_trade_a_later_approved_proposal_made_is_not_rechecked(
     expired = _proposal(loaded, agent, expired_ago=timedelta(hours=2))
     _proposal(loaded, agent, expired_ago=timedelta(hours=1), state="approved")
     with pytest.raises(NotRecheckableError) as refused:
-        find_expired_trade(loaded, agent.user_id, agent.agent_id, expired, NOW)
+        find_recheckable_trade(loaded, agent.user_id, agent.agent_id, expired, NOW)
     assert refused.value.code == "superseded"
 
 
@@ -262,4 +276,84 @@ def test_a_later_sell_or_a_later_rejection_does_not_supersede(
     expired = _proposal(loaded, agent, expired_ago=timedelta(hours=3))
     _proposal(loaded, agent, expired_ago=timedelta(hours=2), state="approved", kind="sell")
     _proposal(loaded, agent, expired_ago=timedelta(hours=1), state="rejected")
-    assert find_expired_trade(loaded, agent.user_id, agent.agent_id, expired, NOW)
+    assert find_recheckable_trade(loaded, agent.user_id, agent.agent_id, expired, NOW)
+
+
+# D431: a pending proposal whose approval was refused because the price moved too far.
+
+
+def test_a_pending_trade_refused_for_a_moved_price_is_rechecked(
+    loaded: Engine,  # noqa: F811
+    agent: ScanAgent,  # noqa: F811
+) -> None:
+    proposal = _proposal(loaded, agent, expired_ago=-timedelta(minutes=30))
+    _refused(loaded, agent, proposal, PRICE_FAR_FROM_AGENT)
+    trade = find_recheckable_trade(loaded, agent.user_id, agent.agent_id, proposal, NOW)
+    assert trade.cause == "price_moved"
+
+
+@pytest.mark.parametrize("reason", ["market_closed", "quote_too_old", "insufficient_cash"])
+def test_a_pending_trade_refused_for_anything_else_is_not(
+    loaded: Engine,  # noqa: F811
+    agent: ScanAgent,  # noqa: F811
+    reason: str,
+) -> None:
+    proposal = _proposal(loaded, agent, expired_ago=-timedelta(minutes=30))
+    _refused(loaded, agent, proposal, reason)
+    with pytest.raises(NotRecheckableError) as refused:
+        find_recheckable_trade(loaded, agent.user_id, agent.agent_id, proposal, NOW)
+    assert refused.value.code == "not_expired"
+
+
+def test_a_moved_price_is_not_rechecked_while_an_approval_for_the_open_waits(
+    loaded: Engine,  # noqa: F811
+    agent: ScanAgent,  # noqa: F811
+) -> None:
+    proposal = _proposal(loaded, agent, expired_ago=-timedelta(minutes=30))
+    _refused(loaded, agent, proposal, PRICE_FAR_FROM_AGENT)
+    with loaded.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE proposals SET opens_at = :t, open_approval = 'queued', "
+                "open_approval_surface = 'web', open_approval_at = :t WHERE id = CAST(:p AS uuid)"
+            ),
+            {"t": NOW, "p": proposal},
+        )
+    with pytest.raises(NotRecheckableError) as refused:
+        find_recheckable_trade(loaded, agent.user_id, agent.agent_id, proposal, NOW)
+    assert refused.value.code == "not_expired"
+
+
+async def test_a_moved_price_recheck_is_not_refused_as_its_own_duplicate(
+    loaded: Engine,  # noqa: F811
+    agent: ScanAgent,  # noqa: F811
+    market: ScriptedMarket,
+) -> None:
+    # The proposal is still pending: counted as waiting, the same buy would be
+    # refused as a duplicate of it, and its cash set aside twice.
+    proposal = _proposal(loaded, agent, expired_ago=-timedelta(minutes=30))
+    _refused(loaded, agent, proposal, PRICE_FAR_FROM_AGENT)
+    llm = ScriptedLLM(_trades(_trade("buy", "CCJ", "3", "CCJ trades at 54.32 today.")))
+
+    result = await _recheck(loaded, agent, proposal, llm, market)
+
+    assert result.outcome == "trade", result.problems
+    row = _stored(loaded, result.scan_id)
+    assert row.briefing["waiting_for_approval"] == []
+    assert row.briefing["recheck"]["cause"] == "price_moved"
+    assert "expired_at" not in row.briefing["recheck"]
+    assert "price had moved too far" in str(llm.heard[0])
+
+
+async def test_a_moved_price_recheck_is_once_too(
+    loaded: Engine,  # noqa: F811
+    agent: ScanAgent,  # noqa: F811
+    market: ScriptedMarket,
+) -> None:
+    proposal = _proposal(loaded, agent, expired_ago=-timedelta(minutes=30))
+    _refused(loaded, agent, proposal, PRICE_FAR_FROM_AGENT)
+    llm = ScriptedLLM(_trades(thesis="The price is above where it was worth buying."))
+    await _recheck(loaded, agent, proposal, llm, market)
+    with pytest.raises(NotRecheckableError) as refused:
+        find_recheckable_trade(loaded, agent.user_id, agent.agent_id, proposal, NOW)
+    assert refused.value.code == "already_rechecked"
