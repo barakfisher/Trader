@@ -39,7 +39,8 @@ export interface paths {
         put?: never;
         /**
          * Recheck Proposal
-         * @description Re-check one expired trade proposal (D212): a `refresh` scan of that one trade.
+         * @description Re-check one trade proposal - expired (D212), or refused for a moved price (D431):
+         *     a `refresh` scan of that one trade.
          */
         post: operations["recheck_proposal_agents__agent_id__proposals__proposal_id__recheck_post"];
         delete?: never;
