@@ -4,7 +4,7 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-24 - **Re-check a trade whose price moved too far (#PR, D431-D433, VERSION 0.0.17, no
+Updated: 2026-11-24 - **Re-check a trade whose price moved too far (#407, D431-D433, VERSION 0.0.17, no
 migration). Not deployed.**
 - **What the user asked and chose, one question at a time:** after an approval is refused because the price is
   more than 3% from the agent's (D47), a *Re-check* button asks the agent whether the trade still holds at the
@@ -7682,7 +7682,7 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
     - **What a long-lived order needs with it:** the agent sees its open orders at every scan and can withdraw
       or replace them; pausing or archiving the agent cancels them; a split must not fill one.
 431. **A pending trade refused because the price moved too far from the agent's can be re-checked, once**
-    (#PR, the user, 2026-11-24). D47 refuses an approval beyond 3% of the agent's price, and until now the only
+    (#407, the user, 2026-11-24). D47 refuses an approval beyond 3% of the agent's price, and until now the only
     ways out were Reject or tapping Approve again. Measured on production that day: 9 such refusals on 2
     proposals (five taps on one NVDA buy on 11-10, then a reject; an NVDA sell refused at the open on 11-24).
     *Re-check* (D212's focused `refresh` scan) is now offered for a pending buy or sell with a
@@ -7693,7 +7693,7 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
       new proposal gets a re-check of its own.
     - *Rejected:* no limit but the daily budget. It needs the index changed, and every tap is a paid model call.
     - *Rejected:* offering it from the live distance. Showing a button would then need a quote.
-432. **A moved price's re-check closes the old proposal whatever it decides** (#PR, the user, 2026-11-24).
+432. **A moved price's re-check closes the old proposal whatever it decides** (#407, the user, 2026-11-24).
     The agent still holds the trade: a **new proposal** at the fresh price, with the quantity sized again,
     announced as any proposal is, and the old one rejected by the system. The agent declines: the old one is
     rejected by the system and its page shows the agent's reason under Approve and Re-check, both disabled.
@@ -7711,7 +7711,7 @@ Settings, because a collapsed row's height depends on the sizing rule (the user,
       proposed (`already_decided`, logged `proposal.recheck_overtaken`). Proposing first left a filled trade and
       a fresh proposal for the same one. Nor is a moved price re-checked while an approval for the open waits,
       in either service: the open decides that one.
-433. **Where Re-check appears** (#PR, 2026-11-24).
+433. **Where Re-check appears** (#407, 2026-11-24).
     - **Web:** on the trade's card, beside Approve and Reject, once a preview was refused `price_far_from_agent`
       or the open refused it so. Once the agent answers, the proposal's page opens: the inbox no longer lists a
       closed proposal, and the page is where its outcome and the new proposal's link are. The page's own
